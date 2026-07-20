@@ -30,4 +30,14 @@ class Client extends Model
     {
         return $this->hasMany(Project::class);
     }
+
+    public function leads(): HasMany
+    {
+        return $this->hasMany(Lead::class);
+    }
+
+    public function opportunities(): HasMany
+    {
+        return $this->hasMany(Opportunity::class);
+    }
 }

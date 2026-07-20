@@ -43,7 +43,7 @@ class AuthController extends ApiController
 
             $ownerRole = Role::query()->create([
                 'company_id' => $company->id,
-                'name' => 'Owner',
+                'name' => 'CEO',
                 'slug' => 'owner',
                 'permissions' => ['*'],
                 'is_system' => true,
@@ -138,7 +138,8 @@ class AuthController extends ApiController
             'company' => $user->company,
             'branch' => $user->branch,
             'role' => $user->role,
-            'permissions' => $user->role?->permissions ?? [],
+            'permissions' => $user->accessPermissions(),
+            'effective_permissions' => $user->accessPermissions(),
         ];
     }
 
@@ -148,25 +149,49 @@ class AuthController extends ApiController
             [
                 'name' => 'Project Director',
                 'slug' => 'project-director',
-                'permissions' => ['projects.manage', 'procurement.approve', 'documents.manage', 'reports.view'],
+                'permissions' => ['projects.manage', 'procurement.approve', 'documents.manage', 'field.manage', 'attendance.manage', 'equipment.manage', 'quality.manage', 'safety.manage', 'portals.manage', 'intelligence.manage', 'bi.manage', 'automation.manage', 'reports.view'],
                 'is_system' => true,
             ],
             [
                 'name' => 'Procurement Manager',
                 'slug' => 'procurement-manager',
-                'permissions' => ['procurement.manage', 'documents.manage', 'reports.view'],
+                'permissions' => ['procurement.manage', 'inventory.manage', 'suppliers.manage', 'equipment.manage', 'documents.manage', 'reports.view'],
                 'is_system' => true,
             ],
             [
                 'name' => 'Site Engineer',
                 'slug' => 'site-engineer',
-                'permissions' => ['projects.manage', 'documents.manage', 'reports.view'],
+                'permissions' => ['projects.manage', 'documents.manage', 'field.manage', 'attendance.manage', 'inventory.manage', 'equipment.manage', 'quality.manage', 'safety.manage', 'reports.view'],
                 'is_system' => true,
             ],
             [
                 'name' => 'Finance',
                 'slug' => 'finance',
-                'permissions' => ['reports.view', 'procurement.approve'],
+                'permissions' => ['finance.manage', 'payroll.manage', 'intelligence.manage', 'bi.manage', 'integrations.manage', 'localization.manage', 'reports.view', 'procurement.approve'],
+                'is_system' => true,
+            ],
+            [
+                'name' => 'HR',
+                'slug' => 'hr',
+                'permissions' => ['payroll.manage', 'reports.view'],
+                'is_system' => true,
+            ],
+            [
+                'name' => 'Architect',
+                'slug' => 'architect',
+                'permissions' => ['documents.manage', 'reports.view'],
+                'is_system' => true,
+            ],
+            [
+                'name' => 'Sales & Estimating',
+                'slug' => 'sales-estimating',
+                'permissions' => ['crm.manage', 'tenders.manage', 'estimating.manage', 'reports.view'],
+                'is_system' => true,
+            ],
+            [
+                'name' => 'QHSE Manager',
+                'slug' => 'qhse-manager',
+                'permissions' => ['quality.manage', 'safety.manage', 'field.manage', 'documents.manage', 'intelligence.manage', 'bi.manage', 'automation.manage', 'reports.view'],
                 'is_system' => true,
             ],
         ];

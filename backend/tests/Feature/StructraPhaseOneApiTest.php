@@ -12,6 +12,7 @@ use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -40,6 +41,8 @@ class StructraPhaseOneApiTest extends TestCase
 
         $this->assertDatabaseHas('companies', ['name' => 'Atlas Builders Ltd']);
         $this->assertDatabaseHas('users', ['email' => 'adjoa@example.com']);
+        $this->assertDatabaseHas('roles', ['slug' => 'hr', 'name' => 'HR']);
+        $this->assertDatabaseHas('roles', ['slug' => 'architect', 'name' => 'Architect']);
     }
 
     public function test_projects_tasks_budgets_and_dashboard_rollups_work(): void
@@ -85,6 +88,198 @@ class StructraPhaseOneApiTest extends TestCase
             ->assertJsonPath('kpis.total_projects', 1)
             ->assertJsonPath('kpis.active_projects', 1)
             ->assertJsonPath('kpis.budget_total', 500000);
+    }
+
+    public function test_admin_can_create_update_and_delete_users(): void
+    {
+        [$user, $branch] = $this->tenantUser();
+        Sanctum::actingAs($user);
+
+        $role = Role::query()->create([
+            'company_id' => $user->company_id,
+            'name' => 'Site Engineer',
+            'slug' => 'site-engineer',
+            'permissions' => ['projects.manage'],
+            'is_system' => true,
+        ]);
+
+        $managedUserId = $this->postJson('/api/v1/organization/users', [
+            'name' => 'Managed User',
+            'email' => 'managed.user@example.com',
+            'password' => 'Structra2026',
+            'branch_id' => $branch->id,
+            'role_id' => $role->id,
+            'permissions' => ['payroll.manage'],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('user.role.name', 'Site Engineer')
+            ->assertJsonPath('user.permissions.0', 'payroll.manage')
+            ->json('user.id');
+
+        Sanctum::actingAs(User::query()->findOrFail($managedUserId));
+
+        $this->getJson('/api/v1/people')->assertOk();
+        $this->getJson('/api/v1/finance')->assertForbidden();
+
+        Sanctum::actingAs($user);
+
+        $this->patchJson("/api/v1/organization/users/{$managedUserId}", [
+            'name' => 'Edited User',
+            'email' => 'edited.user@example.com',
+            'password' => 'Structra2027',
+            'branch_id' => $branch->id,
+            'role_id' => $user->role_id,
+            'permissions' => ['projects.manage', 'reports.view'],
+            'status' => 'inactive',
+        ])
+            ->assertOk()
+            ->assertJsonPath('user.name', 'Edited User')
+            ->assertJsonPath('user.permissions.0', 'projects.manage')
+            ->assertJsonPath('user.status', 'inactive');
+
+        $managedUser = User::query()->findOrFail($managedUserId);
+        $this->assertTrue(Hash::check('Structra2027', $managedUser->password));
+        $this->assertSame(['projects.manage', 'reports.view'], $managedUser->permissions);
+
+        $this->deleteJson("/api/v1/organization/users/{$managedUserId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'User deleted.');
+
+        $this->assertDatabaseMissing('users', ['id' => $managedUserId]);
+    }
+
+    public function test_shared_module_indexes_accept_related_access_categories(): void
+    {
+        [, $branch, $company] = $this->tenantUser();
+
+        $tenderRole = Role::query()->create([
+            'company_id' => $company->id,
+            'name' => 'Tender Manager',
+            'slug' => 'tender-manager',
+            'permissions' => ['tenders.manage'],
+            'is_system' => true,
+        ]);
+
+        $safetyRole = Role::query()->create([
+            'company_id' => $company->id,
+            'name' => 'HSE Officer',
+            'slug' => 'hse-officer',
+            'permissions' => ['safety.manage'],
+            'is_system' => true,
+        ]);
+
+        $tenderUser = User::query()->create([
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'role_id' => $tenderRole->id,
+            'name' => 'Tender User',
+            'email' => 'tender@example.com',
+            'password' => 'Structra2026',
+        ]);
+
+        $safetyUser = User::query()->create([
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'role_id' => $safetyRole->id,
+            'name' => 'Safety User',
+            'email' => 'safety@example.com',
+            'password' => 'Structra2026',
+        ]);
+
+        Sanctum::actingAs($tenderUser);
+        $this->getJson('/api/v1/sales')->assertOk();
+
+        Sanctum::actingAs($safetyUser);
+        $this->getJson('/api/v1/compliance')->assertOk();
+        $this->getJson('/api/v1/finance')->assertForbidden();
+    }
+
+    public function test_only_admin_can_edit_and_archive_projects_clients_suppliers_and_company(): void
+    {
+        [$admin, $branch, $company] = $this->tenantUser();
+
+        $client = Client::query()->create([
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'name' => 'Restricted Client',
+        ]);
+
+        $supplier = Supplier::query()->create([
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'name' => 'Restricted Supplier',
+        ]);
+
+        $project = Project::query()->create([
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'client_id' => $client->id,
+            'code' => 'PRJ-ADMIN-001',
+            'name' => 'Admin Controlled Project',
+        ]);
+
+        $managerRole = Role::query()->create([
+            'company_id' => $company->id,
+            'name' => 'Operations Manager',
+            'slug' => 'operations-manager',
+            'permissions' => ['projects.manage', 'procurement.manage'],
+            'is_system' => true,
+        ]);
+
+        $manager = User::query()->create([
+            'company_id' => $company->id,
+            'branch_id' => $branch->id,
+            'role_id' => $managerRole->id,
+            'name' => 'Operations User',
+            'email' => 'operations@example.com',
+            'password' => 'Structra2026',
+        ]);
+
+        Sanctum::actingAs($manager);
+
+        $this->patchJson("/api/v1/projects/{$project->id}", ['name' => 'Blocked Project Edit'])->assertForbidden();
+        $this->deleteJson("/api/v1/projects/{$project->id}")->assertForbidden();
+        $this->patchJson('/api/v1/organization/company', ['name' => 'Blocked Company Edit'])->assertForbidden();
+        $this->deleteJson('/api/v1/organization/company')->assertForbidden();
+        $this->patchJson("/api/v1/organization/clients/{$client->id}", ['name' => 'Blocked Client Edit'])->assertForbidden();
+        $this->deleteJson("/api/v1/organization/clients/{$client->id}")->assertForbidden();
+        $this->patchJson("/api/v1/organization/suppliers/{$supplier->id}", ['name' => 'Blocked Supplier Edit'])->assertForbidden();
+        $this->deleteJson("/api/v1/organization/suppliers/{$supplier->id}")->assertForbidden();
+
+        Sanctum::actingAs($admin);
+
+        $this->patchJson("/api/v1/projects/{$project->id}", ['name' => 'Admin Edited Project'])
+            ->assertOk()
+            ->assertJsonPath('project.name', 'Admin Edited Project');
+
+        $this->patchJson("/api/v1/organization/clients/{$client->id}", ['name' => 'Admin Edited Client'])
+            ->assertOk()
+            ->assertJsonPath('client.name', 'Admin Edited Client');
+
+        $this->patchJson("/api/v1/organization/suppliers/{$supplier->id}", ['name' => 'Admin Edited Supplier'])
+            ->assertOk()
+            ->assertJsonPath('supplier.name', 'Admin Edited Supplier');
+
+        $this->deleteJson("/api/v1/projects/{$project->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Project archived.');
+
+        $this->deleteJson("/api/v1/organization/clients/{$client->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Client archived.');
+
+        $this->deleteJson("/api/v1/organization/suppliers/{$supplier->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Supplier archived.');
+
+        $this->deleteJson('/api/v1/organization/company')
+            ->assertOk()
+            ->assertJsonPath('message', 'Company archived.');
+
+        $this->assertSoftDeleted('projects', ['id' => $project->id]);
+        $this->assertSoftDeleted('clients', ['id' => $client->id]);
+        $this->assertSoftDeleted('suppliers', ['id' => $supplier->id]);
+        $this->assertSoftDeleted('companies', ['id' => $company->id]);
     }
 
     public function test_procurement_flow_updates_project_commitments_and_actuals(): void
@@ -144,9 +339,7 @@ class StructraPhaseOneApiTest extends TestCase
 
         $this->postJson("/api/v1/procurement/requisitions/{$requisitionId}/submit")->assertOk();
 
-        $this->postJson("/api/v1/procurement/requisitions/{$requisitionId}/review", [
-            'decision' => 'approved',
-        ])->assertOk();
+        $this->approveRequisitionThroughWorkflow($requisitionId);
 
         $purchaseOrderId = $this->postJson("/api/v1/procurement/requisitions/{$requisitionId}/convert-to-po", [
             'supplier_id' => $supplier->id,
@@ -164,6 +357,169 @@ class StructraPhaseOneApiTest extends TestCase
         $this->postJson("/api/v1/procurement/purchase-orders/{$purchaseOrderId}/transition", ['status' => 'delivered'])->assertOk();
 
         $this->assertSame('45000.00', $project->fresh()->actual_cost);
+    }
+
+    public function test_procurement_lifecycle_is_traceable_from_request_to_payment(): void
+    {
+        [$user, $branch] = $this->tenantUser();
+        Sanctum::actingAs($user);
+
+        $project = Project::query()->create([
+            'company_id' => $user->company_id,
+            'branch_id' => $branch->id,
+            'code' => 'PRJ-PROC-001',
+            'name' => 'Lifecycle Procurement Project',
+            'status' => 'active',
+        ]);
+
+        $cementSupplier = Supplier::query()->create([
+            'company_id' => $user->company_id,
+            'branch_id' => $branch->id,
+            'name' => 'Cement Supply Ltd',
+        ]);
+
+        $steelSupplier = Supplier::query()->create([
+            'company_id' => $user->company_id,
+            'branch_id' => $branch->id,
+            'name' => 'Steel Supply Ltd',
+        ]);
+
+        $requisition = $this->postJson("/api/v1/projects/{$project->id}/requisitions", [
+            'title' => 'Foundation concrete materials',
+            'department' => 'Construction',
+            'delivery_location' => 'Site A Warehouse',
+            'purpose' => 'Foundation concrete works.',
+            'priority' => 'critical',
+            'required_by' => now()->addDays(3)->toDateString(),
+            'lines' => [
+                [
+                    'item_name' => 'Cement',
+                    'description' => 'Portland 50kg',
+                    'cost_code' => 'CON-001',
+                    'quantity' => 100,
+                    'unit' => 'bags',
+                    'estimated_unit_cost' => 80,
+                    'tax_rate' => 5,
+                ],
+                [
+                    'item_name' => 'Sand',
+                    'description' => 'River sand',
+                    'cost_code' => 'MAT-011',
+                    'quantity' => 25,
+                    'unit' => 'm3',
+                    'estimated_unit_cost' => 350,
+                ],
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('requisition.requisition_number', fn (string $number) => str_starts_with($number, 'MR-'))
+            ->assertJsonPath('requisition.grand_total', '17150.00')
+            ->json('requisition');
+
+        $this->postJson("/api/v1/procurement/requisitions/{$requisition['id']}/submit")->assertOk();
+        $this->approveRequisitionThroughWorkflow($requisition['id']);
+
+        $rfqId = $this->postJson("/api/v1/procurement/requisitions/{$requisition['id']}/rfqs", [
+            'supplier_ids' => [$cementSupplier->id, $steelSupplier->id],
+            'closing_date' => now()->addWeek()->toDateString(),
+            'terms' => 'Quote inclusive of delivery to site.',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('rfq.status', 'sent')
+            ->assertJsonCount(2, 'rfq.suppliers')
+            ->json('rfq.id');
+
+        $quotationId = $this->postJson("/api/v1/procurement/rfqs/{$rfqId}/quotations", [
+            'supplier_id' => $cementSupplier->id,
+            'supplier_reference' => 'SUP-QT-001',
+            'lead_time_days' => 2,
+            'payment_terms' => '30 days',
+            'lines' => [
+                [
+                    'item_name' => 'Cement',
+                    'description' => 'Portland 50kg',
+                    'cost_code' => 'CON-001',
+                    'quantity' => 100,
+                    'unit' => 'bags',
+                    'unit_price' => 78,
+                    'tax_rate' => 5,
+                ],
+                [
+                    'item_name' => 'Sand',
+                    'description' => 'River sand',
+                    'cost_code' => 'MAT-011',
+                    'quantity' => 25,
+                    'unit' => 'm3',
+                    'unit_price' => 330,
+                ],
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('quotation.total_amount', '16440.00')
+            ->json('quotation.id');
+
+        $this->postJson("/api/v1/procurement/quotations/{$quotationId}/accept")
+            ->assertOk()
+            ->assertJsonPath('quotation.status', 'accepted');
+
+        $purchaseOrderId = $this->postJson("/api/v1/procurement/quotations/{$quotationId}/purchase-order")
+            ->assertCreated()
+            ->assertJsonPath('purchase_order.total_amount', '16440.00')
+            ->json('purchase_order.id');
+
+        $this->postJson("/api/v1/procurement/purchase-orders/{$purchaseOrderId}/transition", ['status' => 'issued'])->assertOk();
+        $this->postJson("/api/v1/procurement/purchase-orders/{$purchaseOrderId}/transition", ['status' => 'approved'])->assertOk();
+
+        $goodsReceiptId = $this->postJson("/api/v1/procurement/purchase-orders/{$purchaseOrderId}/goods-receipts", [
+            'delivery_note_number' => 'DN-001',
+            'received_date' => now()->toDateString(),
+            'notes' => 'Delivered to Site A Warehouse.',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('goods_receipt.status', 'received')
+            ->assertJsonCount(2, 'goods_receipt.lines')
+            ->json('goods_receipt.id');
+
+        $this->postJson("/api/v1/procurement/goods-receipts/{$goodsReceiptId}/quality-inspections", [
+            'status' => 'passed',
+            'result_summary' => 'Materials accepted for foundation works.',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('quality_inspection.status', 'passed');
+
+        $invoiceId = $this->postJson("/api/v1/procurement/purchase-orders/{$purchaseOrderId}/supplier-invoices", [
+            'goods_receipt_id' => $goodsReceiptId,
+            'supplier_reference' => 'INV-CEM-001',
+            'subtotal_amount' => 16050,
+            'tax_amount' => 390,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('supplier_invoice.total_amount', '16440.00')
+            ->assertJsonPath('supplier_invoice.status', 'submitted')
+            ->json('supplier_invoice.id');
+
+        $this->postJson("/api/v1/procurement/supplier-invoices/{$invoiceId}/approve", [
+            'decision' => 'approved',
+        ])
+            ->assertOk()
+            ->assertJsonPath('supplier_invoice.status', 'finance_approved');
+
+        $this->postJson("/api/v1/procurement/supplier-invoices/{$invoiceId}/payments", [
+            'amount' => 16440,
+            'method' => 'bank_transfer',
+            'reference' => 'PAY-CEM-001',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('payment.invoice.status', 'paid')
+            ->assertJsonPath('payment.invoice.balance_due', '0.00');
+
+        $this->getJson('/api/v1/procurement')
+            ->assertOk()
+            ->assertJsonFragment([
+                'material_request' => $requisition['requisition_number'],
+                'invoice_status' => 'paid',
+                'payment_status' => 'paid',
+            ]);
     }
 
     public function test_document_uploads_and_drawing_revision_workflows_store_files(): void
@@ -238,7 +594,7 @@ class StructraPhaseOneApiTest extends TestCase
 
         $role = Role::query()->create([
             'company_id' => $company->id,
-            'name' => 'Owner',
+            'name' => 'CEO',
             'slug' => 'owner',
             'permissions' => ['*'],
             'is_system' => true,
@@ -254,5 +610,24 @@ class StructraPhaseOneApiTest extends TestCase
         ]);
 
         return [$user, $branch, $company];
+    }
+
+    private function approveRequisitionThroughWorkflow(int $requisitionId): void
+    {
+        foreach (range(1, 5) as $step) {
+            $response = $this->postJson("/api/v1/procurement/requisitions/{$requisitionId}/review", [
+                'decision' => 'approved',
+            ])->assertOk();
+
+            if ($step < 5) {
+                $response
+                    ->assertJsonPath('requisition.status', 'submitted')
+                    ->assertJsonPath('requisition.approval_progress.approved', $step);
+            } else {
+                $response
+                    ->assertJsonPath('requisition.status', 'approved')
+                    ->assertJsonPath('requisition.approval_progress.label', '5/5');
+            }
+        }
     }
 }

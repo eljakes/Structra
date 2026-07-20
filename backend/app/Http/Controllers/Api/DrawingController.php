@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Branch;
 use App\Models\Drawing;
+use App\Models\DrawingMarkup;
+use App\Models\DrawingReview;
 use App\Models\DrawingRevision;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -176,6 +178,103 @@ class DrawingController extends ApiController
         abort_if(! $revision->file_path || ! Storage::disk('local')->exists($revision->file_path), 404, 'Drawing revision file was not found.');
 
         return Storage::disk('local')->download($revision->file_path, $revision->original_filename);
+    }
+
+    public function storeMarkup(Request $request, Drawing $drawing): JsonResponse
+    {
+        $this->assertTenant($request, $drawing);
+
+        $data = $request->validate([
+            'drawing_revision_id' => ['nullable', 'integer'],
+            'markup_type' => ['nullable', Rule::in(['comment', 'cloud', 'dimension', 'pin', 'area'])],
+            'x' => ['nullable', 'numeric', 'min:0', 'max:1'],
+            'y' => ['nullable', 'numeric', 'min:0', 'max:1'],
+            'width' => ['nullable', 'numeric', 'min:0', 'max:1'],
+            'height' => ['nullable', 'numeric', 'min:0', 'max:1'],
+            'comment' => ['required', 'string', 'max:4000'],
+        ]);
+
+        $revisionId = $data['drawing_revision_id'] ?? $drawing->revisions()->where('revision_code', $drawing->current_revision)->latest()->value('id');
+
+        if ($revisionId) {
+            DrawingRevision::query()
+                ->where('company_id', $drawing->company_id)
+                ->where('drawing_id', $drawing->id)
+                ->whereKey($revisionId)
+                ->firstOrFail();
+        }
+
+        $markup = DrawingMarkup::query()->create([
+            'company_id' => $drawing->company_id,
+            'drawing_id' => $drawing->id,
+            'drawing_revision_id' => $revisionId,
+            'author_id' => $this->user($request)->id,
+            'markup_type' => $data['markup_type'] ?? 'comment',
+            'x' => $data['x'] ?? 0,
+            'y' => $data['y'] ?? 0,
+            'width' => $data['width'] ?? null,
+            'height' => $data['height'] ?? null,
+            'comment' => $data['comment'],
+        ]);
+
+        return response()->json(['markup' => $markup], 201);
+    }
+
+    public function resolveMarkup(Request $request, DrawingMarkup $markup): JsonResponse
+    {
+        abort_if($markup->company_id !== $this->companyId($request), 404);
+
+        $markup->update([
+            'status' => 'resolved',
+            'resolved_by' => $this->user($request)->id,
+            'resolved_at' => now(),
+        ]);
+
+        return response()->json(['markup' => $markup->fresh()]);
+    }
+
+    public function storeReview(Request $request, Drawing $drawing): JsonResponse
+    {
+        $this->assertTenant($request, $drawing);
+
+        $data = $request->validate([
+            'drawing_revision_id' => ['nullable', 'integer'],
+            'decision' => ['required', Rule::in(['approved', 'changes_required', 'rejected'])],
+            'comments' => ['nullable', 'string', 'max:4000'],
+        ]);
+
+        $revision = null;
+
+        if (! empty($data['drawing_revision_id'])) {
+            $revision = DrawingRevision::query()
+                ->where('company_id', $drawing->company_id)
+                ->where('drawing_id', $drawing->id)
+                ->whereKey($data['drawing_revision_id'])
+                ->firstOrFail();
+        } else {
+            $revision = $drawing->revisions()->where('revision_code', $drawing->current_revision)->latest()->first();
+        }
+
+        $review = DrawingReview::query()->create([
+            'company_id' => $drawing->company_id,
+            'drawing_id' => $drawing->id,
+            'drawing_revision_id' => $revision?->id,
+            'reviewer_id' => $this->user($request)->id,
+            'decision' => $data['decision'],
+            'comments' => $data['comments'] ?? null,
+            'reviewed_at' => now(),
+        ]);
+
+        $status = match ($data['decision']) {
+            'approved' => 'approved_for_construction',
+            'changes_required' => 'issued_for_review',
+            'rejected' => 'draft',
+        };
+
+        $drawing->update(['status' => $status]);
+        $revision?->update(['status' => $status]);
+
+        return response()->json(['review' => $review, 'drawing' => $drawing->fresh(['revisions', 'markups', 'reviews'])], 201);
     }
 
     private function storeUploadedFile(Request $request, int $companyId, ?int $branchId, ?int $projectId): array

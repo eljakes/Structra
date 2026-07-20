@@ -21,6 +21,7 @@ class User extends Authenticatable
         'company_id',
         'branch_id',
         'role_id',
+        'permissions',
         'name',
         'email',
         'phone',
@@ -40,9 +41,14 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'permissions' => 'array',
             'password' => 'hashed',
         ];
     }
+
+    protected $appends = [
+        'effective_permissions',
+    ];
 
     public function company(): BelongsTo
     {
@@ -61,12 +67,28 @@ class User extends Authenticatable
 
     public function hasPermission(string $permission): bool
     {
+        $permissions = $this->accessPermissions();
+
+        return in_array('*', $permissions, true) || in_array($permission, $permissions, true);
+    }
+
+    public function accessPermissions(): array
+    {
         if (! $this->relationLoaded('role')) {
             $this->load('role');
         }
 
-        $permissions = $this->role?->permissions ?? [];
+        $permissions = $this->permissions;
 
-        return in_array('*', $permissions, true) || in_array($permission, $permissions, true);
+        if ($permissions === null) {
+            $permissions = $this->role?->permissions ?? [];
+        }
+
+        return array_values(array_unique($permissions));
+    }
+
+    public function getEffectivePermissionsAttribute(): array
+    {
+        return $this->accessPermissions();
     }
 }

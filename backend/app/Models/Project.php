@@ -92,4 +92,14 @@ class Project extends Model
     {
         return $this->hasMany(Drawing::class);
     }
+
+    public function fieldDailyReports(): HasMany
+    {
+        return $this->hasMany(FieldDailyReport::class);
+    }
+
+    public function fieldIssues(): HasMany
+    {
+        return $this->hasMany(FieldIssue::class);
+    }
 }

@@ -101,6 +101,8 @@ class ProjectController extends ApiController
                 'purchaseOrders.lines',
                 'documents',
                 'drawings.revisions',
+                'fieldDailyReports.issues',
+                'fieldIssues',
             ])
             ->firstOrFail();
 

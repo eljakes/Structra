@@ -45,4 +45,14 @@ class Drawing extends Model
     {
         return $this->hasMany(DrawingRevision::class);
     }
+
+    public function markups(): HasMany
+    {
+        return $this->hasMany(DrawingMarkup::class);
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(DrawingReview::class);
+    }
 }

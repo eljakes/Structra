@@ -19,6 +19,7 @@ class PurchaseOrder extends Model
         'project_id',
         'supplier_id',
         'purchase_requisition_id',
+        'supplier_quotation_id',
         'po_number',
         'status',
         'currency',
@@ -57,8 +58,28 @@ class PurchaseOrder extends Model
         return $this->belongsTo(Supplier::class);
     }
 
+    public function requisition(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequisition::class, 'purchase_requisition_id');
+    }
+
+    public function quotation(): BelongsTo
+    {
+        return $this->belongsTo(SupplierQuotation::class, 'supplier_quotation_id');
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(PurchaseOrderLine::class);
+    }
+
+    public function goodsReceipts(): HasMany
+    {
+        return $this->hasMany(GoodsReceipt::class);
+    }
+
+    public function supplierInvoices(): HasMany
+    {
+        return $this->hasMany(SupplierInvoice::class);
     }
 }

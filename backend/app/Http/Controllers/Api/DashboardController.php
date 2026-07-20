@@ -2,14 +2,33 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\AttendanceRecord;
 use App\Models\AuditLog;
 use App\Models\BudgetLine;
+use App\Models\ClientApproval;
+use App\Models\ConsultantSubmittal;
 use App\Models\Document;
 use App\Models\Drawing;
+use App\Models\EmployeeProfile;
+use App\Models\EquipmentAsset;
+use App\Models\Estimate;
+use App\Models\Expense;
+use App\Models\FieldDailyReport;
+use App\Models\FieldIssue;
+use App\Models\Inspection;
+use App\Models\InventoryItem;
+use App\Models\Invoice;
+use App\Models\Lead;
+use App\Models\NonConformanceReport;
+use App\Models\Opportunity;
+use App\Models\PayrollRun;
 use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequisition;
+use App\Models\SafetyIncident;
+use App\Models\Tender;
+use App\Models\WorkPermit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -62,10 +81,24 @@ class DashboardController extends ApiController
                 'average_progress' => round((float) ($portfolio->average_progress ?? 0), 1),
                 'late_tasks' => $lateTasks,
                 'pending_approvals' => $pendingApprovals,
+                'open_leads' => Lead::query()->forCompany($companyId)->whereNotIn('stage', ['won', 'lost'])->count(),
+                'active_tenders' => Tender::query()->forCompany($companyId)->whereIn('status', ['draft', 'submitted', 'pending'])->count(),
+                'open_field_issues' => FieldIssue::query()->forCompany($companyId)->whereNotIn('status', ['resolved', 'closed'])->count(),
+                'reorder_alerts' => InventoryItem::query()->forCompany($companyId)->whereColumn('quantity_on_hand', '<=', 'reorder_level')->count(),
+                'clocked_in' => AttendanceRecord::query()->forCompany($companyId)->where('status', 'open')->count(),
+                'accounts_receivable' => (float) Invoice::query()->forCompany($companyId)->whereNotIn('payment_status', ['paid'])->sum('balance_due'),
+                'payroll_liability' => (float) PayrollRun::query()->forCompany($companyId)->whereIn('status', ['draft', 'approved'])->sum('net_pay'),
+                'equipment_available' => EquipmentAsset::query()->forCompany($companyId)->where('status', 'available')->count(),
+                'open_ncrs' => NonConformanceReport::query()->forCompany($companyId)->whereNotIn('status', ['closed'])->count(),
+                'open_incidents' => SafetyIncident::query()->forCompany($companyId)->whereNotIn('status', ['closed'])->count(),
+                'portal_reviews' => ClientApproval::query()->forCompany($companyId)->where('status', 'submitted')->count()
+                    + ConsultantSubmittal::query()->forCompany($companyId)->whereIn('status', ['submitted', 'in_review'])->count(),
             ],
             'project_health' => $this->projectHealth($companyId),
             'cost_by_category' => $this->costByCategory($companyId),
             'procurement_status' => $this->procurementStatus($companyId),
+            'sales_pipeline' => $this->salesPipeline($companyId),
+            'field_status' => $this->fieldStatus($companyId),
             'upcoming' => $this->upcoming($companyId),
             'recent_activity' => $this->recentActivity($companyId),
         ]);
@@ -126,6 +159,47 @@ class DashboardController extends ApiController
                     ->groupBy('status')
                     ->get(),
             ],
+            'sales' => [
+                'leads' => Lead::query()->forCompany($companyId)->select('stage', DB::raw('count(*) as total'), DB::raw('coalesce(sum(estimated_value), 0) as value'))->groupBy('stage')->get(),
+                'opportunities' => Opportunity::query()->forCompany($companyId)->select('stage', DB::raw('count(*) as total'), DB::raw('coalesce(sum(estimated_value), 0) as value'))->groupBy('stage')->get(),
+                'tenders' => Tender::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'), DB::raw('coalesce(sum(value), 0) as value'))->groupBy('status')->get(),
+                'estimates' => Estimate::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'), DB::raw('coalesce(sum(total_amount), 0) as value'))->groupBy('status')->get(),
+            ],
+            'field' => [
+                'daily_reports' => FieldDailyReport::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+                'issues' => FieldIssue::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+                'attendance_open' => AttendanceRecord::query()->forCompany($companyId)->where('status', 'open')->count(),
+            ],
+            'inventory' => [
+                'items' => InventoryItem::query()->forCompany($companyId)->count(),
+                'reorder_alerts' => InventoryItem::query()->forCompany($companyId)->whereColumn('quantity_on_hand', '<=', 'reorder_level')->get(),
+            ],
+            'finance' => [
+                'invoices' => Invoice::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'), DB::raw('coalesce(sum(total_amount), 0) as value'), DB::raw('coalesce(sum(balance_due), 0) as balance'))->groupBy('status')->get(),
+                'expenses' => Expense::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'), DB::raw('coalesce(sum(amount + tax_amount), 0) as value'))->groupBy('status')->get(),
+                'receivables' => Invoice::query()->forCompany($companyId)->whereNotIn('payment_status', ['paid'])->with(['client:id,name', 'project:id,code,name'])->orderBy('due_date')->get(),
+            ],
+            'payroll' => [
+                'employees' => EmployeeProfile::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+                'runs' => PayrollRun::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'), DB::raw('coalesce(sum(net_pay), 0) as value'))->groupBy('status')->get(),
+            ],
+            'equipment' => EquipmentAsset::query()
+                ->forCompany($companyId)
+                ->select('status', DB::raw('count(*) as total'), DB::raw('coalesce(sum(hourly_rate), 0) as hourly_rate'))
+                ->groupBy('status')
+                ->get(),
+            'quality' => [
+                'inspections' => Inspection::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+                'ncrs' => NonConformanceReport::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+            ],
+            'safety' => [
+                'incidents' => SafetyIncident::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+                'permits' => WorkPermit::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+            ],
+            'portals' => [
+                'client_approvals' => ClientApproval::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+                'consultant_submittals' => ConsultantSubmittal::query()->forCompany($companyId)->select('status', DB::raw('count(*) as total'))->groupBy('status')->get(),
+            ],
         ]);
     }
 
@@ -170,6 +244,43 @@ class DashboardController extends ApiController
                 ->groupBy('status')
                 ->get(),
             'purchase_orders' => PurchaseOrder::query()
+                ->forCompany($companyId)
+                ->select('status', DB::raw('count(*) as total'))
+                ->groupBy('status')
+                ->get(),
+        ];
+    }
+
+    private function salesPipeline(int $companyId): array
+    {
+        return [
+            'leads' => Lead::query()
+                ->forCompany($companyId)
+                ->select('stage', DB::raw('count(*) as total'), DB::raw('coalesce(sum(estimated_value), 0) as value'))
+                ->groupBy('stage')
+                ->get(),
+            'opportunities' => Opportunity::query()
+                ->forCompany($companyId)
+                ->select('stage', DB::raw('count(*) as total'), DB::raw('coalesce(sum(estimated_value), 0) as value'))
+                ->groupBy('stage')
+                ->get(),
+            'tenders' => Tender::query()
+                ->forCompany($companyId)
+                ->select('status', DB::raw('count(*) as total'), DB::raw('coalesce(sum(value), 0) as value'))
+                ->groupBy('status')
+                ->get(),
+        ];
+    }
+
+    private function fieldStatus(int $companyId): array
+    {
+        return [
+            'daily_reports' => FieldDailyReport::query()
+                ->forCompany($companyId)
+                ->select('status', DB::raw('count(*) as total'))
+                ->groupBy('status')
+                ->get(),
+            'issues' => FieldIssue::query()
                 ->forCompany($companyId)
                 ->select('status', DB::raw('count(*) as total'))
                 ->groupBy('status')
