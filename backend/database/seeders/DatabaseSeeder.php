@@ -87,6 +87,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if (! (bool) env('STRUCTRA_SEED_DEMO', false)) {
+            $this->command?->warn('Structra demo seed data skipped. Set STRUCTRA_SEED_DEMO=true only in disposable development databases.');
+
+            return;
+        }
+
         $company = Company::query()->updateOrCreate(
             ['registration_number' => 'NCG-2026-001'],
             [
@@ -136,7 +142,7 @@ class DatabaseSeeder extends Seeder
 
         $projectRole = Role::query()->firstOrCreate(
             ['company_id' => $company->id, 'slug' => 'project-director'],
-            ['name' => 'Project Director', 'permissions' => ['projects.manage', 'procurement.approve', 'documents.manage', 'field.manage', 'attendance.manage', 'equipment.manage', 'quality.manage', 'safety.manage', 'portals.manage', 'intelligence.manage', 'bi.manage', 'automation.manage', 'reports.view'], 'is_system' => true],
+            ['name' => 'Project Director', 'permissions' => ['projects.manage', 'procurement.approve', 'documents.manage', 'field.manage', 'attendance.manage', 'equipment.manage', 'quality.manage', 'safety.manage', 'portals.manage', 'bi.manage', 'automation.manage', 'reports.view'], 'is_system' => true],
         );
 
         $procurementRole = Role::query()->firstOrCreate(
@@ -156,7 +162,7 @@ class DatabaseSeeder extends Seeder
 
         $financeRole = Role::query()->firstOrCreate(
             ['company_id' => $company->id, 'slug' => 'finance'],
-            ['name' => 'Finance', 'permissions' => ['finance.manage', 'payroll.manage', 'intelligence.manage', 'bi.manage', 'integrations.manage', 'localization.manage', 'reports.view', 'procurement.approve'], 'is_system' => true],
+            ['name' => 'Finance', 'permissions' => ['finance.manage', 'payroll.manage', 'bi.manage', 'reports.view', 'procurement.approve'], 'is_system' => true],
         );
 
         $hrRole = Role::query()->firstOrCreate(
@@ -171,7 +177,7 @@ class DatabaseSeeder extends Seeder
 
         $qhseRole = Role::query()->firstOrCreate(
             ['company_id' => $company->id, 'slug' => 'qhse-manager'],
-            ['name' => 'QHSE Manager', 'permissions' => ['quality.manage', 'safety.manage', 'field.manage', 'documents.manage', 'intelligence.manage', 'bi.manage', 'automation.manage', 'reports.view'], 'is_system' => true],
+            ['name' => 'QHSE Manager', 'permissions' => ['quality.manage', 'safety.manage', 'field.manage', 'documents.manage', 'bi.manage', 'automation.manage', 'reports.view'], 'is_system' => true],
         );
 
         $owner = User::query()->firstOrCreate(

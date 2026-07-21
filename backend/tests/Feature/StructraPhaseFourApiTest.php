@@ -8,7 +8,6 @@ use App\Models\Client;
 use App\Models\Company;
 use App\Models\InventoryItem;
 use App\Models\Invoice;
-use App\Models\LocalizationCountry;
 use App\Models\NonConformanceReport;
 use App\Models\Project;
 use App\Models\Role;
@@ -22,41 +21,14 @@ class StructraPhaseFourApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_ai_analysis_assistant_and_insight_resolution_work(): void
+    public function test_removed_module_api_surfaces_are_not_exposed(): void
     {
-        [$user, , , $project] = $this->tenantScenario();
+        [$user] = $this->tenantScenario();
         Sanctum::actingAs($user);
 
-        $analysis = $this->postJson('/api/v1/intelligence/analyze')
-            ->assertOk()
-            ->assertJsonPath('message', 'Analysis completed.');
-
-        $this->assertGreaterThanOrEqual(4, $analysis->json('insights_created_or_updated'));
-        $this->assertGreaterThanOrEqual(3, $analysis->json('forecasts_created_or_updated'));
-        $this->assertDatabaseHas('ai_insights', [
-            'company_id' => $user->company_id,
-            'project_id' => $project->id,
-            'source_key' => "project-risk-{$project->id}",
-        ]);
-
-        $queryId = $this->postJson('/api/v1/intelligence/assistant', [
-            'question' => 'What is our cash and receivables exposure?',
-        ])
-            ->assertOk()
-            ->assertJsonPath('assistant_query.intent', 'cash_flow')
-            ->json('assistant_query.id');
-
-        $this->assertDatabaseHas('assistant_queries', [
-            'id' => $queryId,
-            'company_id' => $user->company_id,
-            'intent' => 'cash_flow',
-        ]);
-
-        $insightId = $analysis->json('insights.0.id');
-
-        $this->postJson("/api/v1/intelligence/insights/{$insightId}/resolve")
-            ->assertOk()
-            ->assertJsonPath('insight.status', 'resolved');
+        $this->postJson('/api/v1/intelligence/analyze')->assertNotFound();
+        $this->getJson('/api/v1/integrations')->assertNotFound();
+        $this->getJson('/api/v1/localization')->assertNotFound();
     }
 
     public function test_business_intelligence_dashboards_and_metric_snapshots_work(): void
@@ -137,110 +109,6 @@ class StructraPhaseFourApiTest extends TestCase
         $this->postJson('/api/v1/automation/run-active')
             ->assertOk()
             ->assertJsonCount(1, 'runs');
-    }
-
-    public function test_integration_connectors_webhooks_openapi_and_graphql_work(): void
-    {
-        [$user] = $this->tenantScenario();
-        Sanctum::actingAs($user);
-
-        $connectorId = $this->postJson('/api/v1/integrations/connectors', [
-            'provider' => 'xero',
-            'name' => 'Xero Test Tenant',
-            'settings' => ['sync_invoices' => true],
-            'credentials' => ['tenant_id' => 'tenant-123', 'client_id' => 'client-123'],
-        ])
-            ->assertCreated()
-            ->assertJsonPath('connector.status', 'configured')
-            ->json('connector.id');
-
-        $this->postJson("/api/v1/integrations/connectors/{$connectorId}/test")
-            ->assertOk()
-            ->assertJsonPath('test.ok', true)
-            ->assertJsonPath('connector.status', 'connected');
-
-        $subscriptionId = $this->postJson('/api/v1/integrations/webhooks', [
-            'name' => 'Invoice Webhook',
-            'event_type' => 'invoice.issued',
-            'target_url' => 'https://example.com/structra/webhook',
-            'secret' => 'phase-four-secret',
-        ])
-            ->assertCreated()
-            ->assertJsonPath('webhook_subscription.event_type', 'invoice.issued')
-            ->json('webhook_subscription.id');
-
-        $this->postJson("/api/v1/integrations/webhooks/{$subscriptionId}/dispatch", [
-            'payload' => ['invoice_number' => 'INV-TEST-001'],
-            'simulate' => true,
-        ])
-            ->assertCreated()
-            ->assertJsonPath('webhook_delivery.status', 'delivered')
-            ->assertJsonPath('webhook_delivery.response_code', 202);
-
-        $this->getJson('/api/v1/ecosystem/openapi')
-            ->assertOk()
-            ->assertJsonPath('info.title', 'Structra API');
-
-        $this->postJson('/api/v1/ecosystem/graphql', [
-            'query' => '{ projects { id name } invoices { id balance_due } inventoryItems { id sku } }',
-        ])
-            ->assertOk()
-            ->assertJsonCount(1, 'data.projects')
-            ->assertJsonCount(1, 'data.invoices')
-            ->assertJsonCount(1, 'data.inventoryItems');
-    }
-
-    public function test_multi_country_tax_and_currency_operations_work(): void
-    {
-        [$user] = $this->tenantScenario();
-        Sanctum::actingAs($user);
-
-        $this->seedCountries();
-
-        $this->patchJson('/api/v1/localization/settings', [
-            'base_country' => 'GH',
-            'base_currency' => 'GHS',
-            'enabled_countries' => ['GH', 'NG', 'KE'],
-            'enabled_currencies' => ['GHS', 'USD', 'NGN'],
-            'tax_rounding_mode' => 'document',
-            'date_format' => 'd/m/Y',
-        ])
-            ->assertOk()
-            ->assertJsonPath('settings.base_currency', 'GHS');
-
-        $this->postJson('/api/v1/localization/exchange-rates', [
-            'base_currency' => 'GHS',
-            'quote_currency' => 'USD',
-            'rate' => 0.08,
-            'rate_date' => now()->toDateString(),
-        ])
-            ->assertCreated()
-            ->assertJsonPath('exchange_rate.quote_currency', 'USD');
-
-        $this->postJson('/api/v1/localization/tax-rates', [
-            'country' => 'GH',
-            'name' => 'Ghana VAT Test',
-            'rate_percent' => 15,
-            'is_default' => true,
-        ])
-            ->assertCreated()
-            ->assertJsonPath('tax_rate.country', 'GH');
-
-        $this->postJson('/api/v1/localization/convert', [
-            'amount' => 1000,
-            'from_currency' => 'GHS',
-            'to_currency' => 'USD',
-        ])
-            ->assertOk()
-            ->assertJsonPath('conversion.converted_amount', 80);
-
-        $this->postJson('/api/v1/localization/calculate-tax', [
-            'amount' => 2000,
-            'country' => 'GH',
-        ])
-            ->assertOk()
-            ->assertJsonPath('tax.tax_amount', 300)
-            ->assertJsonPath('tax.total_amount', 2300);
     }
 
     private function tenantScenario(): array
@@ -369,19 +237,4 @@ class StructraPhaseFourApiTest extends TestCase
         return [$user, $branch, $company, $project, $client];
     }
 
-    private function seedCountries(): void
-    {
-        foreach ([['GH', 'Ghana', 'GHS'], ['NG', 'Nigeria', 'NGN'], ['KE', 'Kenya', 'KES']] as [$iso2, $name, $currency]) {
-            LocalizationCountry::query()->firstOrCreate(
-                ['iso2' => $iso2],
-                [
-                    'name' => $name,
-                    'currency' => $currency,
-                    'timezone' => 'UTC',
-                    'tax_label' => 'VAT',
-                    'is_active' => true,
-                ],
-            );
-        }
-    }
 }

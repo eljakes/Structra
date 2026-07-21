@@ -149,7 +149,7 @@ class AuthController extends ApiController
             [
                 'name' => 'Project Director',
                 'slug' => 'project-director',
-                'permissions' => ['projects.manage', 'procurement.approve', 'documents.manage', 'field.manage', 'attendance.manage', 'equipment.manage', 'quality.manage', 'safety.manage', 'portals.manage', 'intelligence.manage', 'bi.manage', 'automation.manage', 'reports.view'],
+                'permissions' => ['projects.manage', 'procurement.approve', 'documents.manage', 'field.manage', 'attendance.manage', 'equipment.manage', 'quality.manage', 'safety.manage', 'portals.manage', 'bi.manage', 'automation.manage', 'reports.view'],
                 'is_system' => true,
             ],
             [
@@ -167,7 +167,7 @@ class AuthController extends ApiController
             [
                 'name' => 'Finance',
                 'slug' => 'finance',
-                'permissions' => ['finance.manage', 'payroll.manage', 'intelligence.manage', 'bi.manage', 'integrations.manage', 'localization.manage', 'reports.view', 'procurement.approve'],
+                'permissions' => ['finance.manage', 'payroll.manage', 'bi.manage', 'reports.view', 'procurement.approve'],
                 'is_system' => true,
             ],
             [
@@ -191,7 +191,7 @@ class AuthController extends ApiController
             [
                 'name' => 'QHSE Manager',
                 'slug' => 'qhse-manager',
-                'permissions' => ['quality.manage', 'safety.manage', 'field.manage', 'documents.manage', 'intelligence.manage', 'bi.manage', 'automation.manage', 'reports.view'],
+                'permissions' => ['quality.manage', 'safety.manage', 'field.manage', 'documents.manage', 'bi.manage', 'automation.manage', 'reports.view'],
                 'is_system' => true,
             ],
         ];

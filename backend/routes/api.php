@@ -11,10 +11,7 @@ use App\Http\Controllers\Api\DrawingController;
 use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\FieldController;
 use App\Http\Controllers\Api\FinanceController;
-use App\Http\Controllers\Api\IntegrationController;
-use App\Http\Controllers\Api\IntelligenceController;
 use App\Http\Controllers\Api\InventoryController;
-use App\Http\Controllers\Api\LocalizationController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PeopleController;
 use App\Http\Controllers\Api\PortalController;
@@ -181,11 +178,6 @@ Route::prefix('v1')->group(function (): void {
         Route::post('projects/{project}/consultant-submittals', [PortalController::class, 'storeConsultantSubmittal'])->middleware('permission:portals.manage');
         Route::post('portals/consultant-submittals/{submittal}/review', [PortalController::class, 'reviewConsultantSubmittal'])->middleware('permission:portals.manage');
 
-        Route::get('intelligence', [IntelligenceController::class, 'index'])->middleware('permission:intelligence.manage');
-        Route::post('intelligence/analyze', [IntelligenceController::class, 'analyze'])->middleware('permission:intelligence.manage');
-        Route::post('intelligence/assistant', [IntelligenceController::class, 'ask'])->middleware('permission:intelligence.manage');
-        Route::post('intelligence/insights/{insight}/resolve', [IntelligenceController::class, 'resolveInsight'])->middleware('permission:intelligence.manage');
-
         Route::get('bi', [BusinessIntelligenceController::class, 'index'])->middleware('permission:bi.manage');
         Route::post('bi/dashboards', [BusinessIntelligenceController::class, 'storeDashboard'])->middleware('permission:bi.manage');
         Route::post('bi/snapshots', [BusinessIntelligenceController::class, 'createSnapshot'])->middleware('permission:bi.manage');
@@ -195,20 +187,5 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('automation/rules/{rule}', [AutomationController::class, 'updateRule'])->middleware('permission:automation.manage');
         Route::post('automation/rules/{rule}/run', [AutomationController::class, 'runRule'])->middleware('permission:automation.manage');
         Route::post('automation/run-active', [AutomationController::class, 'runActive'])->middleware('permission:automation.manage');
-
-        Route::get('integrations', [IntegrationController::class, 'index'])->middleware('permission:integrations.manage');
-        Route::post('integrations/connectors', [IntegrationController::class, 'storeConnector'])->middleware('permission:integrations.manage');
-        Route::post('integrations/connectors/{connector}/test', [IntegrationController::class, 'testConnector'])->middleware('permission:integrations.manage');
-        Route::post('integrations/webhooks', [IntegrationController::class, 'storeWebhookSubscription'])->middleware('permission:integrations.manage');
-        Route::post('integrations/webhooks/{subscription}/dispatch', [IntegrationController::class, 'dispatchWebhook'])->middleware('permission:integrations.manage');
-        Route::get('ecosystem/openapi', [IntegrationController::class, 'openApi'])->middleware('permission:integrations.manage');
-        Route::post('ecosystem/graphql', [IntegrationController::class, 'graphql'])->middleware('permission:integrations.manage');
-
-        Route::get('localization', [LocalizationController::class, 'index'])->middleware('permission:localization.manage');
-        Route::patch('localization/settings', [LocalizationController::class, 'updateSettings'])->middleware('permission:localization.manage');
-        Route::post('localization/tax-rates', [LocalizationController::class, 'storeTaxRate'])->middleware('permission:localization.manage');
-        Route::post('localization/exchange-rates', [LocalizationController::class, 'storeExchangeRate'])->middleware('permission:localization.manage');
-        Route::post('localization/convert', [LocalizationController::class, 'convertCurrency'])->middleware('permission:localization.manage');
-        Route::post('localization/calculate-tax', [LocalizationController::class, 'calculateTax'])->middleware('permission:localization.manage');
     });
 });
