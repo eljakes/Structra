@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AdminApprovalController;
 use App\Http\Controllers\Api\AutomationController;
 use App\Http\Controllers\Api\BudgetLineController;
 use App\Http\Controllers\Api\BusinessIntelligenceController;
@@ -37,15 +38,20 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('organization/company', [OrganizationController::class, 'updateCompany'])->middleware('permission:settings.manage');
         Route::delete('organization/company', [OrganizationController::class, 'destroyCompany'])->middleware('permission:settings.manage');
         Route::post('organization/branches', [OrganizationController::class, 'storeBranch'])->middleware('permission:settings.manage');
-        Route::post('organization/users', [OrganizationController::class, 'storeUser'])->middleware('permission:settings.manage');
-        Route::patch('organization/users/{user}', [OrganizationController::class, 'updateUser'])->middleware('permission:settings.manage');
-        Route::delete('organization/users/{user}', [OrganizationController::class, 'destroyUser'])->middleware('permission:settings.manage');
+        Route::post('organization/users', [OrganizationController::class, 'storeUser'])->middleware('permission:settings.manage|payroll.manage');
+        Route::patch('organization/users/{user}', [OrganizationController::class, 'updateUser'])->middleware('permission:settings.manage|payroll.manage');
+        Route::delete('organization/users/{user}', [OrganizationController::class, 'destroyUser'])->middleware('permission:settings.manage|payroll.manage');
+        Route::post('organization/roles', [OrganizationController::class, 'storeRole'])->middleware('permission:settings.manage|payroll.manage');
+        Route::patch('organization/roles/{role}', [OrganizationController::class, 'updateRole'])->middleware('permission:settings.manage|payroll.manage');
+        Route::delete('organization/roles/{role}', [OrganizationController::class, 'destroyRole'])->middleware('permission:settings.manage|payroll.manage');
         Route::post('organization/clients', [OrganizationController::class, 'storeClient'])->middleware('permission:projects.manage');
         Route::patch('organization/clients/{client}', [OrganizationController::class, 'updateClient'])->middleware('permission:settings.manage');
         Route::delete('organization/clients/{client}', [OrganizationController::class, 'destroyClient'])->middleware('permission:settings.manage');
         Route::post('organization/suppliers', [OrganizationController::class, 'storeSupplier'])->middleware('permission:procurement.manage');
         Route::patch('organization/suppliers/{supplier}', [OrganizationController::class, 'updateSupplier'])->middleware('permission:settings.manage');
         Route::delete('organization/suppliers/{supplier}', [OrganizationController::class, 'destroySupplier'])->middleware('permission:settings.manage');
+        Route::get('admin/approvals', [AdminApprovalController::class, 'index'])->middleware('permission:settings.manage');
+        Route::post('admin/approvals/{type}/{id}/review', [AdminApprovalController::class, 'review'])->middleware('permission:settings.manage');
 
         Route::get('projects', [ProjectController::class, 'index']);
         Route::post('projects', [ProjectController::class, 'store'])->middleware('permission:projects.manage');
@@ -66,6 +72,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('procurement/requisitions', [ProcurementController::class, 'requisitions']);
         Route::post('projects/{project}/requisitions', [ProcurementController::class, 'storeRequisition'])->middleware('permission:procurement.manage');
         Route::patch('procurement/requisitions/{requisition}', [ProcurementController::class, 'updateRequisition'])->middleware('permission:procurement.manage');
+        Route::delete('procurement/requisitions/{requisition}', [ProcurementController::class, 'destroyRequisition'])->middleware('permission:procurement.manage');
         Route::post('procurement/requisitions/{requisition}/submit', [ProcurementController::class, 'submitRequisition'])->middleware('permission:procurement.manage');
         Route::post('procurement/requisitions/{requisition}/review', [ProcurementController::class, 'reviewRequisition'])->middleware('permission:procurement.approve');
         Route::post('procurement/requisitions/{requisition}/convert-to-po', [ProcurementController::class, 'convertToPurchaseOrder'])->middleware('permission:procurement.manage');
@@ -102,6 +109,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('sales', [SalesController::class, 'index'])->middleware('permission:crm.manage|tenders.manage|estimating.manage');
         Route::post('sales/leads', [SalesController::class, 'storeLead'])->middleware('permission:crm.manage');
         Route::patch('sales/leads/{lead}', [SalesController::class, 'updateLead'])->middleware('permission:crm.manage');
+        Route::delete('sales/leads/{lead}', [SalesController::class, 'destroyLead'])->middleware('permission:crm.manage');
         Route::post('sales/leads/{lead}/qualify', [SalesController::class, 'qualifyLead'])->middleware('permission:crm.manage');
         Route::post('sales/opportunities', [SalesController::class, 'storeOpportunity'])->middleware('permission:crm.manage');
         Route::post('sales/opportunities/{opportunity}/tenders', [SalesController::class, 'createTenderFromOpportunity'])->middleware('permission:tenders.manage');
@@ -120,7 +128,11 @@ Route::prefix('v1')->group(function (): void {
 
         Route::get('inventory', [InventoryController::class, 'index'])->middleware('permission:inventory.manage');
         Route::post('inventory/warehouses', [InventoryController::class, 'storeWarehouse'])->middleware('permission:inventory.manage');
+        Route::patch('inventory/warehouses/{warehouse}', [InventoryController::class, 'updateWarehouse'])->middleware('permission:inventory.manage');
+        Route::delete('inventory/warehouses/{warehouse}', [InventoryController::class, 'destroyWarehouse'])->middleware('permission:inventory.manage');
         Route::post('inventory/items', [InventoryController::class, 'storeItem'])->middleware('permission:inventory.manage');
+        Route::patch('inventory/items/{item}', [InventoryController::class, 'updateItem'])->middleware('permission:inventory.manage');
+        Route::delete('inventory/items/{item}', [InventoryController::class, 'destroyItem'])->middleware('permission:inventory.manage');
         Route::post('inventory/movements', [InventoryController::class, 'moveStock'])->middleware('permission:inventory.manage');
         Route::post('suppliers/{supplier}/prices', [InventoryController::class, 'storeSupplierPrice'])->middleware('permission:suppliers.manage');
         Route::post('suppliers/{supplier}/reviews', [InventoryController::class, 'storeSupplierReview'])->middleware('permission:suppliers.manage');
@@ -130,6 +142,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('field/daily-reports/{dailyReport}/transition', [FieldController::class, 'transitionDailyReport'])->middleware('permission:field.manage');
         Route::post('projects/{project}/field-issues', [FieldController::class, 'storeIssue'])->middleware('permission:field.manage');
         Route::patch('field/issues/{issue}', [FieldController::class, 'updateIssue'])->middleware('permission:field.manage');
+        Route::delete('field/issues/{issue}', [FieldController::class, 'destroyIssue'])->middleware('permission:field.manage');
         Route::get('field/issues/{issue}/photo', [FieldController::class, 'downloadIssuePhoto'])->middleware('permission:field.manage');
         Route::post('attendance/clock-in', [FieldController::class, 'clockIn'])->middleware('permission:attendance.manage');
         Route::post('attendance/{attendance}/clock-out', [FieldController::class, 'clockOut'])->middleware('permission:attendance.manage');
@@ -142,13 +155,46 @@ Route::prefix('v1')->group(function (): void {
         Route::post('finance/expenses', [FinanceController::class, 'storeExpense'])->middleware('permission:finance.manage');
         Route::post('finance/expenses/{expense}/review', [FinanceController::class, 'reviewExpense'])->middleware('permission:finance.manage');
         Route::post('finance/journal-entries', [FinanceController::class, 'storeJournalEntry'])->middleware('permission:finance.manage');
+        Route::post('finance/accounts', [FinanceController::class, 'storeAccount'])->middleware('permission:finance.manage');
+        Route::post('finance/bank-accounts', [FinanceController::class, 'storeBankAccount'])->middleware('permission:finance.manage');
+        Route::post('finance/bank-reconciliations', [FinanceController::class, 'storeBankReconciliation'])->middleware('permission:finance.manage');
+        Route::post('finance/credit-notes', [FinanceController::class, 'storeCreditNote'])->middleware('permission:finance.manage');
+        Route::post('finance/retentions', [FinanceController::class, 'storeRetention'])->middleware('permission:finance.manage');
+        Route::post('finance/retentions/{retention}/release', [FinanceController::class, 'releaseRetention'])->middleware('permission:finance.manage');
+        Route::post('finance/progress-billings', [FinanceController::class, 'storeProgressBilling'])->middleware('permission:finance.manage');
+        Route::post('finance/tax-rules', [FinanceController::class, 'storeTaxRule'])->middleware('permission:finance.manage');
+        Route::post('finance/cost-centers', [FinanceController::class, 'storeCostCenter'])->middleware('permission:finance.manage');
+        Route::post('finance/fixed-assets', [FinanceController::class, 'storeFixedAsset'])->middleware('permission:finance.manage');
 
         Route::get('people', [PeopleController::class, 'index'])->middleware('permission:payroll.manage');
         Route::post('people/employees', [PeopleController::class, 'storeEmployeeProfile'])->middleware('permission:payroll.manage');
+        Route::post('people/job-vacancies', [PeopleController::class, 'storeJobVacancy'])->middleware('permission:payroll.manage');
+        Route::post('people/candidates', [PeopleController::class, 'storeCandidate'])->middleware('permission:payroll.manage');
+        Route::post('people/applications', [PeopleController::class, 'storeApplication'])->middleware('permission:payroll.manage');
+        Route::post('people/applications/{application}/hire', [PeopleController::class, 'hireApplication'])->middleware('permission:payroll.manage');
+        Route::post('people/interviews', [PeopleController::class, 'storeInterview'])->middleware('permission:payroll.manage');
+        Route::post('people/onboarding-checklists', [PeopleController::class, 'storeOnboardingChecklist'])->middleware('permission:payroll.manage');
+        Route::post('people/shifts', [PeopleController::class, 'storeShift'])->middleware('permission:payroll.manage');
+        Route::post('people/shift-assignments', [PeopleController::class, 'storeShiftAssignment'])->middleware('permission:payroll.manage');
+        Route::post('people/timesheets', [PeopleController::class, 'storeTimesheet'])->middleware('permission:payroll.manage');
+        Route::post('people/timesheets/{timesheet}/review', [PeopleController::class, 'reviewTimesheet'])->middleware('permission:payroll.manage');
+        Route::post('people/workforce-allocations', [PeopleController::class, 'storeAllocation'])->middleware('permission:payroll.manage');
+        Route::post('people/overtime-requests', [PeopleController::class, 'storeOvertimeRequest'])->middleware('permission:payroll.manage');
+        Route::post('people/overtime-requests/{overtime}/review', [PeopleController::class, 'reviewOvertimeRequest'])->middleware('permission:payroll.manage');
         Route::post('people/leave-requests', [PeopleController::class, 'storeLeaveRequest'])->middleware('permission:payroll.manage');
         Route::post('people/leave-requests/{leaveRequest}/review', [PeopleController::class, 'reviewLeaveRequest'])->middleware('permission:payroll.manage');
         Route::post('people/payroll-runs', [PeopleController::class, 'storePayrollRun'])->middleware('permission:payroll.manage');
         Route::post('people/payroll-runs/{payrollRun}/approve', [PeopleController::class, 'approvePayrollRun'])->middleware('permission:payroll.manage');
+        Route::post('people/benefits', [PeopleController::class, 'storeBenefit'])->middleware('permission:payroll.manage');
+        Route::post('people/performance-reviews', [PeopleController::class, 'storePerformanceReview'])->middleware('permission:payroll.manage');
+        Route::post('people/training-courses', [PeopleController::class, 'storeTrainingCourse'])->middleware('permission:payroll.manage');
+        Route::post('people/training-records', [PeopleController::class, 'storeTrainingRecord'])->middleware('permission:payroll.manage');
+        Route::post('people/certifications', [PeopleController::class, 'storeCertification'])->middleware('permission:payroll.manage');
+        Route::post('people/ppe-issues', [PeopleController::class, 'storePpeIssue'])->middleware('permission:payroll.manage');
+        Route::post('people/contractors', [PeopleController::class, 'storeContractor'])->middleware('permission:payroll.manage');
+        Route::post('people/assets', [PeopleController::class, 'storeWorkforceAsset'])->middleware('permission:payroll.manage');
+        Route::post('people/documents', [PeopleController::class, 'storeWorkforceDocument'])->middleware('permission:payroll.manage');
+        Route::post('people/exit-records', [PeopleController::class, 'storeExitRecord'])->middleware('permission:payroll.manage');
 
         Route::get('equipment', [EquipmentController::class, 'index'])->middleware('permission:equipment.manage');
         Route::post('equipment/assets', [EquipmentController::class, 'storeAsset'])->middleware('permission:equipment.manage');
@@ -177,15 +223,26 @@ Route::prefix('v1')->group(function (): void {
         Route::post('portals/client-approvals/{approval}/review', [PortalController::class, 'reviewClientApproval'])->middleware('permission:portals.manage');
         Route::post('projects/{project}/consultant-submittals', [PortalController::class, 'storeConsultantSubmittal'])->middleware('permission:portals.manage');
         Route::post('portals/consultant-submittals/{submittal}/review', [PortalController::class, 'reviewConsultantSubmittal'])->middleware('permission:portals.manage');
+        Route::post('projects/{project}/portal-work-items', [PortalController::class, 'storeWorkItem'])->middleware('permission:portals.manage');
+        Route::patch('portals/work-items/{workItem}', [PortalController::class, 'updateWorkItem'])->middleware('permission:portals.manage');
+        Route::post('portals/work-items/{workItem}/review', [PortalController::class, 'reviewWorkItem'])->middleware('permission:portals.manage');
+        Route::delete('portals/work-items/{workItem}', [PortalController::class, 'destroyWorkItem'])->middleware('permission:portals.manage');
 
         Route::get('bi', [BusinessIntelligenceController::class, 'index'])->middleware('permission:bi.manage');
         Route::post('bi/dashboards', [BusinessIntelligenceController::class, 'storeDashboard'])->middleware('permission:bi.manage');
+        Route::patch('bi/dashboards/{dashboard}', [BusinessIntelligenceController::class, 'updateDashboard'])->middleware('permission:bi.manage');
+        Route::delete('bi/dashboards/{dashboard}', [BusinessIntelligenceController::class, 'destroyDashboard'])->middleware('permission:bi.manage');
         Route::post('bi/snapshots', [BusinessIntelligenceController::class, 'createSnapshot'])->middleware('permission:bi.manage');
 
         Route::get('automation', [AutomationController::class, 'index'])->middleware('permission:automation.manage');
+        Route::get('automation/catalog', [AutomationController::class, 'catalog'])->middleware('permission:automation.manage');
         Route::post('automation/rules', [AutomationController::class, 'storeRule'])->middleware('permission:automation.manage');
         Route::patch('automation/rules/{rule}', [AutomationController::class, 'updateRule'])->middleware('permission:automation.manage');
+        Route::delete('automation/rules/{rule}', [AutomationController::class, 'destroyRule'])->middleware('permission:automation.manage');
         Route::post('automation/rules/{rule}/run', [AutomationController::class, 'runRule'])->middleware('permission:automation.manage');
+        Route::post('automation/rules/{rule}/versions/{version}/rollback', [AutomationController::class, 'rollbackVersion'])->middleware('permission:automation.manage');
+        Route::post('automation/templates/{template}/instantiate', [AutomationController::class, 'instantiateTemplate'])->middleware('permission:automation.manage');
+        Route::post('automation/triggers/{event}', [AutomationController::class, 'triggerEvent'])->middleware('permission:automation.manage');
         Route::post('automation/run-active', [AutomationController::class, 'runActive'])->middleware('permission:automation.manage');
     });
 });

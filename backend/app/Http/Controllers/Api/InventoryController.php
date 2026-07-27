@@ -44,7 +44,7 @@ class InventoryController extends ApiController
         $data = $request->validate([
             'branch_id' => ['required', 'integer'],
             'name' => ['required', 'string', 'max:255'],
-            'code' => ['required', 'string', 'max:32'],
+            'code' => ['nullable', 'string', 'max:32', Rule::unique('warehouses')->where('company_id', $companyId)],
             'location' => ['nullable', 'string', 'max:2000'],
             'manager_id' => ['nullable', 'integer'],
         ]);
@@ -54,10 +54,47 @@ class InventoryController extends ApiController
         $warehouse = Warehouse::query()->create([
             'company_id' => $companyId,
             ...$data,
-            'code' => strtoupper($data['code']),
+            'code' => $this->suppliedCode($data['code'] ?? null)
+                ?? $this->nextCompanyCode($this->codePrefix($data['name'], 'WAR'), Warehouse::class, 'code', $companyId),
         ]);
 
         return response()->json(['warehouse' => $warehouse], 201);
+    }
+
+    public function updateWarehouse(Request $request, Warehouse $warehouse): JsonResponse
+    {
+        $this->assertWarehouseTenant($request, $warehouse);
+        $companyId = $this->companyId($request);
+
+        $data = $request->validate([
+            'branch_id' => ['sometimes', 'integer'],
+            'name' => ['sometimes', 'string', 'max:255'],
+            'code' => ['nullable', 'string', 'max:32', Rule::unique('warehouses')->where('company_id', $companyId)->ignore($warehouse->id)],
+            'location' => ['nullable', 'string', 'max:2000'],
+            'manager_id' => ['nullable', 'integer'],
+        ]);
+
+        if (array_key_exists('branch_id', $data)) {
+            Branch::query()->forCompany($companyId)->whereKey($data['branch_id'])->firstOrFail();
+        }
+
+        if (array_key_exists('code', $data)) {
+            $data['code'] = $this->suppliedCode($data['code'])
+                ?? $this->nextCompanyCode($this->codePrefix($data['name'] ?? $warehouse->name, 'WAR'), Warehouse::class, 'code', $companyId);
+        }
+
+        $warehouse->update($data);
+
+        return response()->json(['warehouse' => $warehouse->fresh(['stocks.item'])]);
+    }
+
+    public function destroyWarehouse(Request $request, Warehouse $warehouse): JsonResponse
+    {
+        $this->assertWarehouseTenant($request, $warehouse);
+
+        $warehouse->delete();
+
+        return response()->json(['message' => 'Warehouse archived.']);
     }
 
     public function storeItem(Request $request): JsonResponse
@@ -66,7 +103,7 @@ class InventoryController extends ApiController
 
         $data = $request->validate([
             'branch_id' => ['nullable', 'integer'],
-            'sku' => ['required', 'string', 'max:64', Rule::unique('inventory_items')->where('company_id', $companyId)],
+            'sku' => ['nullable', 'string', 'max:64', Rule::unique('inventory_items')->where('company_id', $companyId)],
             'name' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:80'],
             'unit' => ['nullable', 'string', 'max:24'],
@@ -77,12 +114,58 @@ class InventoryController extends ApiController
 
         $item = InventoryItem::query()->create([
             'company_id' => $companyId,
-            'sku' => strtoupper($data['sku']),
+            'sku' => $this->suppliedCode($data['sku'] ?? null)
+                ?? $this->nextCompanyCode($this->codePrefix($data['category'] ?? $data['name'], 'SKU'), InventoryItem::class, 'sku', $companyId),
             'currency' => strtoupper($data['currency'] ?? $this->user($request)->company->default_currency),
-            ...$data,
+            ...collect($data)->except(['sku', 'currency'])->all(),
         ]);
 
         return response()->json(['item' => $item], 201);
+    }
+
+    public function updateItem(Request $request, InventoryItem $item): JsonResponse
+    {
+        $this->assertInventoryItemTenant($request, $item);
+        $companyId = $this->companyId($request);
+
+        $data = $request->validate([
+            'branch_id' => ['nullable', 'integer'],
+            'sku' => ['nullable', 'string', 'max:64', Rule::unique('inventory_items')->where('company_id', $companyId)->ignore($item->id)],
+            'name' => ['sometimes', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:80'],
+            'unit' => ['nullable', 'string', 'max:24'],
+            'reorder_level' => ['nullable', 'numeric', 'min:0'],
+            'currency' => ['nullable', 'string', 'size:3'],
+            'average_cost' => ['nullable', 'numeric', 'min:0'],
+            'status' => ['sometimes', Rule::in(['active', 'inactive'])],
+        ]);
+
+        if (! empty($data['branch_id'])) {
+            Branch::query()->forCompany($companyId)->whereKey($data['branch_id'])->firstOrFail();
+        }
+
+        if (array_key_exists('sku', $data)) {
+            $data['sku'] = $this->suppliedCode($data['sku'])
+                ?? $this->nextCompanyCode($this->codePrefix($data['category'] ?? $item->category ?? $data['name'] ?? $item->name, 'SKU'), InventoryItem::class, 'sku', $companyId);
+        }
+
+        if (isset($data['currency'])) {
+            $data['currency'] = strtoupper($data['currency']);
+        }
+
+        $item->update($data);
+
+        return response()->json(['item' => $item->fresh('stocks.warehouse')]);
+    }
+
+    public function destroyItem(Request $request, InventoryItem $item): JsonResponse
+    {
+        $this->assertInventoryItemTenant($request, $item);
+
+        $item->update(['status' => 'inactive']);
+        $item->delete();
+
+        return response()->json(['message' => 'Inventory item archived.']);
     }
 
     public function moveStock(Request $request): JsonResponse
@@ -165,6 +248,14 @@ class InventoryController extends ApiController
             return $movement;
         });
 
+        $item->refresh();
+        if ($item->status === 'active' && (float) $item->quantity_on_hand <= (float) $item->reorder_level) {
+            $this->publishAutomationEvent($request, 'stock_low', [
+                'record_type' => 'inventory_item',
+                'record_id' => $item->id,
+            ]);
+        }
+
         return response()->json(['movement' => $movement->load('item')], 201);
     }
 
@@ -191,8 +282,10 @@ class InventoryController extends ApiController
         $price = SupplierPriceCatalog::query()->create([
             'company_id' => $supplier->company_id,
             'supplier_id' => $supplier->id,
+            'cost_code' => $this->suppliedCode($data['cost_code'] ?? null)
+                ?? $this->nextCompanyCode($this->codePrefix($data['description'], 'CST'), SupplierPriceCatalog::class, 'cost_code', $supplier->company_id),
             'currency' => strtoupper($data['currency'] ?? $supplier->currency),
-            ...$data,
+            ...collect($data)->except(['cost_code', 'currency'])->all(),
         ]);
 
         return response()->json(['supplier_price' => $price], 201);
@@ -248,5 +341,15 @@ class InventoryController extends ApiController
     private function assertSupplierTenant(Request $request, Supplier $supplier): void
     {
         abort_if($supplier->company_id !== $this->companyId($request), 404);
+    }
+
+    private function assertWarehouseTenant(Request $request, Warehouse $warehouse): void
+    {
+        abort_if($warehouse->company_id !== $this->companyId($request), 404);
+    }
+
+    private function assertInventoryItemTenant(Request $request, InventoryItem $item): void
+    {
+        abort_if($item->company_id !== $this->companyId($request), 404);
     }
 }

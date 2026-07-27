@@ -242,8 +242,8 @@ class IntelligenceController extends ApiController
                 'source_key' => 'open-qhse-load',
                 'category' => 'quality_safety',
                 'severity' => $openIncidents > 0 ? 'high' : 'medium',
-                'title' => 'Open QA/HSE actions require attention',
-                'narrative' => "There are {$openNcrs} open NCR(s) and {$openIncidents} open safety incident(s).",
+                'title' => 'Open Quality Assurance and Health, Safety, and Environment actions require attention',
+                'narrative' => "There are {$openNcrs} open Non-Conformance Report(NCR) item(s) and {$openIncidents} open safety incident(s).",
                 'recommendation' => 'Prioritize corrective action closure before upcoming client or consultant reviews.',
                 'signals' => ['open_ncrs' => $openNcrs, 'open_incidents' => $openIncidents],
                 'confidence_score' => 88,
@@ -371,12 +371,12 @@ class IntelligenceController extends ApiController
             $openNcrs = NonConformanceReport::query()->forCompany($companyId)->whereNotIn('status', ['closed'])->count();
             $openIncidents = SafetyIncident::query()->forCompany($companyId)->whereNotIn('status', ['closed'])->count();
 
-            return ['quality_safety', "There are {$openNcrs} open NCR(s) and {$openIncidents} open safety incident(s).", ['open_ncrs' => $openNcrs, 'open_incidents' => $openIncidents], ['non_conformance_reports', 'safety_incidents']];
+            return ['quality_safety', "There are {$openNcrs} open Non-Conformance Report(NCR) item(s) and {$openIncidents} open safety incident(s).", ['open_ncrs' => $openNcrs, 'open_incidents' => $openIncidents], ['non_conformance_reports', 'safety_incidents']];
         }
 
         $summary = $this->summary($companyId);
 
-        return ['general', 'I can answer questions about project risk, cash flow, inventory reorder exposure, and QA/HSE status. Current open insights: '.$summary['open_insights'].'.', $summary, ['ai_insights', 'projects', 'invoices']];
+        return ['general', 'I can answer questions about project risk, cash flow, inventory reorder exposure, and Quality Assurance and Health, Safety, and Environment status. Current open insights: '.$summary['open_insights'].'.', $summary, ['ai_insights', 'projects', 'invoices']];
     }
 
     private function upsertInsight(Request $request, array $payload): AiInsight

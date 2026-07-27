@@ -90,6 +90,15 @@ class SalesController extends ApiController
         return response()->json(['lead' => $lead->fresh(['client', 'opportunity'])]);
     }
 
+    public function destroyLead(Request $request, Lead $lead): JsonResponse
+    {
+        $this->assertTenant($request, $lead);
+
+        $lead->delete();
+
+        return response()->json(['message' => 'Lead archived.']);
+    }
+
     public function qualifyLead(Request $request, Lead $lead): JsonResponse
     {
         $this->assertTenant($request, $lead);
@@ -360,8 +369,10 @@ class SalesController extends ApiController
 
         $item = PricingItem::query()->create([
             'company_id' => $this->companyId($request),
+            'cost_code' => $this->suppliedCode($data['cost_code'] ?? null)
+                ?? $this->nextCompanyCode($this->codePrefix($data['category'] ?? $data['description'], 'CST'), PricingItem::class, 'cost_code', $this->companyId($request)),
             'currency' => strtoupper($data['currency'] ?? $this->user($request)->company->default_currency),
-            ...$data,
+            ...collect($data)->except(['cost_code', 'currency'])->all(),
         ]);
 
         return response()->json(['pricing_item' => $item], 201);
@@ -561,14 +572,18 @@ class SalesController extends ApiController
         $unitCost = (float) ($line['unit_cost'] ?? $pricingItem?->unit_cost ?? 0);
         $markup = (float) ($line['markup_percent'] ?? 0);
         $lineTotal = round($quantity * $unitCost * (1 + ($markup / 100)), 2);
+        $description = $line['description'] ?? $pricingItem?->description;
+        $category = $line['category'] ?? $pricingItem?->category ?? 'materials';
 
         return EstimateLine::query()->create([
             'company_id' => $estimate->company_id,
             'estimate_id' => $estimate->id,
             'pricing_item_id' => $pricingItem?->id,
-            'cost_code' => $line['cost_code'] ?? $pricingItem?->cost_code,
-            'description' => $line['description'] ?? $pricingItem?->description,
-            'category' => $line['category'] ?? $pricingItem?->category ?? 'materials',
+            'cost_code' => $this->suppliedCode($line['cost_code'] ?? null)
+                ?? $pricingItem?->cost_code
+                ?? $this->nextCompanyCode($this->codePrefix($category ?? $description, 'CST'), EstimateLine::class, 'cost_code', $estimate->company_id),
+            'description' => $description,
+            'category' => $category,
             'quantity' => $quantity,
             'unit' => $line['unit'] ?? $pricingItem?->unit ?? 'each',
             'unit_cost' => $unitCost,

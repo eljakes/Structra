@@ -260,6 +260,14 @@ class StructraPhaseOneApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('supplier.name', 'Admin Edited Supplier');
 
+        $this->patchJson('/api/v1/organization/company', [
+            'settings' => ['appearance' => ['theme' => 'dark']],
+        ])
+            ->assertOk()
+            ->assertJsonPath('company.settings.appearance.theme', 'dark');
+
+        $this->assertSame('dark', Company::query()->findOrFail($company->id)->settings['appearance']['theme']);
+
         $this->deleteJson("/api/v1/projects/{$project->id}")
             ->assertOk()
             ->assertJsonPath('message', 'Project archived.');

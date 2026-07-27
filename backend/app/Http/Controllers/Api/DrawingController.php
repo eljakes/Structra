@@ -45,7 +45,7 @@ class DrawingController extends ApiController
         $data = $request->validate([
             'branch_id' => ['nullable', 'integer'],
             'project_id' => ['nullable', 'integer'],
-            'drawing_number' => ['required', 'string', 'max:80'],
+            'drawing_number' => ['nullable', 'string', 'max:80'],
             'title' => ['required', 'string', 'max:255'],
             'discipline' => ['required', Rule::in(['architectural', 'structural', 'mep', 'landscape', 'interiors', 'civil', 'other'])],
             'status' => ['nullable', Rule::in(['draft', 'issued_for_review', 'approved_for_construction', 'superseded'])],
@@ -66,7 +66,20 @@ class DrawingController extends ApiController
             Branch::query()->forCompany($companyId)->whereKey($branchId)->firstOrFail();
         }
 
-        $drawing = DB::transaction(function () use ($request, $data, $companyId, $branchId, $projectId) {
+        $drawingNumber = $this->suppliedCode($data['drawing_number'] ?? null)
+            ?? $this->nextCompanyCode($this->codePrefix($data['discipline'], 'DRG'), Drawing::class, 'drawing_number', $companyId);
+
+        abort_if(
+            Drawing::query()
+                ->forCompany($companyId)
+                ->where('project_id', $projectId)
+                ->where('drawing_number', $drawingNumber)
+                ->exists(),
+            422,
+            'Drawing number already exists for this project.',
+        );
+
+        $drawing = DB::transaction(function () use ($request, $data, $companyId, $branchId, $projectId, $drawingNumber) {
             $revisionCode = strtoupper($data['revision_code'] ?? 'P01');
 
             $drawing = Drawing::query()->create([
@@ -74,7 +87,7 @@ class DrawingController extends ApiController
                 'branch_id' => $branchId,
                 'project_id' => $projectId,
                 'uploaded_by' => $this->user($request)->id,
-                'drawing_number' => strtoupper($data['drawing_number']),
+                'drawing_number' => $drawingNumber,
                 'title' => $data['title'],
                 'discipline' => $data['discipline'],
                 'status' => $data['status'] ?? 'draft',
@@ -97,6 +110,11 @@ class DrawingController extends ApiController
             return $drawing;
         });
 
+        $this->publishAutomationEvent($request, 'document_uploaded', [
+            'record_type' => 'drawing',
+            'record_id' => $drawing->id,
+        ]);
+
         return response()->json(['drawing' => $drawing->load(['project', 'revisions'])], 201);
     }
 
@@ -105,13 +123,15 @@ class DrawingController extends ApiController
         $this->assertTenant($request, $drawing);
 
         $data = $request->validate([
-            'revision_code' => ['required', 'string', 'max:24'],
+            'revision_code' => ['nullable', 'string', 'max:24'],
             'status' => ['nullable', Rule::in(['draft', 'issued_for_review', 'approved_for_construction'])],
             'notes' => ['nullable', 'string', 'max:4000'],
             'file' => ['nullable', 'file', 'max:102400'],
         ]);
 
-        $revisionCode = strtoupper($data['revision_code']);
+        $revisionCode = $this->suppliedCode($data['revision_code'] ?? null) ?? $this->nextRevisionCode($drawing);
+
+        abort_if($drawing->revisions()->where('revision_code', $revisionCode)->exists(), 422, 'Revision code already exists for this drawing.');
 
         $revision = DB::transaction(function () use ($request, $drawing, $data, $revisionCode) {
             $drawing->revisions()
@@ -297,5 +317,18 @@ class DrawingController extends ApiController
     private function assertTenant(Request $request, Drawing $drawing): void
     {
         abort_if($drawing->company_id !== $this->companyId($request), 404);
+    }
+
+    private function nextRevisionCode(Drawing $drawing): string
+    {
+        $next = $drawing->revisions()->count() + 1;
+
+        do {
+            $revisionCode = sprintf('P%02d', $next);
+            $exists = $drawing->revisions()->where('revision_code', $revisionCode)->exists();
+            $next++;
+        } while ($exists);
+
+        return $revisionCode;
     }
 }

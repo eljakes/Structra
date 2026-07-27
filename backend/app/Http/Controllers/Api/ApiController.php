@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 abstract class ApiController extends Controller
 {
@@ -26,14 +27,92 @@ abstract class ApiController extends Controller
         return (int) $this->user($request)->company_id;
     }
 
+    protected function publishAutomationEvent(Request $request, string $event, array $payload = []): void
+    {
+        try {
+            app(AutomationController::class)->dispatchEvent($request, $event, $payload);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+    }
+
     protected function nextNumber(string $prefix, string $modelClass, string $column, int $companyId): string
     {
+        return $this->nextScopedSequenceCode(
+            "{$this->codePrefix($prefix)}-".now()->format('ym'),
+            $modelClass,
+            $column,
+            ['company_id' => $companyId],
+            5,
+        );
+    }
+
+    protected function nextCompanyCode(string $prefix, string $modelClass, string $column, int $companyId, int $pad = 6): string
+    {
+        return $this->nextScopedSequenceCode($prefix, $modelClass, $column, ['company_id' => $companyId], $pad);
+    }
+
+    protected function nextProjectCode(string $prefix, string $modelClass, string $column, int $projectId, int $pad = 6): string
+    {
+        return $this->nextScopedSequenceCode($prefix, $modelClass, $column, ['project_id' => $projectId], $pad);
+    }
+
+    protected function suppliedCode(?string $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        return strtoupper(trim($value));
+    }
+
+    protected function codePrefix(?string $value, string $fallback = 'GEN'): string
+    {
+        $prefix = preg_replace('/[^A-Z0-9]/', '', strtoupper((string) $value));
+
+        if (blank($prefix)) {
+            $prefix = $fallback;
+        }
+
+        return substr($prefix, 0, 3);
+    }
+
+    private function nextScopedSequenceCode(string $prefix, string $modelClass, string $column, array $scope, int $pad): string
+    {
         /** @var class-string<Model> $modelClass */
-        $next = $modelClass::query()
-            ->where('company_id', $companyId)
+        $model = new $modelClass();
+        $table = $model->getTable();
+        $normalizedPrefix = $this->sequencePrefix($prefix);
+        $query = DB::table($table);
+
+        foreach ($scope as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        $next = (clone $query)
+            ->where($column, 'like', "{$normalizedPrefix}-%")
             ->count() + 1;
 
-        return sprintf('%s-%s-%05d', $prefix, now()->format('ym'), $next);
+        do {
+            $candidate = sprintf("%s-%0{$pad}d", $normalizedPrefix, $next);
+            $existsQuery = DB::table($table);
+
+            foreach ($scope as $field => $value) {
+                $existsQuery->where($field, $value);
+            }
+
+            $exists = $existsQuery->where($column, $candidate)->exists();
+            $next++;
+        } while ($exists);
+
+        return $candidate;
+    }
+
+    private function sequencePrefix(string $prefix): string
+    {
+        $normalized = preg_replace('/[^A-Z0-9-]/', '', strtoupper($prefix));
+
+        return blank($normalized) ? 'GEN' : trim($normalized, '-');
     }
 
     protected function projectForTenant(Request $request, int|string $projectId): Project

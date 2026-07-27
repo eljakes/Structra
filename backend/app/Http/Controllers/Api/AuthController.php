@@ -189,7 +189,7 @@ class AuthController extends ApiController
                 'is_system' => true,
             ],
             [
-                'name' => 'QHSE Manager',
+                'name' => 'Quality Assurance and Health, Safety, and Environment Manager',
                 'slug' => 'qhse-manager',
                 'permissions' => ['quality.manage', 'safety.manage', 'field.manage', 'documents.manage', 'bi.manage', 'automation.manage', 'reports.view'],
                 'is_system' => true,

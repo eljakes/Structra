@@ -259,6 +259,11 @@ class ComplianceController extends ApiController
             'reported_by' => $this->user($request)->id,
         ]);
 
+        $this->publishAutomationEvent($request, 'safety_incident_reported', [
+            'record_type' => 'safety_incident',
+            'record_id' => $incident->id,
+        ]);
+
         return response()->json(['incident' => $incident->load('project')], 201);
     }
 
@@ -400,6 +405,11 @@ class ComplianceController extends ApiController
             'location' => $data['location'] ?? null,
             'hazards' => $data['hazards'] ?? null,
             'controls' => $data['controls'] ?? null,
+        ]);
+
+        $this->publishAutomationEvent($request, 'work_permit_expiring', [
+            'record_type' => 'work_permit',
+            'record_id' => $permit->id,
         ]);
 
         return response()->json(['permit' => $permit->load('project')], 201);

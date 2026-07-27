@@ -17,6 +17,7 @@ use App\Models\SupplierInvoice;
 use App\Models\SupplierPayment;
 use App\Models\SupplierQuotation;
 use App\Models\SupplierQuotationLine;
+use App\Services\FinancePostingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -142,7 +143,7 @@ class ProcurementController extends ApiController
                     'supplier_id' => $line['supplier_id'] ?? null,
                     'item_name' => $line['item_name'] ?? null,
                     'description' => $line['description'],
-                    'cost_code' => $line['cost_code'] ?? null,
+                    'cost_code' => $this->lineCostCode($line['cost_code'] ?? null, $line['item_name'] ?? $line['description'], PurchaseRequisitionLine::class, $projectModel->company_id),
                     'quantity' => $amounts['quantity'],
                     'unit' => $line['unit'] ?? 'each',
                     'estimated_unit_cost' => $amounts['unit_cost'],
@@ -208,7 +209,7 @@ class ProcurementController extends ApiController
                         'supplier_id' => $line['supplier_id'] ?? null,
                         'item_name' => $line['item_name'] ?? null,
                         'description' => $line['description'],
-                        'cost_code' => $line['cost_code'] ?? null,
+                        'cost_code' => $this->lineCostCode($line['cost_code'] ?? null, $line['item_name'] ?? $line['description'], PurchaseRequisitionLine::class, $requisition->company_id),
                         'quantity' => $amounts['quantity'],
                         'unit' => $line['unit'] ?? 'each',
                         'estimated_unit_cost' => $amounts['unit_cost'],
@@ -227,6 +228,16 @@ class ProcurementController extends ApiController
         return response()->json(['requisition' => $this->decorateRequisition($requisition->fresh(['project', 'lines', 'requestedBy']))]);
     }
 
+    public function destroyRequisition(Request $request, PurchaseRequisition $requisition): JsonResponse
+    {
+        $this->assertRequisitionTenant($request, $requisition);
+        abort_if(! in_array($requisition->status, ['draft', 'rejected'], true), 422, 'Only draft or rejected requisitions can be archived.');
+
+        $requisition->delete();
+
+        return response()->json(['message' => 'Material request archived.']);
+    }
+
     public function submitRequisition(Request $request, PurchaseRequisition $requisition): JsonResponse
     {
         $this->assertRequisitionTenant($request, $requisition);
@@ -241,6 +252,11 @@ class ProcurementController extends ApiController
             'approval_stage' => $workflow[0]['key'],
             'approval_workflow' => $workflow,
             'submitted_at' => now(),
+        ]);
+
+        $this->publishAutomationEvent($request, 'material_request_submitted', [
+            'record_type' => 'material_request',
+            'record_id' => $requisition->id,
         ]);
 
         return response()->json(['requisition' => $this->decorateRequisition($requisition->fresh(['project', 'lines', 'requestedBy']))]);
@@ -420,7 +436,7 @@ class ProcurementController extends ApiController
                     'supplier_quotation_id' => $quotation->id,
                     'item_name' => $line['item_name'] ?? null,
                     'description' => $line['description'],
-                    'cost_code' => $line['cost_code'] ?? null,
+                    'cost_code' => $this->lineCostCode($line['cost_code'] ?? null, $line['item_name'] ?? $line['description'], SupplierQuotationLine::class, $rfq->company_id),
                     'quantity' => $amounts['quantity'],
                     'unit' => $line['unit'] ?? 'each',
                     'unit_price' => $amounts['unit_cost'],
@@ -439,6 +455,11 @@ class ProcurementController extends ApiController
         });
 
         $this->updateQuotationScores($rfq->id);
+
+        $this->publishAutomationEvent($request, 'supplier_quotation_submitted', [
+            'record_type' => 'supplier_quotation',
+            'record_id' => $quotation->id,
+        ]);
 
         return response()->json(['quotation' => $quotation->fresh(['rfq', 'supplier', 'lines'])], 201);
     }
@@ -665,6 +686,13 @@ class ProcurementController extends ApiController
         $purchaseOrder->update($updates);
         $this->syncProjectCosts($purchaseOrder->project);
 
+        if ($data['status'] === 'approved') {
+            $this->publishAutomationEvent($request, 'purchase_order_approved', [
+                'record_type' => 'purchase_order',
+                'record_id' => $purchaseOrder->id,
+            ]);
+        }
+
         return response()->json(['purchase_order' => $purchaseOrder->fresh(['supplier', 'project', 'lines'])]);
     }
 
@@ -820,6 +848,11 @@ class ProcurementController extends ApiController
 
         $purchaseOrder->update(['payment_status' => 'invoiced']);
 
+        $this->publishAutomationEvent($request, 'supplier_invoice_submitted', [
+            'record_type' => 'supplier_invoice',
+            'record_id' => $invoice->id,
+        ]);
+
         return response()->json(['supplier_invoice' => $invoice->load(['supplier', 'purchaseOrder', 'goodsReceipt', 'payments'])], 201);
     }
 
@@ -841,6 +874,10 @@ class ProcurementController extends ApiController
             'notes' => $data['notes'] ?? $invoice->notes,
         ]);
 
+        if ($data['decision'] === 'approved') {
+            app(FinancePostingService::class)->postSupplierInvoiceApproval($invoice->fresh(), $this->user($request)->id);
+        }
+
         return response()->json(['supplier_invoice' => $invoice->fresh(['supplier', 'purchaseOrder', 'goodsReceipt', 'payments'])]);
     }
 
@@ -851,6 +888,7 @@ class ProcurementController extends ApiController
 
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01'],
+            'finance_bank_account_id' => ['nullable', 'integer'],
             'payment_date' => ['nullable', 'date'],
             'method' => ['nullable', Rule::in(['bank_transfer', 'cheque', 'cash', 'mobile_money'])],
             'reference' => ['nullable', 'string', 'max:120'],
@@ -862,6 +900,7 @@ class ProcurementController extends ApiController
             $payment = SupplierPayment::query()->create([
                 'company_id' => $invoice->company_id,
                 'supplier_invoice_id' => $invoice->id,
+                'finance_bank_account_id' => $data['finance_bank_account_id'] ?? null,
                 'payment_number' => $this->nextNumber('SPY', SupplierPayment::class, 'payment_number', $invoice->company_id),
                 'amount' => $amount,
                 'payment_date' => $data['payment_date'] ?? now()->toDateString(),
@@ -885,7 +924,9 @@ class ProcurementController extends ApiController
             return $payment;
         });
 
-        return response()->json(['payment' => $payment->load('invoice')], 201);
+        $payment = app(FinancePostingService::class)->postSupplierPayment($payment, $invoice->fresh(), $this->user($request)->id, $data['finance_bank_account_id'] ?? null);
+
+        return response()->json(['payment' => $payment->load(['invoice', 'bankAccount'])], 201);
     }
 
     public function storeSupplierContract(Request $request, Supplier $supplier): JsonResponse
@@ -958,12 +999,18 @@ class ProcurementController extends ApiController
             'company_id' => $purchaseOrder->company_id,
             'purchase_order_id' => $purchaseOrder->id,
             'description' => $line['description'],
-            'cost_code' => $line['cost_code'] ?? null,
+            'cost_code' => $this->lineCostCode($line['cost_code'] ?? null, $line['description'] ?? null, PurchaseOrderLine::class, $purchaseOrder->company_id),
             'quantity' => $quantity,
             'unit' => $line['unit'] ?? 'each',
             'unit_cost' => $unitCost,
             'line_total' => round($quantity * $unitCost, 2),
         ]);
+    }
+
+    private function lineCostCode(?string $provided, ?string $source, string $modelClass, int $companyId): string
+    {
+        return $this->suppliedCode($provided)
+            ?? $this->nextCompanyCode($this->codePrefix($source, 'CST'), $modelClass, 'cost_code', $companyId);
     }
 
     private function lineAmounts(array $line, string $unitCostKey): array

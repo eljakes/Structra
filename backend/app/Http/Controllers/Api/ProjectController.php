@@ -66,7 +66,7 @@ class ProjectController extends ApiController
             'company_id' => $companyId,
             'branch_id' => $branch->id,
             'client_id' => $clientId,
-            'code' => $data['code'] ?? $this->nextNumber('PRJ', Project::class, 'code', $companyId),
+            'code' => $this->suppliedCode($data['code'] ?? null) ?? $this->nextNumber('PRJ', Project::class, 'code', $companyId),
             'name' => $data['name'],
             'description' => $data['description'] ?? null,
             'status' => $data['status'] ?? 'planning',
@@ -81,6 +81,11 @@ class ProjectController extends ApiController
             'target_end_date' => $data['target_end_date'] ?? null,
             'created_by' => $this->user($request)->id,
             'updated_by' => $this->user($request)->id,
+        ]);
+
+        $this->publishAutomationEvent($request, 'project_created', [
+            'record_type' => 'project',
+            'record_id' => $project->id,
         ]);
 
         return response()->json(['project' => $project->load(['branch', 'client'])], 201);
@@ -138,6 +143,20 @@ class ProjectController extends ApiController
             'currency' => isset($data['currency']) ? strtoupper($data['currency']) : $project->currency,
             'updated_by' => $this->user($request)->id,
         ]);
+
+        if (in_array($project->fresh()->health_status, ['at_risk', 'critical'], true) || in_array($data['risk_level'] ?? null, ['high', 'critical'], true)) {
+            $this->publishAutomationEvent($request, 'project_delayed', [
+                'record_type' => 'project',
+                'record_id' => $project->id,
+            ]);
+        }
+
+        if ((float) $project->fresh()->forecast_to_complete > (float) $project->fresh()->budget_total && (float) $project->fresh()->budget_total > 0) {
+            $this->publishAutomationEvent($request, 'budget_exceeded', [
+                'record_type' => 'project',
+                'record_id' => $project->id,
+            ]);
+        }
 
         return response()->json(['project' => $project->fresh(['branch', 'client'])]);
     }

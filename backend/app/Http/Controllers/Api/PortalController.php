@@ -7,8 +7,16 @@ use App\Models\ClientApproval;
 use App\Models\ConsultantSubmittal;
 use App\Models\Document;
 use App\Models\Drawing;
+use App\Models\FieldDailyReport;
+use App\Models\Inspection;
+use App\Models\Invoice;
 use App\Models\PortalAccess;
 use App\Models\PortalUser;
+use App\Models\PortalWorkItem;
+use App\Models\Project;
+use App\Models\PurchaseOrder;
+use App\Models\Supplier;
+use App\Models\SupplierInvoice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -18,17 +26,36 @@ class PortalController extends ApiController
     public function index(Request $request): JsonResponse
     {
         $companyId = $this->companyId($request);
+        $workItems = PortalWorkItem::query()
+            ->forCompany($companyId)
+            ->with($this->workItemRelations())
+            ->latest()
+            ->limit(200)
+            ->get();
 
         return response()->json([
-            'portal_users' => PortalUser::query()->forCompany($companyId)->with(['client:id,name', 'accesses.project:id,code,name'])->orderBy('name')->get(),
+            'portal_users' => PortalUser::query()->forCompany($companyId)->with(['client:id,name', 'accesses.project:id,code,name', 'workItems:id,portal_user_id,portal_type,item_type,status'])->orderBy('name')->get(),
             'accesses' => PortalAccess::query()->forCompany($companyId)->with(['portalUser:id,name,email,user_type', 'project:id,code,name'])->latest()->get(),
             'client_approvals' => ClientApproval::query()->forCompany($companyId)->with(['portalUser:id,name,email', 'project:id,code,name', 'drawing:id,drawing_number,title', 'document:id,document_number,title'])->latest()->limit(100)->get(),
             'consultant_submittals' => ConsultantSubmittal::query()->forCompany($companyId)->with(['portalUser:id,name,email', 'project:id,code,name', 'drawing:id,drawing_number,title', 'document:id,document_number,title'])->latest()->limit(100)->get(),
+            'work_items' => $workItems,
+            'portal_types' => $this->portalTypes($companyId, $workItems),
+            'project_snapshots' => Project::query()->forCompany($companyId)->withCount(['documents', 'drawings', 'fieldDailyReports', 'purchaseOrders'])->latest()->limit(60)->get(['id', 'code', 'name', 'status', 'health_status', 'risk_level', 'progress_percent', 'contract_value', 'budget_total', 'actual_cost', 'target_end_date']),
+            'supplier_purchase_orders' => PurchaseOrder::query()->forCompany($companyId)->with(['supplier:id,name', 'project:id,code,name'])->latest()->limit(80)->get(),
+            'supplier_invoices' => SupplierInvoice::query()->forCompany($companyId)->with(['supplier:id,name', 'project:id,code,name', 'purchaseOrder:id,po_number'])->latest()->limit(80)->get(),
+            'client_invoices' => Invoice::query()->forCompany($companyId)->with(['client:id,name', 'project:id,code,name'])->latest()->limit(80)->get(),
+            'inspections' => Inspection::query()->forCompany($companyId)->with(['project:id,code,name'])->latest()->limit(80)->get(),
+            'daily_reports' => FieldDailyReport::query()->forCompany($companyId)->with(['project:id,code,name'])->latest('report_date')->limit(80)->get(),
+            'activity' => $this->portalActivity($workItems),
             'summary' => [
                 'active_users' => PortalUser::query()->forCompany($companyId)->where('status', 'active')->count(),
                 'pending_client_approvals' => ClientApproval::query()->forCompany($companyId)->where('status', 'submitted')->count(),
                 'consultant_reviews' => ConsultantSubmittal::query()->forCompany($companyId)->whereIn('status', ['submitted', 'in_review'])->count(),
                 'project_accesses' => PortalAccess::query()->forCompany($companyId)->count(),
+                'open_work_items' => $workItems->whereNotIn('status', ['approved', 'rejected', 'closed', 'completed', 'paid', 'signed_off'])->count(),
+                'overdue_items' => $workItems->filter(fn (PortalWorkItem $item): bool => $item->due_date && $item->due_date->isPast() && ! in_array($item->status, ['approved', 'closed', 'completed', 'paid', 'signed_off'], true))->count(),
+                'supplier_invoices' => SupplierInvoice::query()->forCompany($companyId)->whereNotIn('status', ['paid', 'rejected'])->count(),
+                'inspection_signoffs' => $workItems->where('item_type', 'inspection_signoff')->whereIn('status', ['submitted', 'in_review'])->count(),
             ],
         ]);
     }
@@ -39,7 +66,7 @@ class PortalController extends ApiController
 
         $data = $request->validate([
             'client_id' => ['nullable', 'integer'],
-            'user_type' => ['required', Rule::in(['client', 'consultant'])],
+            'user_type' => ['required', Rule::in(array_keys($this->portalTypesConfig()))],
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('portal_users')->where('company_id', $companyId)],
             'phone' => ['nullable', 'string', 'max:60'],
@@ -72,8 +99,10 @@ class PortalController extends ApiController
 
         $data = $request->validate([
             'project_id' => ['required', 'integer'],
-            'access_level' => ['nullable', Rule::in(['view', 'comment', 'approve'])],
+            'access_level' => ['nullable', Rule::in(['view', 'comment', 'approve', 'submit', 'manage'])],
+            'access_scope' => ['nullable', Rule::in(['project', 'contract', 'work_package', 'cost_code'])],
             'disciplines' => ['nullable', 'array'],
+            'features' => ['nullable', 'array'],
             'expires_at' => ['nullable', 'date'],
         ]);
 
@@ -87,7 +116,9 @@ class PortalController extends ApiController
             [
                 'company_id' => $portalUser->company_id,
                 'access_level' => $data['access_level'] ?? 'view',
+                'access_scope' => $data['access_scope'] ?? 'project',
                 'disciplines' => $data['disciplines'] ?? [],
+                'features' => $data['features'] ?? $this->defaultFeaturesFor($portalUser->user_type),
                 'expires_at' => $data['expires_at'] ?? null,
                 'granted_by' => $this->user($request)->id,
             ],
@@ -223,8 +254,236 @@ class PortalController extends ApiController
         return response()->json(['consultant_submittal' => $submittal->fresh(['portalUser', 'project', 'drawing', 'document'])]);
     }
 
+    public function storeWorkItem(Request $request, int $project): JsonResponse
+    {
+        $projectModel = $this->projectForTenant($request, $project);
+
+        $data = $request->validate([
+            'portal_user_id' => ['nullable', 'integer'],
+            'supplier_id' => ['nullable', 'integer'],
+            'purchase_order_id' => ['nullable', 'integer'],
+            'invoice_id' => ['nullable', 'integer'],
+            'supplier_invoice_id' => ['nullable', 'integer'],
+            'drawing_id' => ['nullable', 'integer'],
+            'document_id' => ['nullable', 'integer'],
+            'portal_type' => ['required', Rule::in(array_keys($this->portalTypesConfig()))],
+            'item_type' => ['required', Rule::in($this->portalItemTypes())],
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:4000'],
+            'status' => ['nullable', Rule::in($this->portalStatuses())],
+            'priority' => ['nullable', Rule::in(['low', 'medium', 'high', 'critical'])],
+            'due_date' => ['nullable', 'date'],
+            'attachments' => ['nullable', 'array'],
+            'metadata' => ['nullable', 'array'],
+        ]);
+
+        $portalUser = null;
+        if (! empty($data['portal_user_id'])) {
+            $portalUser = PortalUser::query()->forCompany($projectModel->company_id)->whereKey($data['portal_user_id'])->firstOrFail();
+            abort_if($portalUser->user_type !== $data['portal_type'], 422, 'Portal user type does not match the selected portal.');
+        }
+
+        if (! empty($data['supplier_id'])) {
+            Supplier::query()->forCompany($projectModel->company_id)->whereKey($data['supplier_id'])->firstOrFail();
+        }
+
+        if (! empty($data['purchase_order_id'])) {
+            PurchaseOrder::query()->forCompany($projectModel->company_id)->where('project_id', $projectModel->id)->whereKey($data['purchase_order_id'])->firstOrFail();
+        }
+
+        if (! empty($data['invoice_id'])) {
+            Invoice::query()->forCompany($projectModel->company_id)->where('project_id', $projectModel->id)->whereKey($data['invoice_id'])->firstOrFail();
+        }
+
+        if (! empty($data['supplier_invoice_id'])) {
+            SupplierInvoice::query()->forCompany($projectModel->company_id)->where('project_id', $projectModel->id)->whereKey($data['supplier_invoice_id'])->firstOrFail();
+        }
+
+        if (! empty($data['drawing_id'])) {
+            Drawing::query()->forCompany($projectModel->company_id)->where('project_id', $projectModel->id)->whereKey($data['drawing_id'])->firstOrFail();
+        }
+
+        if (! empty($data['document_id'])) {
+            Document::query()->forCompany($projectModel->company_id)->where('project_id', $projectModel->id)->whereKey($data['document_id'])->firstOrFail();
+        }
+
+        $item = PortalWorkItem::query()->create([
+            'company_id' => $projectModel->company_id,
+            'portal_user_id' => $portalUser?->id,
+            'project_id' => $projectModel->id,
+            'supplier_id' => $data['supplier_id'] ?? null,
+            'purchase_order_id' => $data['purchase_order_id'] ?? null,
+            'invoice_id' => $data['invoice_id'] ?? null,
+            'supplier_invoice_id' => $data['supplier_invoice_id'] ?? null,
+            'drawing_id' => $data['drawing_id'] ?? null,
+            'document_id' => $data['document_id'] ?? null,
+            'portal_type' => $data['portal_type'],
+            'item_type' => $data['item_type'],
+            'item_number' => $this->nextNumber($this->portalItemPrefix($data['item_type']), PortalWorkItem::class, 'item_number', $projectModel->company_id),
+            'title' => $data['title'],
+            'description' => $data['description'] ?? null,
+            'status' => $data['status'] ?? 'submitted',
+            'priority' => $data['priority'] ?? 'medium',
+            'due_date' => $data['due_date'] ?? null,
+            'submitted_at' => now(),
+            'attachments' => $data['attachments'] ?? [],
+            'metadata' => $data['metadata'] ?? [],
+            'created_by' => $this->user($request)->id,
+        ]);
+
+        return response()->json(['work_item' => $item->load($this->workItemRelations())], 201);
+    }
+
+    public function updateWorkItem(Request $request, PortalWorkItem $workItem): JsonResponse
+    {
+        $this->assertTenant($request, $workItem);
+
+        $data = $request->validate([
+            'portal_user_id' => ['nullable', 'integer'],
+            'title' => ['sometimes', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:4000'],
+            'priority' => ['sometimes', Rule::in(['low', 'medium', 'high', 'critical'])],
+            'due_date' => ['nullable', 'date'],
+            'attachments' => ['nullable', 'array'],
+            'metadata' => ['nullable', 'array'],
+        ]);
+
+        if (! empty($data['portal_user_id'])) {
+            PortalUser::query()->forCompany($workItem->company_id)->where('user_type', $workItem->portal_type)->whereKey($data['portal_user_id'])->firstOrFail();
+        }
+
+        $workItem->update($data);
+
+        return response()->json(['work_item' => $workItem->fresh($this->workItemRelations())]);
+    }
+
+    public function reviewWorkItem(Request $request, PortalWorkItem $workItem): JsonResponse
+    {
+        $this->assertTenant($request, $workItem);
+
+        $data = $request->validate([
+            'status' => ['required', Rule::in($this->portalStatuses())],
+            'response' => ['nullable', 'string', 'max:4000'],
+        ]);
+
+        $workItem->update([
+            'status' => $data['status'],
+            'response' => $data['response'] ?? $workItem->response,
+            'reviewed_by' => $this->user($request)->id,
+            'reviewed_at' => $data['status'] === 'in_review' ? null : now(),
+        ]);
+
+        return response()->json(['work_item' => $workItem->fresh($this->workItemRelations())]);
+    }
+
+    public function destroyWorkItem(Request $request, PortalWorkItem $workItem): JsonResponse
+    {
+        $this->assertTenant($request, $workItem);
+
+        $workItem->delete();
+
+        return response()->json(['message' => 'Portal work item archived.']);
+    }
+
     private function assertTenant(Request $request, object $model): void
     {
         abort_if((int) $model->company_id !== $this->companyId($request), 404);
+    }
+
+    private function workItemRelations(): array
+    {
+        return [
+            'portalUser:id,name,email,user_type,organization',
+            'project:id,code,name,status,health_status,progress_percent',
+            'supplier:id,name',
+            'purchaseOrder:id,po_number,status,total_amount,delivery_status',
+            'invoice:id,invoice_number,title,status,total_amount,balance_due,payment_status',
+            'supplierInvoice:id,invoice_number,status,total_amount,balance_due',
+            'drawing:id,drawing_number,title,discipline,status',
+            'document:id,document_number,title,document_type,status',
+        ];
+    }
+
+    private function portalTypesConfig(): array
+    {
+        return [
+            'client' => ['label' => 'Client Portal', 'features' => ['progress_photos', 'milestones', 'approvals', 'invoices', 'variation_requests', 'rfis', 'meeting_minutes', 'project_documents']],
+            'consultant' => ['label' => 'Consultant Portal', 'features' => ['drawing_reviews', 'technical_comments', 'submittals', 'rfis', 'inspections', 'digital_approvals']],
+            'supplier' => ['label' => 'Supplier Portal', 'features' => ['purchase_orders', 'delivery_schedules', 'invoice_submission', 'payment_status', 'document_uploads']],
+            'subcontractor' => ['label' => 'Subcontractor Portal', 'features' => ['work_packages', 'daily_reports', 'safety_documents', 'attendance', 'progress_updates']],
+            'inspector' => ['label' => 'Inspector Portal', 'features' => ['inspection_schedules', 'findings', 'compliance_reports', 'sign_offs']],
+            'investor_owner' => ['label' => 'Investor/Owner Portal', 'features' => ['executive_dashboards', 'project_health', 'milestones', 'budget_visibility', 'reports']],
+        ];
+    }
+
+    private function portalTypes(int $companyId, $workItems): array
+    {
+        return collect($this->portalTypesConfig())
+            ->map(fn (array $config, string $type): array => [
+                'key' => $type,
+                'label' => $config['label'],
+                'features' => $config['features'],
+                'users' => PortalUser::query()->forCompany($companyId)->where('user_type', $type)->count(),
+                'open_items' => $workItems->where('portal_type', $type)->whereNotIn('status', ['approved', 'rejected', 'closed', 'completed', 'paid', 'signed_off'])->count(),
+                'completed_items' => $workItems->where('portal_type', $type)->whereIn('status', ['approved', 'closed', 'completed', 'paid', 'signed_off'])->count(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function portalActivity($workItems): array
+    {
+        return $workItems
+            ->take(12)
+            ->map(fn (PortalWorkItem $item): array => [
+                'time' => $item->updated_at?->toISOString(),
+                'portal' => $item->portal_type,
+                'title' => $item->title,
+                'status' => $item->status,
+                'project' => $item->project?->name,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function defaultFeaturesFor(string $portalType): array
+    {
+        return $this->portalTypesConfig()[$portalType]['features'] ?? [];
+    }
+
+    private function portalItemTypes(): array
+    {
+        return [
+            'progress_photo', 'milestone_update', 'approval_request', 'invoice_query',
+            'variation_request', 'rfi', 'meeting_minutes', 'project_document',
+            'drawing_review', 'technical_comment', 'submittal', 'inspection_request',
+            'digital_approval', 'purchase_order_acknowledgement', 'delivery_schedule',
+            'invoice_submission', 'payment_status_query', 'document_upload',
+            'work_package_update', 'daily_report', 'safety_document', 'attendance_update',
+            'progress_update', 'inspection_schedule', 'inspection_finding',
+            'compliance_report', 'inspection_signoff', 'executive_report',
+            'budget_report', 'project_health_update',
+        ];
+    }
+
+    private function portalStatuses(): array
+    {
+        return ['draft', 'submitted', 'in_review', 'approved', 'changes_required', 'rejected', 'scheduled', 'completed', 'closed', 'acknowledged', 'paid', 'signed_off'];
+    }
+
+    private function portalItemPrefix(string $type): string
+    {
+        return match ($type) {
+            'rfi' => 'RFI',
+            'variation_request' => 'VAR',
+            'invoice_submission', 'invoice_query' => 'INV',
+            'purchase_order_acknowledgement' => 'POA',
+            'delivery_schedule' => 'DEL',
+            'inspection_finding', 'inspection_schedule', 'inspection_signoff' => 'INS',
+            'meeting_minutes' => 'MIN',
+            'daily_report' => 'DRP',
+            'progress_update', 'project_health_update' => 'PRG',
+            default => 'PWI',
+        };
     }
 }

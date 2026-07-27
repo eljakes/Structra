@@ -103,6 +103,13 @@ class FieldController extends ApiController
 
         $dailyReport->update($updates);
 
+        if ($data['status'] === 'submitted') {
+            $this->publishAutomationEvent($request, 'daily_report_submitted', [
+                'record_type' => 'daily_report',
+                'record_id' => $dailyReport->id,
+            ]);
+        }
+
         return response()->json(['daily_report' => $dailyReport->fresh(['project', 'issues'])]);
     }
 
@@ -164,6 +171,15 @@ class FieldController extends ApiController
         $issue->update($data);
 
         return response()->json(['issue' => $issue->fresh('project')]);
+    }
+
+    public function destroyIssue(Request $request, FieldIssue $issue): JsonResponse
+    {
+        $this->assertTenant($request, $issue);
+
+        $issue->delete();
+
+        return response()->json(['message' => 'Field issue archived.']);
     }
 
     public function clockIn(Request $request): JsonResponse

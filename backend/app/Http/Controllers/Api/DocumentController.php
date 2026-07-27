@@ -80,6 +80,11 @@ class DocumentController extends ApiController
             ...$filePayload,
         ]);
 
+        $this->publishAutomationEvent($request, 'document_uploaded', [
+            'record_type' => 'document',
+            'record_id' => $document->id,
+        ]);
+
         return response()->json(['document' => $document->load(['branch', 'project'])], 201);
     }
 

@@ -14,6 +14,8 @@ class BudgetLineController extends ApiController
         $projectModel = $this->projectForTenant($request, $project);
 
         $data = $this->validated($request, $projectModel->id);
+        $data['cost_code'] = $this->suppliedCode($data['cost_code'] ?? null)
+            ?? $this->nextProjectCode($this->codePrefix($data['category'] ?? $data['description'], 'CST'), BudgetLine::class, 'cost_code', $projectModel->id);
 
         $budgetLine = BudgetLine::query()->create([
             'company_id' => $projectModel->company_id,
@@ -34,7 +36,14 @@ class BudgetLineController extends ApiController
 
         abort_if($budgetLine->project_id !== $projectModel->id || $budgetLine->company_id !== $projectModel->company_id, 404);
 
-        $budgetLine->update($this->validated($request, $projectModel->id, true));
+        $data = $this->validated($request, $projectModel->id, true);
+
+        if (array_key_exists('cost_code', $data)) {
+            $data['cost_code'] = $this->suppliedCode($data['cost_code'])
+                ?? $this->nextProjectCode($this->codePrefix($data['category'] ?? $budgetLine->category, 'CST'), BudgetLine::class, 'cost_code', $projectModel->id);
+        }
+
+        $budgetLine->update($data);
         $this->syncProjectCosts($projectModel);
 
         return response()->json(['budget_line' => $budgetLine->fresh()]);
@@ -58,7 +67,8 @@ class BudgetLineController extends ApiController
 
         return $request->validate([
             'cost_code' => [
-                $prefix,
+                $partial ? 'sometimes' : 'nullable',
+                'nullable',
                 'string',
                 'max:40',
                 Rule::unique('budget_lines')->where('project_id', $projectId)->ignore($request->route('budgetLine')),

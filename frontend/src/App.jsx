@@ -1,30 +1,43 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   BarChart3,
   Building2,
+  Calculator,
   CalendarDays,
   CheckCircle2,
+  Clock3,
   ClipboardList,
+  Download,
+  Eye,
+  EyeOff,
   FileText,
   FolderKanban,
+  Globe2,
+  Handshake,
   Layers3,
   LogOut,
+  MapPinned,
+  Moon,
+  Package,
   Plus,
   RefreshCcw,
   Send,
   Settings,
   ShieldCheck,
+  Sun,
   Truck,
   Upload,
   Users,
   WalletCards,
+  Workflow,
 } from 'lucide-react'
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -36,13 +49,137 @@ import { api, getToken, setToken, validationSummary } from './lib/api'
 import './App.css'
 
 const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-  { id: 'projects', label: 'Projects', icon: FolderKanban },
-  { id: 'procurement', label: 'Procurement', icon: Truck },
-  { id: 'documents', label: 'Documents', icon: FileText },
-  { id: 'reports', label: 'Reports', icon: ClipboardList },
-  { id: 'admin', label: 'Admin', icon: Settings },
+  { id: 'dashboard', label: 'Dashboard', icon: BarChart3, permissions: ['reports.view'] },
+  { id: 'crm', label: 'CRM', icon: Handshake, permissions: ['crm.manage'] },
+  { id: 'tendering', label: 'Tendering', icon: ClipboardList, permissions: ['tenders.manage'] },
+  { id: 'estimating', label: 'Estimating', icon: Calculator, permissions: ['estimating.manage'] },
+  { id: 'projects', label: 'Projects', icon: FolderKanban, permissions: ['projects.manage'] },
+  { id: 'procurement', label: 'Procurement', icon: Truck, permissions: ['procurement.manage'] },
+  { id: 'inventory', label: 'Inventory', icon: Package, permissions: ['inventory.manage'] },
+  { id: 'field', label: 'Field', icon: MapPinned, permissions: ['field.manage', 'attendance.manage'] },
+  { id: 'finance', label: 'Finance', icon: WalletCards, permissions: ['finance.manage'] },
+  { id: 'people', label: 'HR & Workforce', icon: Users, permissions: ['payroll.manage'] },
+  { id: 'equipment', label: 'Equipment', icon: Truck, permissions: ['equipment.manage'] },
+  { id: 'compliance', label: 'QA/HSE', icon: ShieldCheck, permissions: ['quality.manage', 'safety.manage'] },
+  { id: 'portals', label: 'Portals', icon: Building2, permissions: ['portals.manage'] },
+  { id: 'documents', label: 'Documents', icon: FileText, permissions: ['documents.manage'] },
+  { id: 'reports', label: 'Reports', icon: ClipboardList, permissions: ['reports.view'] },
+  { id: 'bi', label: 'Intelligence', icon: BarChart3, permissions: ['bi.manage'] },
+  { id: 'automation', label: 'Automation', icon: Workflow, permissions: ['automation.manage'] },
+  { id: 'admin', label: 'Admin', icon: Settings, permissions: ['settings.manage'] },
 ]
+
+const accessCategories = [
+  { id: 'dashboard_reports', label: 'Dashboard & Reports', description: 'Executive KPIs, dashboards, reports, and audit logs.', permissions: ['reports.view'] },
+  { id: 'crm', label: 'CRM', description: 'Leads, opportunities, and customer pipeline.', permissions: ['crm.manage'] },
+  { id: 'tendering', label: 'Tendering', description: 'Tender documents, RFIs, submissions, wins, and losses.', permissions: ['tenders.manage'] },
+  { id: 'estimating', label: 'Estimating', description: 'Pricing items, estimates, markups, and approvals.', permissions: ['estimating.manage'] },
+  { id: 'projects', label: 'Projects', description: 'Project records, tasks, budgets, and schedules.', permissions: ['projects.manage'] },
+  { id: 'procurement', label: 'Procurement', description: 'Requests, RFQs, quotations, POs, GRNs, invoices, and supplier contracts.', permissions: ['procurement.manage', 'procurement.approve', 'suppliers.manage'] },
+  { id: 'inventory', label: 'Inventory', description: 'Warehouses, stock items, stock movements, and reorder controls.', permissions: ['inventory.manage'] },
+  { id: 'field', label: 'Field App & Attendance', description: 'Daily reports, site issues, clock-in, and clock-out.', permissions: ['field.manage', 'attendance.manage'] },
+  { id: 'finance', label: 'Finance', description: 'Invoices, payments, expenses, journals, and financial approvals.', permissions: ['finance.manage'] },
+  { id: 'people', label: 'HR & Workforce', description: 'Recruitment, employees, workforce allocation, attendance, payroll, training, and HR records.', permissions: ['payroll.manage'] },
+  { id: 'equipment', label: 'Equipment', description: 'Assets, assignments, maintenance, and fuel logs.', permissions: ['equipment.manage'] },
+  { id: 'compliance', label: 'Quality Assurance and Health, Safety, and Environment', description: 'Inspections, Non-Conformance Reports(NCRs), observations, incidents, permits, and corrective actions.', permissions: ['quality.manage', 'safety.manage'] },
+  { id: 'portals', label: 'Portals', description: 'Client and consultant portal access, submittals, and approvals.', permissions: ['portals.manage'] },
+  { id: 'documents', label: 'Documents & Drawings', description: 'Document register, drawings, revisions, markups, and reviews.', permissions: ['documents.manage'] },
+  { id: 'bi', label: 'Intelligence', description: 'Executive analytics, drill-down reporting, and operational scorecards.', permissions: ['bi.manage'] },
+  { id: 'automation', label: 'Automation', description: 'Automation rules, execution runs, and system workflows.', permissions: ['automation.manage'] },
+  { id: 'admin', label: 'Admin Settings', description: 'Company settings, users, roles, branches, clients, and suppliers.', permissions: ['settings.manage'] },
+]
+
+const allAccessPermissions = [...new Set(accessCategories.flatMap((category) => category.permissions))]
+
+const emptyProcurementData = { summary: {}, recent_activity: [], requisitions: [], rfqs: [], quotations: [], purchase_orders: [], goods_receipts: [], quality_inspections: [], supplier_invoices: [], payments: [], contracts: [], traceability: [], reports: {}, settings: {} }
+const emptySalesData = { leads: [], opportunities: [], tenders: [], estimates: [], pricing_items: [] }
+const emptyInventoryData = { warehouses: [], items: [], movements: [], supplier_prices: [], supplier_reviews: [], reorder_alerts: [] }
+const emptyFieldData = { daily_reports: [], issues: [], attendance: [], open_attendance: null }
+const emptyFinanceData = {
+  summary: {},
+  invoices: [],
+  payments: [],
+  expenses: [],
+  journal_entries: [],
+  accounts_receivable: {},
+  accounts_payable: {},
+  customers: [],
+  suppliers: [],
+  credit_notes: [],
+  budgets: {},
+  cash_flow: {},
+  bank_accounts: [],
+  bank_reconciliations: [],
+  chart_of_accounts: {},
+  general_ledger: {},
+  cost_centers: [],
+  fixed_assets: {},
+  payroll_integration: {},
+  taxes: {},
+  retentions: [],
+  progress_billings: [],
+  purchase_invoice_matching: [],
+  financial_reports: {},
+  approvals: {},
+  audit_trail: [],
+  automation: {},
+  finance_settings: {},
+}
+const emptyPeopleData = {
+  summary: {},
+  employees: [],
+  leave_requests: [],
+  payroll_runs: [],
+  recruitment: { vacancies: [], candidates: [], applications: [], interviews: [] },
+  onboarding: [],
+  attendance: { records: [], summary: {} },
+  shifts: [],
+  shift_assignments: [],
+  timesheets: [],
+  workforce_allocations: [],
+  overtime_requests: [],
+  benefits: [],
+  performance_reviews: [],
+  training_courses: [],
+  training_records: [],
+  certifications: [],
+  health_safety: { ppe_issues: [], expiring_ppe: [], certification_risk: [] },
+  ppe_issues: [],
+  contractors: [],
+  employee_assets: [],
+  documents: [],
+  self_service: {},
+  manager_portal: {},
+  exit_records: [],
+  reports: {},
+  analytics: {},
+  automation: {},
+  settings: {},
+  asset_candidates: [],
+}
+const emptyEquipmentData = { summary: {}, assets: [], assignments: [], maintenance: [], fuel_logs: [] }
+const emptyComplianceData = { summary: {}, inspections: [], ncrs: [], incidents: [], toolbox_talks: [], observations: [], permits: [] }
+const emptyPortalData = {
+  summary: {},
+  portal_users: [],
+  accesses: [],
+  client_approvals: [],
+  consultant_submittals: [],
+  work_items: [],
+  portal_types: [],
+  project_snapshots: [],
+  supplier_purchase_orders: [],
+  supplier_invoices: [],
+  client_invoices: [],
+  inspections: [],
+  daily_reports: [],
+  activity: [],
+}
+const emptyBiData = { dashboards: [], snapshots: [], datasets: {}, metrics: {}, filters: {}, meta: {}, executive: {}, portfolio: {}, project_controls: {}, financial: {}, commercial: {}, procurement: {}, inventory: {}, schedule: {}, workforce: {}, equipment: {}, quality: {}, hse: {}, risk: {}, sustainability: {}, client_reporting: {}, alerts: {} }
+const emptyAutomationData = { summary: {}, rules: [], runs: [], templates: [], catalog: {}, analytics: {} }
+const emptyAdminApprovalData = { summary: {}, items: [] }
+const emptyOrganizationData = { company: { branches: [], roles: [], users: [], settings: {} }, clients: [], suppliers: [] }
+const emptyList = []
 
 const currencyFormatter = new Intl.NumberFormat('en-GH', {
   style: 'currency',
@@ -55,6 +192,8 @@ const compactFormatter = new Intl.NumberFormat('en-GH', {
   maximumFractionDigits: 1,
 })
 
+const liveRefreshMs = Math.max(0, Number(import.meta.env.VITE_LIVE_REFRESH_MS ?? 30000) || 0)
+
 const healthColors = {
   on_track: '#188a5a',
   at_risk: '#c47a16',
@@ -63,6 +202,8 @@ const healthColors = {
 
 const statusColor = {
   active: 'good',
+  inactive: 'neutral',
+  suspended: 'bad',
   approved: 'good',
   approved_for_construction: 'good',
   on_track: 'good',
@@ -73,9 +214,61 @@ const statusColor = {
   blocked: 'bad',
   critical: 'bad',
   rejected: 'bad',
+  lost: 'bad',
   cancelled: 'bad',
   draft: 'neutral',
   planning: 'neutral',
+  qualified: 'neutral',
+  new: 'neutral',
+  open: 'warn',
+  closed: 'good',
+  resolved: 'good',
+  paid: 'good',
+  passed: 'good',
+  completed: 'good',
+  available: 'good',
+  partial: 'warn',
+  unpaid: 'warn',
+  pending: 'warn',
+  scheduled: 'neutral',
+  pass: 'good',
+  fail: 'bad',
+  na: 'neutral',
+  under_review: 'warn',
+  configured: 'neutral',
+  queued: 'warn',
+  current: 'good',
+  connected: 'good',
+  delivered: 'good',
+  received: 'good',
+  accepted: 'good',
+  awarded: 'good',
+  quotations_received: 'warn',
+  rfq_sent: 'warn',
+  sent: 'warn',
+  responded: 'good',
+  finance_approved: 'good',
+  partially_paid: 'warn',
+  invoiced: 'warn',
+  recommended: 'good',
+  green: 'good',
+  amber: 'warn',
+  red: 'bad',
+  grey: 'neutral',
+  low: 'good',
+  medium: 'warn',
+  high: 'bad',
+  rework_required: 'bad',
+  reopened: 'bad',
+  in_review: 'warn',
+  corrective_action: 'warn',
+  investigating: 'warn',
+  reported: 'warn',
+  assigned: 'warn',
+  maintenance: 'warn',
+  changes_required: 'warn',
+  revise_and_resubmit: 'warn',
+  failed: 'bad',
 }
 
 const emptyProjectForm = {
@@ -116,8 +309,286 @@ const emptyReqForm = {
   estimated_unit_cost: '',
 }
 
+const emptyLeadForm = {
+  branch_id: '',
+  company_name: '',
+  contact_name: '',
+  email: '',
+  phone: '',
+  source: 'direct',
+  estimated_value: '',
+  next_follow_up_at: '',
+}
+
+const emptyEstimateForm = {
+  tender_id: '',
+  title: '',
+  overhead_percent: 8,
+  profit_percent: 12,
+  tax_percent: 0,
+  cost_code: '',
+  description: '',
+  category: 'materials',
+  quantity: 1,
+  unit: 'each',
+  unit_cost: '',
+}
+
+const emptyInventoryForms = {
+  warehouse: { branch_id: '', code: '', name: '', location: '' },
+  item: { sku: '', name: '', category: 'materials', unit: 'each', reorder_level: 0, average_cost: '' },
+  movement: { warehouse_id: '', to_warehouse_id: '', inventory_item_id: '', type: 'receipt', quantity: 1, unit_cost: '', reason: '' },
+  supplierPrice: { supplier_id: '', inventory_item_id: '', description: '', unit: 'each', unit_price: '', lead_time_days: 7 },
+  supplierReview: { supplier_id: '', rating: 4, quality_score: 4, delivery_score: 4, cost_score: 4, notes: '' },
+}
+
+const emptyFieldForms = {
+  dailyReport: { project_id: '', report_date: new Date().toISOString().slice(0, 10), weather: '', shift: 'day', labour_count: 0, progress_notes: '', safety_notes: '' },
+  issue: { project_id: '', title: '', category: 'blocker', severity: 'medium', status: 'open', description: '', due_date: '' },
+  clock: { project_id: '', clock_in_latitude: '', clock_in_longitude: '', clock_out_latitude: '', clock_out_longitude: '' },
+}
+
+const emptyFinanceForms = {
+  invoice: { project_id: '', client_id: '', title: '', due_date: '', retention_percent: 0, progress_percent: 0, billing_stage: '', line_description: '', cost_code: '', quantity: 1, unit: 'each', unit_price: '', tax_rate: 0 },
+  payment: { invoice_id: '', finance_bank_account_id: '', amount: '', method: 'bank_transfer', reference: '' },
+  expense: { project_id: '', supplier_id: '', description: '', category: 'site_cost', cost_code: '', amount: '', tax_amount: 0 },
+  journal: { entry_date: new Date().toISOString().slice(0, 10), reference: '', description: '', debit_account_code: '1200', debit_account_name: 'Accounts receivable', debit_amount: '', credit_account_code: '4100', credit_account_name: 'Construction revenue', credit_amount: '' },
+  account: { account_code: '', account_name: '', account_type: 'asset', normal_balance: 'debit', description: '' },
+  bankAccount: { branch_id: '', account_name: '', bank_name: '', account_number: '', currency: 'GHS', opening_balance: 0, is_default: false },
+  reconciliation: { finance_bank_account_id: '', statement_date: new Date().toISOString().slice(0, 10), statement_balance: '', notes: '' },
+  creditNote: { invoice_id: '', amount: '', tax_amount: 0, reason: '' },
+  retention: { project_id: '', invoice_id: '', supplier_invoice_id: '', party_type: 'client', base_amount: '', retention_percent: 10, retention_amount: '', due_date: '' },
+  progressBilling: { project_id: '', milestone_name: '', progress_percent: '', billable_amount: '', retention_percent: 10, due_date: '', create_invoice: false },
+  taxRule: { tax_name: '', tax_type: 'vat', rate: '', applies_to: 'sales', effective_from: '' },
+  costCenter: { project_id: '', code: '', name: '', type: 'project', description: '' },
+  fixedAsset: { equipment_asset_id: '', branch_id: '', name: '', category: 'equipment', purchase_date: '', purchase_cost: '', depreciation_method: 'straight_line', useful_life_months: 60 },
+}
+
+const emptyPeopleForms = {
+  employee: {
+    user_id: '',
+    branch_id: '',
+    manager_id: '',
+    current_project_id: '',
+    employment_type: 'full_time',
+    department: 'operations',
+    position: '',
+    gender: '',
+    date_of_birth: '',
+    nationality: 'Ghanaian',
+    marital_status: '',
+    national_id: '',
+    tax_number: '',
+    ssnit_number: '',
+    base_salary: '',
+    hourly_rate: 0,
+    allowances: 0,
+    bonuses: 0,
+    deductions: 0,
+    hire_date: '',
+    emergency_contact: '',
+    bank_name: '',
+    bank_account: '',
+    skills: '',
+    licenses: '',
+    medical_notes: '',
+  },
+  vacancy: { branch_id: '', project_id: '', title: '', department: 'construction', employment_type: 'full_time', openings: 1, priority: 'high', description: '', required_skills: '', closes_on: '' },
+  candidate: { full_name: '', email: '', phone: '', trade: '', location: '', source: 'direct', rating: 3, notes: '' },
+  application: { job_vacancy_id: '', candidate_id: '', expected_salary: '', screening_score: 0, background_check_status: 'pending', offer_status: 'not_sent', notes: '' },
+  hire: { branch_id: '', project_id: '', manager_id: '', base_salary: '', hourly_rate: '', hire_date: new Date().toISOString().slice(0, 10) },
+  interview: { application_id: '', scheduled_at: '', stage: 'technical', interviewers: '', result: 'scheduled', score: 0, notes: '' },
+  onboarding: { employee_profile_id: '', due_date: '', completed_items: '' },
+  shift: { branch_id: '', project_id: '', name: '', shift_type: 'day', start_time: '07:00', end_time: '17:00', break_minutes: 60 },
+  shiftAssignment: { shift_id: '', employee_profile_id: '', project_id: '', starts_on: new Date().toISOString().slice(0, 10), ends_on: '' },
+  timesheet: { employee_profile_id: '', project_id: '', shift_id: '', work_date: new Date().toISOString().slice(0, 10), hours_worked: 8, overtime_hours: 0, cost_rate: '', notes: '' },
+  allocation: { employee_profile_id: '', project_id: '', supervisor_id: '', role: '', allocation_percent: 100, start_date: new Date().toISOString().slice(0, 10), end_date: '' },
+  overtime: { employee_profile_id: '', project_id: '', work_date: new Date().toISOString().slice(0, 10), hours: 1, reason: '' },
+  leave: { employee_profile_id: '', leave_type: 'annual', starts_on: '', ends_on: '', reason: '' },
+  payroll: { branch_id: '', period_start: new Date().toISOString().slice(0, 8) + '01', period_end: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10) },
+  benefit: { employee_profile_id: '', benefit_type: 'health_insurance', provider: '', amount: '', starts_on: '', ends_on: '' },
+  performance: { employee_profile_id: '', period_start: '', period_end: '', safety_score: 4, quality_score: 4, productivity_score: 4, teamwork_score: 4, goals: '', notes: '' },
+  trainingCourse: { title: '', category: 'safety', provider: '', duration_hours: 2 },
+  trainingRecord: { employee_profile_id: '', training_course_id: '', status: 'scheduled', scheduled_on: '', completed_on: '', score: 0, certificate_number: '' },
+  certification: { employee_profile_id: '', name: '', issuing_authority: '', issued_on: '', expires_on: '', document_path: '' },
+  ppeIssue: { employee_profile_id: '', project_id: '', item_name: '', size: '', quantity: 1, issued_on: new Date().toISOString().slice(0, 10), replacement_due_on: '', condition: 'new' },
+  contractor: { supplier_id: '', name: '', contact_name: '', email: '', phone: '', trade: '', worker_count: 0, contract_expires_on: '', insurance_expires_on: '' },
+  asset: { employee_profile_id: '', equipment_asset_id: '', item_name: '', category: 'tool', serial_number: '', assigned_on: new Date().toISOString().slice(0, 10), return_due_on: '' },
+  document: { employee_profile_id: '', candidate_id: '', document_type: 'contract', title: '', file_path: '', expiry_date: '' },
+  exit: { employee_profile_id: '', exit_type: 'resignation', notice_date: '', exit_date: '', reason: '' },
+}
+
+const emptyEquipmentForms = {
+  asset: { branch_id: '', name: '', category: 'plant', meter_reading: 0, hourly_rate: '' },
+  assignment: { asset_id: '', project_id: '', meter_start: '' },
+  maintenance: { asset_id: '', status: 'completed', service_date: new Date().toISOString().slice(0, 10), meter_reading: '', cost_amount: '', description: '' },
+  fuel: { asset_id: '', project_id: '', quantity: '', unit_cost: '', meter_reading: '' },
+}
+
+const emptyComplianceForms = {
+  inspection: {
+    project_id: '',
+    type: 'quality',
+    area: '',
+    scheduled_on: new Date().toISOString().slice(0, 10),
+    notes: '',
+    first_item: 'Work matches approved drawings and specifications',
+    first_requirement: 'Approved drawing / specification',
+    first_result: 'pending',
+    first_severity: 'medium',
+    second_item: 'Method statement and inspection test plan followed',
+    second_requirement: 'Approved method statement',
+    second_result: 'pending',
+    second_severity: 'medium',
+  },
+  ncr: {
+    project_id: '',
+    inspection_id: '',
+    title: '',
+    department: 'qa',
+    category: 'concrete',
+    location: '',
+    contractor: '',
+    subcontractor: '',
+    description: '',
+    reference_documents: '',
+    evidence: '',
+    root_cause: '',
+    corrective_action: '',
+    preventive_action: '',
+    verification_notes: '',
+    severity: 'medium',
+    due_date: '',
+    close_status: 'closed',
+  },
+  incident: {
+    project_id: '',
+    incident_type: 'near_miss',
+    location: '',
+    occurred_at: '',
+    injured_person: '',
+    description: '',
+    immediate_action: '',
+    root_cause: '',
+    severity: 'medium',
+    corrective_action: '',
+    close_status: 'closed',
+  },
+  talk: { project_id: '', topic: '', talk_date: new Date().toISOString().slice(0, 10), attendee_count: 0, summary: '', hazards_discussed: '' },
+  observation: { project_id: '', observation_type: 'unsafe', location: '', description: '', severity: 'medium', corrective_action: '' },
+  permit: { project_id: '', permit_type: 'hot_work', location: '', valid_from: '', valid_until: '', hazards: '', controls: '' },
+}
+
+const emptyPortalForms = {
+  user: { client_id: '', user_type: 'client', name: '', email: '', organization: '' },
+  access: { portal_user_id: '', project_id: '', access_level: 'view', access_scope: 'project' },
+  clientApproval: { project_id: '', portal_user_id: '', drawing_id: '', document_id: '', title: '' },
+  submittal: { project_id: '', portal_user_id: '', drawing_id: '', document_id: '', title: '', discipline: 'architectural' },
+  workItem: {
+    project_id: '',
+    portal_user_id: '',
+    supplier_id: '',
+    portal_type: 'client',
+    item_type: 'rfi',
+    title: '',
+    description: '',
+    priority: 'medium',
+    due_date: '',
+  },
+}
+
+const emptyPhaseFourForms = {
+  dashboard: { name: '', audience: 'operations', refresh_interval: 'daily', is_default: 'false' },
+  automation: {
+    name: '',
+    description: '',
+    module: 'procurement',
+    rule_type: 'event_workflow',
+    trigger_event: 'material_request_submitted',
+    condition_field: 'amount',
+    condition_operator: 'greater_than',
+    condition_value: '20000',
+    condition_mode: 'all',
+    action_type: 'create_insight',
+    action_message: 'Review the matched record and assign the next owner.',
+    schedule_frequency: 'event_driven',
+    approval_mode: 'sequential',
+    severity: 'high',
+    is_active: 'true',
+  },
+}
+
+function coerceAutomationValue(value) {
+  if (value === undefined || value === null || value === '') return null
+
+  const numeric = Number(value)
+
+  return Number.isFinite(numeric) && String(value).trim() !== '' ? numeric : value
+}
+
+function automationPayloadFromForm(form) {
+  const value = coerceAutomationValue(form.condition_value)
+  const condition = form.condition_field
+    ? {
+        field: form.condition_field,
+        operator: form.condition_operator || 'equals',
+        ...(form.condition_operator === 'between'
+          ? {
+              min: Number(String(form.condition_value || '').split(',')[0] || 0),
+              max: Number(String(form.condition_value || '').split(',')[1] || 0),
+            }
+          : {}),
+        ...(!['empty', 'not_empty', 'today', 'yesterday', 'between'].includes(form.condition_operator || '') ? { value } : {}),
+      }
+    : null
+  const conditions = condition ? [condition] : []
+  const action = {
+    type: form.action_type || 'create_insight',
+    message: form.action_message || 'Review the matched automation record.',
+    recommendation: form.action_message || 'Review the matched automation record.',
+  }
+  const approvalSteps = form.approval_mode && form.approval_mode !== 'none' ? ['Originator', 'Manager', 'Finance'] : []
+  const nodes = [
+    { id: 'trigger', type: 'trigger', label: labelize(form.trigger_event || 'manual') },
+    ...(conditions.length ? [{ id: 'conditions', type: 'condition', label: 'Decision Engine', conditions }] : []),
+    ...(approvalSteps.length ? [{ id: 'approval', type: 'approval', label: labelize(form.approval_mode), steps: approvalSteps }] : []),
+    { id: 'action', type: 'action', label: labelize(action.type), action },
+    { id: 'log', type: 'log', label: 'Audit Log' },
+  ]
+
+  return {
+    name: form.name,
+    description: form.description,
+    module: form.module,
+    rule_type: form.rule_type || 'event_workflow',
+    trigger_event: form.trigger_event || 'manual',
+    severity: form.severity || 'medium',
+    status: form.is_active === 'true' || form.is_active === true ? 'active' : 'paused',
+    is_active: form.is_active === 'true' || form.is_active === true,
+    execution_mode: 'sync',
+    conditions,
+    actions: [action],
+    schedule_config: { frequency: form.schedule_frequency || 'event_driven' },
+    approval_config: { mode: form.approval_mode || 'none', steps: approvalSteps },
+    notification_config: { channels: ['in_app'] },
+    settings: { condition_mode: form.condition_mode || 'all', retry_policy: { max_retries: 2, on_failure: 'notify_admin' } },
+    workflow_definition: {
+      schema: 'structra.workflow.v1',
+      nodes,
+      edges: nodes.slice(0, -1).map((node, index) => ({ from: node.id, to: nodes[index + 1].id })),
+    },
+  }
+}
+
+function normalizeTheme(theme) {
+  return theme === 'dark' ? 'dark' : 'light'
+}
+
 function App() {
   const [tokenReady, setTokenReady] = useState(Boolean(getToken()))
+  const refreshInFlight = useRef(false)
+  const refreshWorkspaceRef = useRef(null)
+  const refreshProjectRef = useRef(null)
   const [authMode, setAuthMode] = useState('login')
   const [authForm, setAuthForm] = useState({
     company_name: '',
@@ -125,8 +596,8 @@ function App() {
     country: 'GH',
     currency: 'GHS',
     name: '',
-    email: 'owner@structra.test',
-    password: 'Structra2026',
+    email: '',
+    password: '',
   })
   const [activeView, setActiveView] = useState('dashboard')
   const [user, setUser] = useState(null)
@@ -137,11 +608,22 @@ function App() {
   const [selectedProject, setSelectedProject] = useState(null)
   const [requisitions, setRequisitions] = useState([])
   const [purchaseOrders, setPurchaseOrders] = useState([])
+  const [procurement, setProcurement] = useState(emptyProcurementData)
   const [documents, setDocuments] = useState([])
   const [drawings, setDrawings] = useState([])
+  const [sales, setSales] = useState(emptySalesData)
+  const [inventory, setInventory] = useState(emptyInventoryData)
+  const [fieldOps, setFieldOps] = useState(emptyFieldData)
+  const [finance, setFinance] = useState(emptyFinanceData)
+  const [people, setPeople] = useState(emptyPeopleData)
+  const [equipment, setEquipment] = useState(emptyEquipmentData)
+  const [compliance, setCompliance] = useState(emptyComplianceData)
+  const [portals, setPortals] = useState(emptyPortalData)
+  const [businessIntelligence, setBusinessIntelligence] = useState(emptyBiData)
+  const [automation, setAutomation] = useState(emptyAutomationData)
+  const [adminApprovals, setAdminApprovals] = useState(emptyAdminApprovalData)
   const [reports, setReports] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
 
   const [projectForm, setProjectForm] = useState(emptyProjectForm)
@@ -151,27 +633,87 @@ function App() {
   const [documentForm, setDocumentForm] = useState({})
   const [drawingForm, setDrawingForm] = useState({})
   const [revisionForm, setRevisionForm] = useState({ drawing_id: '', revision_code: '', notes: '' })
+  const [markupForm, setMarkupForm] = useState({ drawing_id: '', comment: '', x: 0.5, y: 0.5 })
+  const [reviewForm, setReviewForm] = useState({ drawing_id: '', decision: 'approved', comments: '' })
+  const [leadForm, setLeadForm] = useState(emptyLeadForm)
+  const [estimateForm, setEstimateForm] = useState(emptyEstimateForm)
+  const [inventoryForms, setInventoryForms] = useState(emptyInventoryForms)
+  const [fieldForms, setFieldForms] = useState(emptyFieldForms)
+  const [financeForms, setFinanceForms] = useState(emptyFinanceForms)
+  const [peopleForms, setPeopleForms] = useState(emptyPeopleForms)
+  const [equipmentForms, setEquipmentForms] = useState(emptyEquipmentForms)
+  const [complianceForms, setComplianceForms] = useState(emptyComplianceForms)
+  const [portalForms, setPortalForms] = useState(emptyPortalForms)
+  const [phaseFourForms, setPhaseFourForms] = useState(emptyPhaseFourForms)
   const [adminForms, setAdminForms] = useState({
     company: {},
     branch: { code: '', name: '', city: '', country: 'GH' },
-    client: { name: '', contact_name: '', email: '', phone: '' },
-    supplier: { name: '', contact_name: '', email: '', phone: '', rating: 4, lead_time_days: 7 },
-    user: { name: '', email: '', password: 'Structra2026', branch_id: '', role_id: '', job_title: '' },
+    client: { id: '', name: '', contact_name: '', email: '', phone: '', status: 'active' },
+    supplier: { id: '', name: '', contact_name: '', email: '', phone: '', rating: 4, lead_time_days: 7, status: 'active' },
+    user: { id: '', name: '', email: '', password: '', branch_id: '', role_id: '', permissions: [], status: 'active' },
   })
 
-  const branches = organization?.company?.branches || []
-  const suppliers = organization?.suppliers || []
-  const clients = organization?.clients || []
-  const roles = organization?.company?.roles || []
-  const users = organization?.company?.users || []
+  const branches = organization?.company?.branches || emptyList
+  const suppliers = organization?.suppliers || emptyList
+  const clients = organization?.clients || emptyList
+  const roles = organization?.company?.roles || emptyList
+  const users = organization?.company?.users || emptyList
+  const currentUserId = user?.id || null
   const firstBranchId = branches[0]?.id || ''
   const firstRoleId = roles[0]?.id || ''
+  const allowedNavItems = useMemo(() => accessibleNavItems(user), [user])
+  const persistedCompanyTheme = normalizeTheme(organization?.company?.settings?.appearance?.theme)
+  const adminSelectedTheme = canAdministerRecords(user) ? adminForms.company?.appearance_theme : null
+  const activeTheme = tokenReady ? normalizeTheme(adminSelectedTheme || persistedCompanyTheme) : 'light'
+
+  useEffect(() => {
+    refreshWorkspaceRef.current = refreshWorkspace
+    refreshProjectRef.current = refreshProject
+  })
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = activeTheme
+    document.documentElement.style.colorScheme = activeTheme
+  }, [activeTheme])
 
   useEffect(() => {
     if (tokenReady) {
-      refreshWorkspace()
+      refreshWorkspaceRef.current?.()
     }
   }, [tokenReady])
+
+  useEffect(() => {
+    if (!tokenReady || !currentUserId || liveRefreshMs <= 0) {
+      return undefined
+    }
+
+    const refreshLiveData = () => {
+      if (document.visibilityState === 'visible') {
+        refreshWorkspaceRef.current?.({ silent: true })
+        refreshProjectRef.current?.(selectedProjectId, { silent: true })
+      }
+    }
+
+    const intervalId = window.setInterval(refreshLiveData, liveRefreshMs)
+    window.addEventListener('focus', refreshLiveData)
+    document.addEventListener('visibilitychange', refreshLiveData)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', refreshLiveData)
+      document.removeEventListener('visibilitychange', refreshLiveData)
+    }
+  }, [currentUserId, selectedProjectId, tokenReady])
+
+  useEffect(() => {
+    if (!tokenReady || !user || allowedNavItems.length === 0) {
+      return
+    }
+
+    if (!allowedNavItems.some((item) => item.id === activeView)) {
+      setActiveView(allowedNavItems[0].id)
+    }
+  }, [activeView, allowedNavItems, tokenReady, user])
 
   useEffect(() => {
     if (!selectedProjectId && projects[0]?.id) {
@@ -190,6 +732,40 @@ function App() {
       setProjectForm((current) => ({ ...current, branch_id: firstBranchId }))
     }
 
+    if (firstBranchId && !leadForm.branch_id) {
+      setLeadForm((current) => ({ ...current, branch_id: firstBranchId }))
+    }
+
+    if (firstBranchId && !inventoryForms.warehouse.branch_id) {
+      setInventoryForms((current) => ({
+        ...current,
+        warehouse: { ...current.warehouse, branch_id: firstBranchId },
+      }))
+    }
+
+    if (firstBranchId && !peopleForms.employee.branch_id) {
+      setPeopleForms((current) => ({
+        ...current,
+        employee: { ...current.employee, branch_id: firstBranchId },
+      }))
+    }
+
+    if (firstBranchId && (!peopleForms.vacancy.branch_id || !peopleForms.shift.branch_id || !peopleForms.payroll.branch_id)) {
+      setPeopleForms((current) => ({
+        ...current,
+        vacancy: { ...current.vacancy, branch_id: firstBranchId },
+        shift: { ...current.shift, branch_id: firstBranchId },
+        payroll: { ...current.payroll, branch_id: firstBranchId },
+      }))
+    }
+
+    if (firstBranchId && !equipmentForms.asset.branch_id) {
+      setEquipmentForms((current) => ({
+        ...current,
+        asset: { ...current.asset, branch_id: firstBranchId },
+      }))
+    }
+
     if (firstBranchId && !adminForms.user.branch_id) {
       setAdminForms((current) => ({
         ...current,
@@ -198,40 +774,142 @@ function App() {
     }
 
     if (firstRoleId && !adminForms.user.role_id) {
+      const role = roles.find((item) => String(item.id) === String(firstRoleId))
+
       setAdminForms((current) => ({
         ...current,
-        user: { ...current.user, role_id: firstRoleId },
+        user: {
+          ...current.user,
+          role_id: firstRoleId,
+          permissions: normalizePermissionList(current.user.permissions).length > 0 ? current.user.permissions : rolePermissions(role),
+        },
       }))
     }
-  }, [firstBranchId, firstRoleId, projectForm.branch_id, adminForms.user.branch_id, adminForms.user.role_id])
+  }, [firstBranchId, firstRoleId, roles, projectForm.branch_id, leadForm.branch_id, inventoryForms.warehouse.branch_id, peopleForms.employee.branch_id, peopleForms.vacancy.branch_id, peopleForms.shift.branch_id, peopleForms.payroll.branch_id, equipmentForms.asset.branch_id, adminForms.user.branch_id, adminForms.user.role_id, adminForms.user.permissions])
 
-  async function refreshWorkspace() {
-    setLoading(true)
-    setError('')
+  async function refreshWorkspace(options = {}) {
+    if (refreshInFlight.current && !options.force) {
+      return null
+    }
+
+    const silent = options.silent === true
+    refreshInFlight.current = true
+
+    if (!silent) {
+      setLoading(true)
+      setError('')
+    }
 
     try {
-      const [me, dashboardData, orgData, projectData, reqData, poData, docData, drawingData, reportData] =
-        await Promise.all([
-          api.me(),
-          api.dashboard(),
-          api.organization(),
-          api.projects(),
-          api.requisitions(),
-          api.purchaseOrders(),
-          api.documents(),
-          api.drawings(),
-          api.reports(),
-        ])
+      const me = await api.me()
+      const currentUser = me.user
+      const can = (permissions) => hasAnyPermission(currentUser, permissions)
+      const moduleLoadFailures = []
+      const organizationFallback = {
+        ...emptyOrganizationData,
+        company: {
+          ...emptyOrganizationData.company,
+          ...(currentUser.company || {}),
+          branches: currentUser.company?.branches || emptyList,
+        },
+      }
+      const loadIf = async (label, condition, loader, fallback) => {
+        if (!condition) {
+          return fallback
+        }
 
+        try {
+          return await loader()
+        } catch (err) {
+          if (err?.status === 401) {
+            throw err
+          }
+
+          moduleLoadFailures.push(label)
+          console.warn(`Structra could not load ${label}.`, err)
+
+          return fallback
+        }
+      }
+      const needsProjects = can([
+        'projects.manage',
+        'procurement.manage',
+        'field.manage',
+        'equipment.manage',
+        'quality.manage',
+        'safety.manage',
+        'portals.manage',
+        'documents.manage',
+        'finance.manage',
+        'payroll.manage',
+      ])
+      const needsDocuments = can(['documents.manage', 'portals.manage'])
+
+      const [
+        dashboardData,
+        orgData,
+        projectData,
+        procurementData,
+        docData,
+        drawingData,
+        salesData,
+        inventoryData,
+        fieldData,
+        financeData,
+        peopleData,
+        equipmentData,
+        complianceData,
+        portalData,
+        reportData,
+        biData,
+        automationData,
+        adminApprovalData,
+      ] = await Promise.all([
+        loadIf('Dashboard', can(['reports.view']), api.dashboard, null),
+        loadIf('Organization', true, api.organization, organizationFallback),
+        loadIf('Projects', needsProjects, api.projects, { data: [] }),
+        loadIf('Procurement', can(['procurement.manage']), api.procurement, emptyProcurementData),
+        loadIf('Documents', needsDocuments, api.documents, { data: [] }),
+        loadIf('Drawings', needsDocuments, api.drawings, { data: [] }),
+        loadIf('CRM, Tendering, and Estimating', can(['crm.manage', 'tenders.manage', 'estimating.manage']), api.sales, emptySalesData),
+        loadIf('Inventory', can(['inventory.manage']), api.inventory, emptyInventoryData),
+        loadIf('Field and Attendance', can(['field.manage', 'attendance.manage']), api.field, emptyFieldData),
+        loadIf('Finance', can(['finance.manage']), api.finance, emptyFinanceData),
+        loadIf('HR and Workforce', can(['payroll.manage']), api.people, emptyPeopleData),
+        loadIf('Equipment', can(['equipment.manage']), api.equipment, emptyEquipmentData),
+        loadIf('QA/HSE', can(['quality.manage', 'safety.manage']), api.compliance, emptyComplianceData),
+        loadIf('Portals', can(['portals.manage']), api.portals, emptyPortalData),
+        loadIf('Reports', can(['reports.view']), api.reports, null),
+        loadIf('Intelligence', can(['bi.manage']), api.businessIntelligence, emptyBiData),
+        loadIf('Automation', can(['automation.manage']), api.automation, emptyAutomationData),
+        loadIf('Admin approvals', can(['settings.manage']), api.adminApprovals, emptyAdminApprovalData),
+      ])
+
+      const nextNavItems = accessibleNavItems(currentUser)
       setUser(me.user)
       setDashboard(dashboardData)
       setOrganization(orgData)
       setProjects(projectData.data || [])
-      setRequisitions(reqData.data || [])
-      setPurchaseOrders(poData.data || [])
+      setProcurement(procurementData)
+      setRequisitions(procurementData.requisitions || [])
+      setPurchaseOrders(procurementData.purchase_orders || [])
       setDocuments(docData.data || [])
       setDrawings(drawingData.data || [])
+      setSales(salesData)
+      setInventory(inventoryData)
+      setFieldOps(fieldData)
+      setFinance(financeData)
+      setPeople(peopleData)
+      setEquipment(equipmentData)
+      setCompliance(complianceData)
+      setPortals(portalData)
       setReports(reportData)
+      setBusinessIntelligence(biData)
+      setAutomation(automationData)
+      setAdminApprovals(adminApprovalData)
+      if (nextNavItems.length > 0 && !nextNavItems.some((item) => item.id === activeView)) {
+        setActiveView(nextNavItems[0].id)
+      }
       setAdminForms((current) => ({
         ...current,
         company: {
@@ -241,38 +919,49 @@ function App() {
           default_currency: orgData.company?.default_currency || 'GHS',
           country: orgData.company?.country || 'GH',
           base_timezone: orgData.company?.base_timezone || 'Africa/Accra',
+          settings: orgData.company?.settings || {},
+          appearance_theme: normalizeTheme(orgData.company?.settings?.appearance?.theme),
         },
       }))
+      if (moduleLoadFailures.length > 0 && !silent) {
+        setError(`Some modules could not be loaded: ${moduleLoadFailures.join(', ')}.`)
+      }
     } catch (err) {
       if (err.status === 401) {
         setToken(null)
         setTokenReady(false)
       }
 
-      setError(validationSummary(err))
+      if (!silent) {
+        setError(validationSummary(err))
+      }
+      return null
     } finally {
-      setLoading(false)
+      refreshInFlight.current = false
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
 
-  async function refreshProject(projectId = selectedProjectId) {
+  async function refreshProject(projectId = selectedProjectId, options = {}) {
     if (!projectId) return
 
     try {
       const payload = await api.project(projectId)
       setSelectedProject(payload.project)
     } catch (err) {
-      setError(validationSummary(err))
+      if (!options.silent) {
+        setError(validationSummary(err))
+      }
     }
   }
 
-  async function runAction(action, successMessage, options = {}) {
+  async function runAction(action, _successMessage, options = {}) {
     setError('')
-    setNotice('')
 
     try {
       const result = await action()
-      setNotice(successMessage)
 
       if (options.skipRefresh) {
         return result
@@ -281,13 +970,26 @@ function App() {
       if (options.refreshProjectOnly) {
         await refreshProject()
       } else {
-        await refreshWorkspace()
+        await refreshWorkspace({ force: true })
       }
 
       return result
     } catch (err) {
       setError(validationSummary(err))
       return null
+    }
+  }
+
+  async function archiveCompany() {
+    const result = await runAction(() => api.deleteCompany(), 'Company archived. Signed out.', { skipRefresh: true })
+
+    if (result) {
+      setToken(null)
+      setTokenReady(false)
+      setUser(null)
+      setOrganization(null)
+      setSelectedProject(null)
+      setSelectedProjectId(null)
     }
   }
 
@@ -304,8 +1006,8 @@ function App() {
 
       setToken(payload.token)
       setUser(payload.user)
+      setActiveView(accessibleNavItems(payload.user)[0]?.id || 'dashboard')
       setTokenReady(true)
-      setNotice('Signed in.')
     } catch (err) {
       setError(validationSummary(err))
     } finally {
@@ -318,6 +1020,7 @@ function App() {
     setToken(null)
     setTokenReady(false)
     setUser(null)
+    setActiveView('dashboard')
   }
 
   function setAdminFormValue(section) {
@@ -327,6 +1030,41 @@ function App() {
         ...current,
         [section]: { ...current[section], [name]: value },
       }))
+    }
+  }
+
+  function setCompanyThemeForm(theme) {
+    const nextTheme = normalizeTheme(theme)
+
+    setAdminForms((current) => {
+      const settings = current.company.settings || organization?.company?.settings || {}
+
+      return {
+        ...current,
+        company: {
+          ...current.company,
+          appearance_theme: nextTheme,
+          settings: {
+            ...settings,
+            appearance: {
+              ...(settings.appearance || {}),
+              theme: nextTheme,
+            },
+          },
+        },
+      }
+    })
+  }
+
+  async function toggleCompanyTheme() {
+    const previousTheme = activeTheme
+    const nextTheme = activeTheme === 'dark' ? 'light' : 'dark'
+
+    setCompanyThemeForm(nextTheme)
+    const result = await runAction(() => api.updateCompany({ settings: { appearance: { theme: nextTheme } } }), 'Company theme updated.')
+
+    if (!result) {
+      setCompanyThemeForm(previousTheme)
     }
   }
 
@@ -404,6 +1142,751 @@ function App() {
     setReqForm({ ...emptyReqForm, supplier_id: reqForm.supplier_id })
   }
 
+  async function createLead(event) {
+    event.preventDefault()
+
+    await runAction(
+      () =>
+        api.createLead({
+          ...leadForm,
+          branch_id: Number(leadForm.branch_id || firstBranchId),
+          estimated_value: Number(leadForm.estimated_value || 0),
+          next_follow_up_at: leadForm.next_follow_up_at || null,
+        }),
+      'Lead created.',
+    )
+    setLeadForm({ ...emptyLeadForm, branch_id: leadForm.branch_id })
+  }
+
+  async function createEstimate(event) {
+    event.preventDefault()
+
+    await runAction(
+      () =>
+        api.createEstimate({
+          tender_id: estimateForm.tender_id ? Number(estimateForm.tender_id) : null,
+          title: estimateForm.title,
+          overhead_percent: Number(estimateForm.overhead_percent || 0),
+          profit_percent: Number(estimateForm.profit_percent || 0),
+          tax_percent: Number(estimateForm.tax_percent || 0),
+          lines: [
+            {
+              cost_code: estimateForm.cost_code,
+              description: estimateForm.description,
+              category: estimateForm.category,
+              quantity: Number(estimateForm.quantity || 1),
+              unit: estimateForm.unit || 'each',
+              unit_cost: Number(estimateForm.unit_cost || 0),
+            },
+          ],
+        }),
+      'Estimate created.',
+    )
+    setEstimateForm({ ...emptyEstimateForm, tender_id: estimateForm.tender_id })
+  }
+
+  function setInventoryForm(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setInventoryForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  function setFieldForm(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setFieldForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  function setFinanceForm(section) {
+    return (event) => {
+      const { checked, name, type, value } = event.target
+      setFinanceForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: type === 'checkbox' ? checked : value },
+      }))
+    }
+  }
+
+  function setPeopleForm(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setPeopleForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  function setEquipmentForm(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setEquipmentForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  function setComplianceForm(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setComplianceForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  function setPortalForm(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setPortalForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  function setPhaseFourForm(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setPhaseFourForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  async function createWarehouse(event) {
+    event.preventDefault()
+    await runAction(
+      () => api.createWarehouse({ ...inventoryForms.warehouse, branch_id: Number(inventoryForms.warehouse.branch_id || firstBranchId) }),
+      'Warehouse created.',
+    )
+    setInventoryForms((current) => ({ ...current, warehouse: { branch_id: firstBranchId, code: '', name: '', location: '' } }))
+  }
+
+  async function createInventoryItem(event) {
+    event.preventDefault()
+    await runAction(
+      () =>
+        api.createInventoryItem({
+          ...inventoryForms.item,
+          reorder_level: Number(inventoryForms.item.reorder_level || 0),
+          average_cost: Number(inventoryForms.item.average_cost || 0),
+        }),
+      'Inventory item created.',
+    )
+    setInventoryForms((current) => ({ ...current, item: emptyInventoryForms.item }))
+  }
+
+  async function createStockMovement(event) {
+    event.preventDefault()
+    const movement = inventoryForms.movement
+
+    await runAction(
+      () =>
+        api.createStockMovement({
+          ...movement,
+          warehouse_id: Number(movement.warehouse_id),
+          to_warehouse_id: movement.to_warehouse_id ? Number(movement.to_warehouse_id) : null,
+          inventory_item_id: Number(movement.inventory_item_id),
+          quantity: Number(movement.quantity || 0),
+          unit_cost: Number(movement.unit_cost || 0),
+        }),
+      'Stock movement recorded.',
+    )
+    setInventoryForms((current) => ({ ...current, movement: { ...emptyInventoryForms.movement, warehouse_id: movement.warehouse_id, inventory_item_id: movement.inventory_item_id } }))
+  }
+
+  async function createSupplierPrice(event) {
+    event.preventDefault()
+    const form = inventoryForms.supplierPrice
+    if (!form.supplier_id) return
+
+    await runAction(
+      () =>
+        api.createSupplierPrice(form.supplier_id, {
+          ...form,
+          inventory_item_id: form.inventory_item_id ? Number(form.inventory_item_id) : null,
+          unit_price: Number(form.unit_price || 0),
+          lead_time_days: Number(form.lead_time_days || 7),
+        }),
+      'Supplier price added.',
+    )
+    setInventoryForms((current) => ({ ...current, supplierPrice: { ...emptyInventoryForms.supplierPrice, supplier_id: form.supplier_id } }))
+  }
+
+  async function createSupplierReview(event) {
+    event.preventDefault()
+    const form = inventoryForms.supplierReview
+    if (!form.supplier_id) return
+
+    await runAction(
+      () =>
+        api.createSupplierReview(form.supplier_id, {
+          rating: Number(form.rating || 3),
+          quality_score: Number(form.quality_score || form.rating || 3),
+          delivery_score: Number(form.delivery_score || form.rating || 3),
+          cost_score: Number(form.cost_score || form.rating || 3),
+          notes: form.notes,
+        }),
+      'Supplier review added.',
+    )
+    setInventoryForms((current) => ({ ...current, supplierReview: { ...emptyInventoryForms.supplierReview, supplier_id: form.supplier_id } }))
+  }
+
+  async function createDailyReport(event) {
+    event.preventDefault()
+    const form = fieldForms.dailyReport
+    if (!form.project_id) return
+
+    await runAction(
+      () =>
+        api.createDailyReport(form.project_id, {
+          ...form,
+          labour_count: Number(form.labour_count || 0),
+        }),
+      'Daily report created.',
+    )
+    setFieldForms((current) => ({ ...current, dailyReport: { ...emptyFieldForms.dailyReport, project_id: form.project_id, report_date: new Date().toISOString().slice(0, 10) } }))
+  }
+
+  async function createFieldIssue(event) {
+    event.preventDefault()
+    const form = fieldForms.issue
+    if (!form.project_id) return
+
+    const formData = new FormData()
+    Object.entries(form).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') formData.append(key, value)
+    })
+
+    await runAction(() => api.createFieldIssue(form.project_id, formData), 'Field issue created.')
+    setFieldForms((current) => ({ ...current, issue: { ...emptyFieldForms.issue, project_id: form.project_id } }))
+    event.target.reset()
+  }
+
+  async function clockIn(event) {
+    event.preventDefault()
+    const form = fieldForms.clock
+    const formData = new FormData()
+    Object.entries(form).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') formData.append(key, value)
+    })
+
+    await runAction(() => api.clockIn(formData), 'Clocked in.')
+  }
+
+  async function clockOut(event) {
+    event.preventDefault()
+    if (!fieldOps.open_attendance?.id) return
+
+    const form = fieldForms.clock
+    const formData = new FormData()
+    if (form.clock_out_latitude) formData.append('clock_out_latitude', form.clock_out_latitude)
+    if (form.clock_out_longitude) formData.append('clock_out_longitude', form.clock_out_longitude)
+    if (form.face) formData.append('face', form.face)
+
+    await runAction(() => api.clockOut(fieldOps.open_attendance.id, formData), 'Clocked out.')
+  }
+
+  async function createInvoice(event) {
+    event.preventDefault()
+    const form = financeForms.invoice
+
+    await runAction(
+      () =>
+        api.createInvoice({
+          project_id: form.project_id ? Number(form.project_id) : null,
+          client_id: form.client_id ? Number(form.client_id) : null,
+          title: form.title,
+          due_date: form.due_date || null,
+          retention_percent: Number(form.retention_percent || 0),
+          progress_percent: Number(form.progress_percent || 0),
+          billing_stage: form.billing_stage || null,
+          lines: [
+            {
+              description: form.line_description,
+              cost_code: form.cost_code || null,
+              quantity: Number(form.quantity || 1),
+              unit: form.unit || 'each',
+              unit_price: Number(form.unit_price || 0),
+              tax_rate: Number(form.tax_rate || 0),
+            },
+          ],
+        }),
+      'Invoice created.',
+    )
+    setFinanceForms((current) => ({ ...current, invoice: { ...emptyFinanceForms.invoice, project_id: form.project_id, client_id: form.client_id } }))
+  }
+
+  async function recordPayment(event) {
+    event.preventDefault()
+    const form = financeForms.payment
+    if (!form.invoice_id) return
+
+    await runAction(
+      () =>
+        api.recordPayment(form.invoice_id, {
+          amount: Number(form.amount || 0),
+          finance_bank_account_id: form.finance_bank_account_id ? Number(form.finance_bank_account_id) : null,
+          method: form.method,
+          reference: form.reference,
+        }),
+      'Payment recorded.',
+    )
+    setFinanceForms((current) => ({ ...current, payment: { ...emptyFinanceForms.payment, invoice_id: form.invoice_id } }))
+  }
+
+  async function createExpense(event) {
+    event.preventDefault()
+    const form = financeForms.expense
+
+    await runAction(
+      () =>
+        api.createExpense({
+          project_id: form.project_id ? Number(form.project_id) : null,
+          supplier_id: form.supplier_id ? Number(form.supplier_id) : null,
+          description: form.description,
+          category: form.category,
+          cost_code: form.cost_code || null,
+          amount: Number(form.amount || 0),
+          tax_amount: Number(form.tax_amount || 0),
+        }),
+      'Expense submitted.',
+    )
+    setFinanceForms((current) => ({ ...current, expense: { ...emptyFinanceForms.expense, project_id: form.project_id, supplier_id: form.supplier_id } }))
+  }
+
+  async function createJournalEntry(event) {
+    event.preventDefault()
+    const form = financeForms.journal
+    const debitAmount = Number(form.debit_amount || 0)
+    const creditAmount = Number(form.credit_amount || debitAmount)
+
+    await runAction(
+      () =>
+        api.createJournalEntry({
+          entry_date: form.entry_date,
+          reference: form.reference,
+          description: form.description,
+          status: 'posted',
+          lines: [
+            { account_code: form.debit_account_code, account_name: form.debit_account_name, debit: debitAmount, credit: 0 },
+            { account_code: form.credit_account_code, account_name: form.credit_account_name, debit: 0, credit: creditAmount },
+          ],
+        }),
+      'Journal entry posted.',
+    )
+    setFinanceForms((current) => ({ ...current, journal: { ...emptyFinanceForms.journal, entry_date: form.entry_date } }))
+  }
+
+  async function createEmployee(event) {
+    event.preventDefault()
+    const form = peopleForms.employee
+    if (!form.user_id) return
+
+    await runAction(
+      () =>
+        api.createEmployee({
+          ...form,
+          user_id: Number(form.user_id),
+          branch_id: Number(form.branch_id || firstBranchId),
+          manager_id: form.manager_id ? Number(form.manager_id) : null,
+          current_project_id: form.current_project_id ? Number(form.current_project_id) : null,
+          base_salary: Number(form.base_salary || 0),
+          hourly_rate: Number(form.hourly_rate || 0),
+          allowances: Number(form.allowances || 0),
+          bonuses: Number(form.bonuses || 0),
+          deductions: Number(form.deductions || 0),
+        }),
+      'Employee profile created.',
+    )
+    setPeopleForms((current) => ({ ...current, employee: { ...emptyPeopleForms.employee, branch_id: form.branch_id } }))
+  }
+
+  async function createLeaveRequest(event) {
+    event.preventDefault()
+    const form = peopleForms.leave
+    if (!form.employee_profile_id) return
+
+    await runAction(
+      () =>
+        api.createLeaveRequest({
+          employee_profile_id: Number(form.employee_profile_id),
+          leave_type: form.leave_type,
+          starts_on: form.starts_on,
+          ends_on: form.ends_on,
+          reason: form.reason,
+        }),
+      'Leave request created.',
+    )
+    setPeopleForms((current) => ({ ...current, leave: { ...emptyPeopleForms.leave, employee_profile_id: form.employee_profile_id } }))
+  }
+
+  async function createPayrollRun(event) {
+    event.preventDefault()
+    const form = peopleForms.payroll
+
+    await runAction(
+      () =>
+        api.createPayrollRun({
+          branch_id: form.branch_id ? Number(form.branch_id) : null,
+          period_start: form.period_start,
+          period_end: form.period_end,
+        }),
+      'Payroll run created.',
+    )
+  }
+
+  async function createEquipmentAsset(event) {
+    event.preventDefault()
+    const form = equipmentForms.asset
+
+    await runAction(
+      () =>
+        api.createEquipmentAsset({
+          ...form,
+          branch_id: Number(form.branch_id || firstBranchId),
+          meter_reading: Number(form.meter_reading || 0),
+          hourly_rate: Number(form.hourly_rate || 0),
+        }),
+      'Equipment asset created.',
+    )
+    setEquipmentForms((current) => ({ ...current, asset: { ...emptyEquipmentForms.asset, branch_id: form.branch_id } }))
+  }
+
+  async function assignEquipment(event) {
+    event.preventDefault()
+    const form = equipmentForms.assignment
+    if (!form.asset_id || !form.project_id) return
+
+    await runAction(
+      () =>
+        api.assignEquipmentAsset(form.asset_id, {
+          project_id: Number(form.project_id),
+          meter_start: form.meter_start ? Number(form.meter_start) : null,
+        }),
+      'Equipment assigned.',
+    )
+    setEquipmentForms((current) => ({ ...current, assignment: { ...emptyEquipmentForms.assignment, project_id: form.project_id } }))
+  }
+
+  async function createMaintenanceLog(event) {
+    event.preventDefault()
+    const form = equipmentForms.maintenance
+    if (!form.asset_id) return
+
+    await runAction(
+      () =>
+        api.createMaintenanceLog(form.asset_id, {
+          status: form.status,
+          service_date: form.service_date,
+          meter_reading: form.meter_reading ? Number(form.meter_reading) : null,
+          cost_amount: Number(form.cost_amount || 0),
+          description: form.description,
+        }),
+      'Maintenance logged.',
+    )
+    setEquipmentForms((current) => ({ ...current, maintenance: { ...emptyEquipmentForms.maintenance, asset_id: form.asset_id } }))
+  }
+
+  async function createFuelLog(event) {
+    event.preventDefault()
+    const form = equipmentForms.fuel
+    if (!form.asset_id) return
+
+    await runAction(
+      () =>
+        api.createFuelLog(form.asset_id, {
+          project_id: form.project_id ? Number(form.project_id) : null,
+          quantity: Number(form.quantity || 0),
+          unit_cost: Number(form.unit_cost || 0),
+          meter_reading: form.meter_reading ? Number(form.meter_reading) : null,
+        }),
+      'Fuel log recorded.',
+    )
+    setEquipmentForms((current) => ({ ...current, fuel: { ...emptyEquipmentForms.fuel, asset_id: form.asset_id, project_id: form.project_id } }))
+  }
+
+  async function createInspection(event) {
+    event.preventDefault()
+    const form = complianceForms.inspection
+    if (!form.project_id) return
+
+    await runAction(
+      () =>
+        api.createInspection(form.project_id, {
+          type: form.type,
+          area: form.area,
+          scheduled_on: form.scheduled_on || null,
+          notes: form.notes,
+          items: [
+            { checklist_item: form.first_item, requirement: form.first_requirement, result: form.first_result, severity: form.first_severity },
+            { checklist_item: form.second_item, requirement: form.second_requirement, result: form.second_result, severity: form.second_severity },
+          ].filter((item) => item.checklist_item),
+        }),
+      'Inspection created.',
+    )
+    setComplianceForms((current) => ({ ...current, inspection: { ...emptyComplianceForms.inspection, project_id: form.project_id } }))
+  }
+
+  async function createNcr(event) {
+    event.preventDefault()
+    const form = complianceForms.ncr
+    if (!form.project_id) return
+
+    await runAction(
+      () =>
+        api.createNcr(form.project_id, {
+          inspection_id: form.inspection_id ? Number(form.inspection_id) : null,
+          title: form.title,
+          department: form.department,
+          category: form.category,
+          location: form.location,
+          contractor: form.contractor,
+          subcontractor: form.subcontractor,
+          description: form.description,
+          reference_documents: csvList(form.reference_documents),
+          evidence: csvList(form.evidence),
+          root_cause: form.root_cause,
+          corrective_action: form.corrective_action,
+          preventive_action: form.preventive_action,
+          severity: form.severity,
+          due_date: form.due_date || null,
+        }),
+      'Non-Conformance Report(NCR) created.',
+    )
+    setComplianceForms((current) => ({ ...current, ncr: { ...emptyComplianceForms.ncr, project_id: form.project_id, inspection_id: form.inspection_id } }))
+  }
+
+  async function createSafetyIncident(event) {
+    event.preventDefault()
+    const form = complianceForms.incident
+
+    await runAction(
+      () =>
+        api.createSafetyIncident({
+          project_id: form.project_id ? Number(form.project_id) : null,
+          incident_type: form.incident_type,
+          location: form.location,
+          occurred_at: form.occurred_at || null,
+          injured_person: form.injured_person,
+          description: form.description,
+          immediate_action: form.immediate_action,
+          severity: form.severity,
+        }),
+      'Safety incident logged.',
+    )
+    setComplianceForms((current) => ({ ...current, incident: { ...emptyComplianceForms.incident, project_id: form.project_id } }))
+  }
+
+  async function createToolboxTalk(event) {
+    event.preventDefault()
+    const form = complianceForms.talk
+
+    await runAction(
+      () =>
+        api.createToolboxTalk({
+          project_id: form.project_id ? Number(form.project_id) : null,
+          topic: form.topic,
+          talk_date: form.talk_date || null,
+          attendee_count: Number(form.attendee_count || 0),
+          summary: form.summary,
+          hazards_discussed: csvList(form.hazards_discussed),
+        }),
+      'Toolbox talk recorded.',
+    )
+    setComplianceForms((current) => ({ ...current, talk: { ...emptyComplianceForms.talk, project_id: form.project_id } }))
+  }
+
+  async function createSafetyObservation(event) {
+    event.preventDefault()
+    const form = complianceForms.observation
+
+    await runAction(
+      () =>
+        api.createSafetyObservation({
+          project_id: form.project_id ? Number(form.project_id) : null,
+          observation_type: form.observation_type,
+          severity: form.severity,
+          location: form.location,
+          description: form.description,
+          corrective_action: form.corrective_action,
+        }),
+      'Safety observation logged.',
+    )
+    setComplianceForms((current) => ({ ...current, observation: { ...emptyComplianceForms.observation, project_id: form.project_id } }))
+  }
+
+  async function createWorkPermit(event) {
+    event.preventDefault()
+    const form = complianceForms.permit
+
+    await runAction(
+      () =>
+        api.createWorkPermit({
+          project_id: form.project_id ? Number(form.project_id) : null,
+          permit_type: form.permit_type,
+          location: form.location,
+          valid_from: form.valid_from || null,
+          valid_until: form.valid_until || null,
+          hazards: form.hazards,
+          controls: form.controls,
+        }),
+      'Permit submitted.',
+    )
+    setComplianceForms((current) => ({ ...current, permit: { ...emptyComplianceForms.permit, project_id: form.project_id } }))
+  }
+
+  async function createPortalUser(event) {
+    event.preventDefault()
+    const form = portalForms.user
+
+    await runAction(
+      () =>
+        api.createPortalUser({
+          client_id: form.client_id ? Number(form.client_id) : null,
+          user_type: form.user_type,
+          name: form.name,
+          email: form.email,
+          organization: form.organization,
+        }),
+      'Portal user created.',
+    )
+    setPortalForms((current) => ({ ...current, user: { ...emptyPortalForms.user, user_type: form.user_type, client_id: form.client_id } }))
+  }
+
+  async function grantPortalAccess(event) {
+    event.preventDefault()
+    const form = portalForms.access
+    if (!form.portal_user_id || !form.project_id) return
+
+    await runAction(
+      () =>
+        api.grantPortalAccess(form.portal_user_id, {
+          project_id: Number(form.project_id),
+          access_level: form.access_level,
+          access_scope: form.access_scope,
+        }),
+      'Portal access granted.',
+    )
+    setPortalForms((current) => ({ ...current, access: { ...emptyPortalForms.access, portal_user_id: form.portal_user_id, project_id: form.project_id } }))
+  }
+
+  async function createClientApproval(event) {
+    event.preventDefault()
+    const form = portalForms.clientApproval
+    if (!form.project_id) return
+
+    await runAction(
+      () =>
+        api.createClientApproval(form.project_id, {
+          portal_user_id: form.portal_user_id ? Number(form.portal_user_id) : null,
+          drawing_id: form.drawing_id ? Number(form.drawing_id) : null,
+          document_id: form.document_id ? Number(form.document_id) : null,
+          title: form.title,
+        }),
+      'Client approval requested.',
+    )
+    setPortalForms((current) => ({ ...current, clientApproval: { ...emptyPortalForms.clientApproval, project_id: form.project_id, portal_user_id: form.portal_user_id } }))
+  }
+
+  async function createConsultantSubmittal(event) {
+    event.preventDefault()
+    const form = portalForms.submittal
+    if (!form.project_id) return
+
+    await runAction(
+      () =>
+        api.createConsultantSubmittal(form.project_id, {
+          portal_user_id: form.portal_user_id ? Number(form.portal_user_id) : null,
+          drawing_id: form.drawing_id ? Number(form.drawing_id) : null,
+          document_id: form.document_id ? Number(form.document_id) : null,
+          title: form.title,
+          discipline: form.discipline,
+        }),
+      'Consultant submittal created.',
+    )
+    setPortalForms((current) => ({ ...current, submittal: { ...emptyPortalForms.submittal, project_id: form.project_id, portal_user_id: form.portal_user_id } }))
+  }
+
+  async function createPortalWorkItem(event) {
+    event.preventDefault()
+    const form = portalForms.workItem
+    if (!form.project_id) return
+
+    await runAction(
+      () =>
+        api.createPortalWorkItem(form.project_id, {
+          portal_user_id: form.portal_user_id ? Number(form.portal_user_id) : null,
+          supplier_id: form.supplier_id ? Number(form.supplier_id) : null,
+          portal_type: form.portal_type,
+          item_type: form.item_type,
+          title: form.title,
+          description: form.description,
+          priority: form.priority,
+          due_date: form.due_date || null,
+        }),
+      'Portal work item created.',
+    )
+    setPortalForms((current) => ({ ...current, workItem: { ...emptyPortalForms.workItem, project_id: form.project_id, portal_type: form.portal_type, portal_user_id: form.portal_user_id } }))
+  }
+
+  async function createBiDashboard(event) {
+    event.preventDefault()
+    const form = phaseFourForms.dashboard
+
+    await runAction(
+      () =>
+        api.createBiDashboard({
+          name: form.name,
+          audience: form.audience,
+          refresh_interval: form.refresh_interval,
+          is_default: form.is_default === 'true',
+        }),
+      'BI dashboard created.',
+    )
+    setPhaseFourForms((current) => ({ ...current, dashboard: { ...emptyPhaseFourForms.dashboard, audience: form.audience } }))
+  }
+
+  async function createMetricSnapshot() {
+    await runAction(
+      () => api.createMetricSnapshot({ period_label: new Date().toISOString().slice(0, 7) }),
+      'Metric snapshot created.',
+    )
+  }
+
+  async function createAutomationRule(event) {
+    event.preventDefault()
+    const form = phaseFourForms.automation
+
+    await runAction(
+      () =>
+        api.createAutomationRule(automationPayloadFromForm(form)),
+      'Automation rule created.',
+    )
+    setPhaseFourForms((current) => ({
+      ...current,
+      automation: {
+        ...emptyPhaseFourForms.automation,
+        module: form.module,
+        rule_type: form.rule_type,
+        trigger_event: form.trigger_event,
+        schedule_frequency: form.schedule_frequency,
+      },
+    }))
+  }
+
   async function uploadDocument(event) {
     event.preventDefault()
 
@@ -474,6 +1957,11 @@ function App() {
     )
   }
 
+  const activeTitle = activeView === 'compliance'
+    ? 'Quality Assurance and Health, Safety, and Environment'
+    : navItems.find((item) => item.id === activeView)?.label || 'Workspace'
+  const showAdminThemeToggle = activeView === 'admin' && canAdministerRecords(user)
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -481,12 +1969,11 @@ function App() {
           <div className="brand-mark">S</div>
           <div>
             <strong>Structra</strong>
-            <span>Construction OS</span>
           </div>
         </div>
 
         <nav className="nav-list" aria-label="Primary">
-          {navItems.map((item) => {
+          {allowedNavItems.map((item) => {
             const Icon = item.icon
             return (
               <button
@@ -508,17 +1995,20 @@ function App() {
             <span>{initials(user?.name)}</span>
             <div>
               <strong>{user?.name}</strong>
-              <small>{user?.role?.name}</small>
+              <small>{roleLabel(user?.role)}</small>
             </div>
           </div>
+          <div className="powered-by">Powered by Navkwa Group Ltd</div>
         </div>
       </aside>
 
       <main className="workspace">
         <header className="topbar">
-          <div>
-            <p>{user?.company?.name}</p>
-            <h1>{navItems.find((item) => item.id === activeView)?.label}</h1>
+          <div className="topbar-title">
+            <h1>{activeTitle}</h1>
+            {showAdminThemeToggle && (
+              <ThemeToggle theme={activeTheme} onToggle={toggleCompanyTheme} disabled={loading} />
+            )}
           </div>
           <div className="topbar-actions">
             <button type="button" className="icon-button" onClick={refreshWorkspace} title="Refresh">
@@ -530,15 +2020,32 @@ function App() {
           </div>
         </header>
 
-        {(notice || error || loading) && (
-          <div className="system-strip">
-            {loading && <span>Working...</span>}
-            {notice && <span className="success">{notice}</span>}
-            {error && <span className="danger">{error}</span>}
-          </div>
-        )}
-
         {activeView === 'dashboard' && <DashboardView dashboard={dashboard} projects={projects} />}
+        {activeView === 'crm' && (
+          <CrmView
+            branches={branches}
+            sales={sales}
+            leadForm={leadForm}
+            setLeadForm={setLeadForm}
+            createLead={createLead}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'tendering' && (
+          <TenderingView
+            sales={sales}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'estimating' && (
+          <EstimatingView
+            sales={sales}
+            estimateForm={estimateForm}
+            setEstimateForm={setEstimateForm}
+            createEstimate={createEstimate}
+            runAction={runAction}
+          />
+        )}
         {activeView === 'projects' && (
           <ProjectsView
             branches={branches}
@@ -555,6 +2062,7 @@ function App() {
             createProject={createProject}
             createTask={createTask}
             createBudgetLine={createBudgetLine}
+            currentUser={user}
             runAction={runAction}
           />
         )}
@@ -563,6 +2071,8 @@ function App() {
             selectedProject={selectedProject}
             projects={projects}
             suppliers={suppliers}
+            procurement={procurement}
+            currentUser={user}
             reqForm={reqForm}
             setReqForm={setReqForm}
             createRequisition={createRequisition}
@@ -570,6 +2080,118 @@ function App() {
             purchaseOrders={purchaseOrders}
             selectedProjectRequisitions={selectedProjectRequisitions}
             selectedProjectOrders={selectedProjectOrders}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'inventory' && (
+          <InventoryView
+            branches={branches}
+            suppliers={suppliers}
+            inventory={inventory}
+            forms={inventoryForms}
+            setInventoryForm={setInventoryForm}
+            setInventoryForms={setInventoryForms}
+            createWarehouse={createWarehouse}
+            createInventoryItem={createInventoryItem}
+            createStockMovement={createStockMovement}
+            createSupplierPrice={createSupplierPrice}
+            createSupplierReview={createSupplierReview}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'field' && (
+          <FieldOpsView
+            projects={projects}
+            fieldOps={fieldOps}
+            forms={fieldForms}
+            setFieldForm={setFieldForm}
+            setFieldForms={setFieldForms}
+            createDailyReport={createDailyReport}
+            createFieldIssue={createFieldIssue}
+            clockIn={clockIn}
+            clockOut={clockOut}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'finance' && (
+          <FinanceView
+            branches={branches}
+            projects={projects}
+            clients={clients}
+            suppliers={suppliers}
+            finance={finance}
+            forms={financeForms}
+            setFinanceForm={setFinanceForm}
+            setFinanceForms={setFinanceForms}
+            createInvoice={createInvoice}
+            recordPayment={recordPayment}
+            createExpense={createExpense}
+            createJournalEntry={createJournalEntry}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'people' && (
+          <PeopleView
+            branches={branches}
+            projects={projects}
+            suppliers={suppliers}
+            users={users}
+            roles={roles}
+            currentUser={user}
+            people={people}
+            forms={peopleForms}
+            setPeopleForm={setPeopleForm}
+            setPeopleForms={setPeopleForms}
+            createEmployee={createEmployee}
+            createLeaveRequest={createLeaveRequest}
+            createPayrollRun={createPayrollRun}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'equipment' && (
+          <EquipmentView
+            branches={branches}
+            projects={projects}
+            equipment={equipment}
+            forms={equipmentForms}
+            setEquipmentForm={setEquipmentForm}
+            createEquipmentAsset={createEquipmentAsset}
+            assignEquipment={assignEquipment}
+            createMaintenanceLog={createMaintenanceLog}
+            createFuelLog={createFuelLog}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'compliance' && (
+          <ComplianceView
+            projects={projects}
+            compliance={compliance}
+            forms={complianceForms}
+            setComplianceForm={setComplianceForm}
+            createInspection={createInspection}
+            createNcr={createNcr}
+            createSafetyIncident={createSafetyIncident}
+            createToolboxTalk={createToolboxTalk}
+            createSafetyObservation={createSafetyObservation}
+            createWorkPermit={createWorkPermit}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'portals' && (
+          <PortalsView
+            projects={projects}
+            clients={clients}
+            suppliers={suppliers}
+            drawings={drawings}
+            documents={documents}
+            portals={portals}
+            forms={portalForms}
+            setPortalForm={setPortalForm}
+            createPortalUser={createPortalUser}
+            grantPortalAccess={grantPortalAccess}
+            createClientApproval={createClientApproval}
+            createConsultantSubmittal={createConsultantSubmittal}
+            createPortalWorkItem={createPortalWorkItem}
             runAction={runAction}
           />
         )}
@@ -588,10 +2210,33 @@ function App() {
             uploadDocument={uploadDocument}
             uploadDrawing={uploadDrawing}
             reviseDrawing={reviseDrawing}
+            markupForm={markupForm}
+            setMarkupForm={setMarkupForm}
+            reviewForm={reviewForm}
+            setReviewForm={setReviewForm}
             runAction={runAction}
           />
         )}
         {activeView === 'reports' && <ReportsView reports={reports} dashboard={dashboard} />}
+        {activeView === 'bi' && (
+          <BusinessIntelligenceView
+            bi={businessIntelligence}
+            forms={phaseFourForms}
+            setPhaseFourForm={setPhaseFourForm}
+            createBiDashboard={createBiDashboard}
+            createMetricSnapshot={createMetricSnapshot}
+            runAction={runAction}
+          />
+        )}
+        {activeView === 'automation' && (
+          <AutomationView
+            automation={automation}
+            forms={phaseFourForms}
+            setPhaseFourForm={setPhaseFourForm}
+            createAutomationRule={createAutomationRule}
+            runAction={runAction}
+          />
+        )}
         {activeView === 'admin' && (
           <AdminView
             organization={organization}
@@ -600,9 +2245,12 @@ function App() {
             suppliers={suppliers}
             roles={roles}
             users={users}
+            currentUser={user}
+            approvals={adminApprovals}
             forms={adminForms}
             setForms={setAdminForms}
             setAdminFormValue={setAdminFormValue}
+            archiveCompany={archiveCompany}
             runAction={runAction}
           />
         )}
@@ -611,17 +2259,61 @@ function App() {
   )
 }
 
+function ThemeToggle({ theme, onToggle, disabled = false }) {
+  const dark = theme === 'dark'
+
+  return (
+    <button
+      type="button"
+      className={`theme-toggle ${dark ? 'dark' : 'light'}`}
+      onClick={onToggle}
+      disabled={disabled}
+      aria-label={`Switch to ${dark ? 'light' : 'dark'} mode`}
+      aria-pressed={dark}
+      title={`Switch to ${dark ? 'light' : 'dark'} mode`}
+    >
+      <span className="theme-toggle-track" aria-hidden="true">
+        <span className="theme-toggle-thumb">
+          {dark ? <Moon size={14} /> : <Sun size={14} />}
+        </span>
+      </span>
+      <span>{dark ? 'Dark' : 'Light'}</span>
+    </button>
+  )
+}
+
 function AuthScreen({ authMode, setAuthMode, authForm, setAuthForm, handleAuth, loading, error }) {
   const register = authMode === 'register'
+  const [showPassword, setShowPassword] = useState(false)
 
   return (
     <main className="auth-layout">
       <section className="auth-panel">
-        <div className="brand-block auth-brand">
-          <div className="brand-mark">S</div>
-          <div>
-            <strong>Structra</strong>
-            <span>Construction Operating System</span>
+        <div className="auth-showcase">
+          <div className="auth-brand-lockup">
+            <div className="brand-mark auth-logo-mark">S</div>
+            <div className="auth-brand-copy">
+              <strong>Structra</strong>
+              <small>Powered by Navkwa Group Ltd.</small>
+            </div>
+          </div>
+          <div className="auth-site-telemetry" aria-hidden="true">
+            <div className="auth-blueprint">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="auth-progress-indicators">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="auth-data-points">
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
           </div>
         </div>
         <form onSubmit={handleAuth} className="auth-form">
@@ -648,7 +2340,21 @@ function AuthScreen({ authMode, setAuthMode, authForm, setAuthForm, handleAuth, 
           )}
 
           <Field label="Email" type="email" name="email" value={authForm.email} onChange={setForm(setAuthForm)} required />
-          <Field label="Password" type="password" name="password" value={authForm.password} onChange={setForm(setAuthForm)} required />
+          <label className="field password-field">
+            <span>Password</span>
+            <div className="password-input-wrap">
+              <input type={showPassword ? 'text' : 'password'} name="password" value={authForm.password} onChange={setForm(setAuthForm)} required />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((current) => !current)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </label>
 
           {error && <p className="form-error">{error}</p>}
 
@@ -738,6 +2444,308 @@ function DashboardView({ dashboard, projects }) {
   )
 }
 
+function CrmView({ branches, sales, leadForm, setLeadForm, createLead, runAction }) {
+  const [editingLeadId, setEditingLeadId] = useState(null)
+  const editingLead = (sales.leads || []).find((lead) => lead.id === editingLeadId)
+
+  function saveLead(event) {
+    if (!editingLeadId) {
+      createLead(event)
+      return
+    }
+
+    event.preventDefault()
+
+    runAction(
+      () =>
+        api.updateLead(editingLeadId, {
+          ...leadForm,
+          branch_id: Number(leadForm.branch_id || editingLead?.branch_id || branches[0]?.id || 0),
+          estimated_value: Number(leadForm.estimated_value || 0),
+          next_follow_up_at: leadForm.next_follow_up_at || null,
+        }),
+      'Lead updated.',
+    ).then(() => {
+      setEditingLeadId(null)
+      setLeadForm({ ...emptyLeadForm, branch_id: leadForm.branch_id })
+    })
+  }
+
+  function editLead(lead) {
+    setEditingLeadId(lead.id)
+    setLeadForm({
+      branch_id: lead.branch_id || lead.branch?.id || branches[0]?.id || '',
+      company_name: lead.company_name || '',
+      contact_name: lead.contact_name || '',
+      email: lead.email || '',
+      phone: lead.phone || '',
+      source: lead.source || 'direct',
+      estimated_value: lead.estimated_value || '',
+      next_follow_up_at: datetimeLocalInputValue(lead.next_follow_up_at),
+    })
+  }
+
+  function cancelLeadEdit() {
+    setEditingLeadId(null)
+    setLeadForm({ ...emptyLeadForm, branch_id: leadForm.branch_id })
+  }
+
+  function deleteLead(lead) {
+    if (!window.confirm(`Archive lead ${lead.lead_number || lead.company_name}?`)) {
+      return
+    }
+
+    runAction(() => api.deleteLead(lead.id), 'Lead archived.').then(() => {
+      if (editingLeadId === lead.id) {
+        cancelLeadEdit()
+      }
+    })
+  }
+
+  return (
+    <section className="view-stack">
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Handshake} title={editingLeadId ? 'Edit Lead' : 'New Lead'} />
+          <form className="form-grid two" onSubmit={saveLead}>
+            <Select label="Branch" name="branch_id" value={leadForm.branch_id} onChange={setForm(setLeadForm)} required>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Source" name="source" value={leadForm.source} onChange={setForm(setLeadForm)} />
+            <Field label="Company" name="company_name" value={leadForm.company_name} onChange={setForm(setLeadForm)} required />
+            <Field label="Contact" name="contact_name" value={leadForm.contact_name} onChange={setForm(setLeadForm)} />
+            <Field label="Email" type="email" name="email" value={leadForm.email} onChange={setForm(setLeadForm)} />
+            <Field label="Phone" name="phone" value={leadForm.phone} onChange={setForm(setLeadForm)} />
+            <Field label="Estimated value" type="number" name="estimated_value" value={leadForm.estimated_value} onChange={setForm(setLeadForm)} />
+            <Field label="Follow-up" type="datetime-local" name="next_follow_up_at" value={leadForm.next_follow_up_at} onChange={setForm(setLeadForm)} />
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">
+                {editingLeadId ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                {editingLeadId ? 'Save lead' : 'Add lead'}
+              </button>
+              {editingLeadId && (
+                <button type="button" className="table-action" onClick={cancelLeadEdit}>
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Users} title="Pipeline Summary" />
+          <div className="kpi-grid compact">
+            <Kpi icon={Handshake} label="Leads" value={sales.leads?.length || 0} sub="Open sales records" />
+            <Kpi icon={ClipboardList} label="Opportunities" value={sales.opportunities?.length || 0} sub="Qualified pipeline" />
+            <Kpi icon={ClipboardList} label="Tenders" value={sales.tenders?.length || 0} sub="Tender records" />
+            <Kpi icon={Calculator} label="Estimates" value={sales.estimates?.length || 0} sub="Cost scenarios" />
+          </div>
+        </section>
+      </div>
+
+      <section className="panel">
+        <PanelTitle icon={Handshake} title="Leads" />
+        <DataTable
+          columns={['No.', 'Company', 'Contact', 'Stage', 'Value', 'Follow-up', 'Actions']}
+          rows={(sales.leads || []).map((lead) => [
+            lead.lead_number,
+            lead.company_name,
+            lead.contact_name || '',
+            <Badge key="stage" value={lead.stage} />,
+            money(lead.estimated_value),
+            shortDate(lead.next_follow_up_at),
+            <div key="actions" className="row-actions">
+              <button type="button" className="table-action" onClick={() => editLead(lead)}>
+                Edit
+              </button>
+              {lead.stage === 'new' && (
+                <button
+                  type="button"
+                  className="table-action"
+                  onClick={() => runAction(() => api.qualifyLead(lead.id, { name: `${lead.company_name} opportunity` }), 'Lead qualified.')}
+                >
+                  Qualify
+                </button>
+              )}
+              <button type="button" className="table-action danger" onClick={() => deleteLead(lead)}>
+                Archive
+              </button>
+            </div>,
+          ])}
+        />
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={ClipboardList} title="Opportunities" />
+        <DataTable
+          columns={['No.', 'Opportunity', 'Client', 'Stage', 'Probability', 'Value', 'Action']}
+          rows={(sales.opportunities || []).map((opportunity) => [
+            opportunity.opportunity_number,
+            opportunity.name,
+            opportunity.client?.name || '',
+            <Badge key="stage" value={opportunity.stage} />,
+            `${opportunity.probability}%`,
+            money(opportunity.estimated_value),
+            !['tender', 'won', 'lost'].includes(opportunity.stage) ? (
+              <button
+                key="tender"
+                type="button"
+                className="table-action"
+                onClick={() => runAction(() => api.createTenderFromOpportunity(opportunity.id, { title: opportunity.name }), 'Tender created.')}
+              >
+                Create tender
+              </button>
+            ) : (
+              ''
+            ),
+          ])}
+        />
+      </section>
+    </section>
+  )
+}
+
+function TenderingView({ sales, runAction }) {
+  return (
+    <section className="view-stack">
+      <section className="panel">
+        <PanelTitle icon={ClipboardList} title="Tender Register" />
+        <DataTable
+          columns={['No.', 'Title', 'Client', 'Status', 'Deadline', 'Value', 'Actions']}
+          rows={(sales.tenders || []).map((tender) => [
+            tender.tender_number,
+            tender.title,
+            tender.client?.name || '',
+            <Badge key="status" value={tender.status} />,
+            shortDate(tender.deadline_at),
+            money(tender.value),
+            <div key="actions" className="row-actions">
+              {['draft', 'pending'].includes(tender.status) && (
+                <button type="button" className="table-action" onClick={() => runAction(() => api.submitTender(tender.id), 'Tender submitted.')}>
+                  Submit
+                </button>
+              )}
+              {['submitted', 'pending'].includes(tender.status) && (
+                <button
+                  type="button"
+                  className="table-action"
+                  onClick={() =>
+                    runAction(
+                      () =>
+                        api.winTender(tender.id, {
+                          estimate_id: tender.estimates?.[0]?.id,
+                          project_name: tender.title,
+                        }),
+                      'Tender won and project created.',
+                    )
+                  }
+                >
+                  Win
+                </button>
+              )}
+            </div>,
+          ])}
+        />
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={FileText} title="Tender RFIs" />
+        <DataTable
+          columns={['Tender', 'Question', 'Status', 'Response']}
+          rows={(sales.tenders || []).flatMap((tender) =>
+            (tender.rfis || []).map((rfi) => [
+              tender.tender_number,
+              rfi.question,
+              <Badge key="status" value={rfi.status} />,
+              rfi.response || '',
+            ]),
+          )}
+        />
+      </section>
+    </section>
+  )
+}
+
+function EstimatingView({ sales, estimateForm, setEstimateForm, createEstimate, runAction }) {
+  return (
+    <section className="view-stack">
+      <section className="panel">
+        <PanelTitle icon={Calculator} title="New Estimate" />
+        <form className="form-grid procurement-form" onSubmit={createEstimate}>
+          <Select label="Tender" name="tender_id" value={estimateForm.tender_id} onChange={setForm(setEstimateForm)}>
+            <option value="">Standalone</option>
+            {(sales.tenders || []).map((tender) => (
+              <option key={tender.id} value={tender.id}>
+                {tender.tender_number} - {tender.title}
+              </option>
+            ))}
+          </Select>
+          <Field label="Title" name="title" value={estimateForm.title} onChange={setForm(setEstimateForm)} required />
+          <Field label="Overhead %" type="number" name="overhead_percent" value={estimateForm.overhead_percent} onChange={setForm(setEstimateForm)} />
+          <Field label="Profit %" type="number" name="profit_percent" value={estimateForm.profit_percent} onChange={setForm(setEstimateForm)} />
+          <Field label="Tax %" type="number" name="tax_percent" value={estimateForm.tax_percent} onChange={setForm(setEstimateForm)} />
+          <Field label="Cost Code" name="cost_code" value={estimateForm.cost_code} onChange={setForm(setEstimateForm)} placeholder="Auto-generated" />
+          <Field label="Line description" name="description" value={estimateForm.description} onChange={setForm(setEstimateForm)} required />
+          <Select label="Category" name="category" value={estimateForm.category} onChange={setForm(setEstimateForm)}>
+            <option value="materials">Materials</option>
+            <option value="labour">Labour</option>
+            <option value="equipment">Equipment</option>
+            <option value="subcontractor">Subcontractor</option>
+          </Select>
+          <Field label="Qty" type="number" name="quantity" value={estimateForm.quantity} onChange={setForm(setEstimateForm)} />
+          <Field label="Unit" name="unit" value={estimateForm.unit} onChange={setForm(setEstimateForm)} />
+          <Field label="Unit cost" type="number" name="unit_cost" value={estimateForm.unit_cost} onChange={setForm(setEstimateForm)} required />
+          <button type="submit" className="primary-action">
+            <Plus size={17} />
+            Create
+          </button>
+        </form>
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={Calculator} title="Estimates" />
+        <DataTable
+          columns={['No.', 'Title', 'Tender', 'Status', 'Subtotal', 'Total', 'Action']}
+          rows={(sales.estimates || []).map((estimate) => [
+            estimate.estimate_number,
+            estimate.title,
+            estimate.tender?.tender_number || '',
+            <Badge key="status" value={estimate.status} />,
+            money(estimate.subtotal),
+            money(estimate.total_amount),
+            estimate.status === 'draft' ? (
+              <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.approveEstimate(estimate.id), 'Estimate approved.')}>
+                Approve
+              </button>
+            ) : (
+              ''
+            ),
+          ])}
+        />
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={WalletCards} title="Pricing Library" />
+        <DataTable
+          columns={['Code', 'Description', 'Category', 'Unit', 'Unit cost', 'Source']}
+          rows={(sales.pricing_items || []).map((item) => [
+            item.cost_code || '',
+            item.description,
+            labelize(item.category),
+            item.unit,
+            money(item.unit_cost),
+            item.source,
+          ])}
+        />
+      </section>
+    </section>
+  )
+}
+
 function ProjectsView({
   branches,
   projects,
@@ -753,8 +2761,169 @@ function ProjectsView({
   createProject,
   createTask,
   createBudgetLine,
+  currentUser,
   runAction,
 }) {
+  const canAdminister = canAdministerRecords(currentUser)
+  const [editingTaskId, setEditingTaskId] = useState(null)
+  const [editingBudgetLineId, setEditingBudgetLineId] = useState(null)
+  const [projectAdminForm, setProjectAdminForm] = useState({
+    name: '',
+    status: 'planning',
+    health_status: 'on_track',
+    risk_level: 'medium',
+    contract_value: 0,
+    progress_percent: 0,
+    start_date: '',
+    target_end_date: '',
+    site_address: '',
+  })
+
+  useEffect(() => {
+    if (!selectedProject) return
+
+    setProjectAdminForm({
+      name: selectedProject.name || '',
+      status: selectedProject.status || 'planning',
+      health_status: selectedProject.health_status || 'on_track',
+      risk_level: selectedProject.risk_level || 'medium',
+      contract_value: selectedProject.contract_value || 0,
+      progress_percent: selectedProject.progress_percent || 0,
+      start_date: dateInputValue(selectedProject.start_date),
+      target_end_date: dateInputValue(selectedProject.target_end_date),
+      site_address: selectedProject.site_address || '',
+    })
+  }, [selectedProject])
+
+  function saveProjectAdministration(event) {
+    event.preventDefault()
+    if (!selectedProject) return
+
+    runAction(
+      () =>
+        api.updateProject(selectedProject.id, {
+          ...projectAdminForm,
+          contract_value: Number(projectAdminForm.contract_value || 0),
+          progress_percent: Number(projectAdminForm.progress_percent || 0),
+        }),
+      'Project updated.',
+      { refreshProjectOnly: true },
+    )
+  }
+
+  function archiveSelectedProject() {
+    if (!selectedProject || !window.confirm(`Archive ${selectedProject.name}? This removes it from active project registers.`)) {
+      return
+    }
+
+    runAction(() => api.deleteProject(selectedProject.id), 'Project archived.').then(() => {
+      const nextProject = projects.find((project) => project.id !== selectedProject.id)
+      setSelectedProjectId(nextProject?.id || null)
+    })
+  }
+
+  function saveTask(event) {
+    if (!editingTaskId) {
+      createTask(event)
+      return
+    }
+
+    event.preventDefault()
+    if (!selectedProject) return
+
+    runAction(
+      () =>
+        api.updateTask(selectedProject.id, editingTaskId, {
+          ...taskForm,
+          progress_percent: Number(taskForm.progress_percent || 0),
+          due_date: taskForm.due_date || null,
+        }),
+      'Task updated.',
+      { refreshProjectOnly: true },
+    ).then(() => {
+      setEditingTaskId(null)
+      setTaskForm(emptyTaskForm)
+    })
+  }
+
+  function editTask(task) {
+    setEditingTaskId(task.id)
+    setTaskForm({
+      title: task.title || '',
+      status: task.status || 'todo',
+      priority: task.priority || 'normal',
+      progress_percent: task.progress_percent ?? 0,
+      due_date: dateInputValue(task.due_date),
+    })
+  }
+
+  function cancelTaskEdit() {
+    setEditingTaskId(null)
+    setTaskForm(emptyTaskForm)
+  }
+
+  function archiveTask(task) {
+    if (!selectedProject || !window.confirm(`Archive task "${task.title}"?`)) {
+      return
+    }
+
+    runAction(() => api.deleteTask(selectedProject.id, task.id), 'Task archived.', { refreshProjectOnly: true }).then(() => {
+      if (editingTaskId === task.id) {
+        cancelTaskEdit()
+      }
+    })
+  }
+
+  function saveBudgetLine(event) {
+    if (!editingBudgetLineId) {
+      createBudgetLine(event)
+      return
+    }
+
+    event.preventDefault()
+    if (!selectedProject) return
+
+    runAction(
+      () =>
+        api.updateBudgetLine(selectedProject.id, editingBudgetLineId, {
+          ...budgetForm,
+          budget_amount: Number(budgetForm.budget_amount || 0),
+        }),
+      'Budget line updated.',
+      { refreshProjectOnly: true },
+    ).then(() => {
+      setEditingBudgetLineId(null)
+      setBudgetForm(emptyBudgetForm)
+    })
+  }
+
+  function editBudgetLine(line) {
+    setEditingBudgetLineId(line.id)
+    setBudgetForm({
+      cost_code: line.cost_code || '',
+      description: line.description || '',
+      category: line.category || 'materials',
+      budget_amount: line.budget_amount ?? '',
+    })
+  }
+
+  function cancelBudgetLineEdit() {
+    setEditingBudgetLineId(null)
+    setBudgetForm(emptyBudgetForm)
+  }
+
+  function archiveBudgetLine(line) {
+    if (!selectedProject || !window.confirm(`Archive budget line ${line.cost_code || line.description}?`)) {
+      return
+    }
+
+    runAction(() => api.deleteBudgetLine(selectedProject.id, line.id), 'Budget line archived.', { refreshProjectOnly: true }).then(() => {
+      if (editingBudgetLineId === line.id) {
+        cancelBudgetLineEdit()
+      }
+    })
+  }
+
   return (
     <section className="view-stack">
       <div className="split-layout">
@@ -815,10 +2984,51 @@ function ProjectsView({
             </div>
           </div>
 
+          {canAdminister && (
+            <section className="panel">
+              <PanelTitle icon={Settings} title="Project Administration" />
+              <form className="form-grid procurement-form" onSubmit={saveProjectAdministration}>
+                <Field label="Project name" name="name" value={projectAdminForm.name} onChange={setForm(setProjectAdminForm)} required />
+                <Select label="Status" name="status" value={projectAdminForm.status} onChange={setForm(setProjectAdminForm)}>
+                  <option value="planning">Planning</option>
+                  <option value="active">Active</option>
+                  <option value="on_hold">On hold</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </Select>
+                <Select label="Health" name="health_status" value={projectAdminForm.health_status} onChange={setForm(setProjectAdminForm)}>
+                  <option value="on_track">On track</option>
+                  <option value="at_risk">At risk</option>
+                  <option value="critical">Critical</option>
+                </Select>
+                <Select label="Risk" name="risk_level" value={projectAdminForm.risk_level} onChange={setForm(setProjectAdminForm)}>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </Select>
+                <Field label="Contract value" type="number" name="contract_value" value={projectAdminForm.contract_value} onChange={setForm(setProjectAdminForm)} />
+                <Field label="Progress %" type="number" min="0" max="100" name="progress_percent" value={projectAdminForm.progress_percent} onChange={setForm(setProjectAdminForm)} />
+                <Field label="Start" type="date" name="start_date" value={projectAdminForm.start_date} onChange={setForm(setProjectAdminForm)} />
+                <Field label="Target end" type="date" name="target_end_date" value={projectAdminForm.target_end_date} onChange={setForm(setProjectAdminForm)} />
+                <Field className="span-2" label="Site address" name="site_address" value={projectAdminForm.site_address} onChange={setForm(setProjectAdminForm)} />
+                <div className="row-actions">
+                  <button type="submit" className="primary-action">
+                    <CheckCircle2 size={17} />
+                    Save project
+                  </button>
+                  <button type="button" className="table-action danger" onClick={archiveSelectedProject}>
+                    Archive project
+                  </button>
+                </div>
+              </form>
+            </section>
+          )}
+
           <div className="grid-main">
             <section className="panel">
-              <PanelTitle icon={CheckCircle2} title="Tasks" />
-              <form className="inline-form" onSubmit={createTask}>
+              <PanelTitle icon={CheckCircle2} title={editingTaskId ? 'Edit Task' : 'Tasks'} />
+              <form className="inline-form" onSubmit={saveTask}>
                 <Field label="Task" name="title" value={taskForm.title} onChange={setForm(setTaskForm)} required />
                 <Select label="Status" name="status" value={taskForm.status} onChange={setForm(setTaskForm)}>
                   <option value="todo">Todo</option>
@@ -832,43 +3042,54 @@ function ProjectsView({
                   <option value="urgent">Urgent</option>
                 </Select>
                 <Field label="Due" type="date" name="due_date" value={taskForm.due_date} onChange={setForm(setTaskForm)} />
-                <button type="submit" className="icon-button solid" title="Add task">
-                  <Plus size={17} />
+                <button type="submit" className="icon-button solid" title={editingTaskId ? 'Save task' : 'Add task'}>
+                  {editingTaskId ? <CheckCircle2 size={17} /> : <Plus size={17} />}
                 </button>
+                {editingTaskId && (
+                  <button type="button" className="table-action" onClick={cancelTaskEdit}>
+                    Cancel
+                  </button>
+                )}
               </form>
               <DataTable
-                columns={['Task', 'Status', 'Priority', 'Progress', 'Due', '']}
+                columns={['Task', 'Status', 'Priority', 'Progress', 'Due', 'Actions']}
                 rows={(selectedProject.tasks || []).map((task) => [
                   task.title,
                   <Badge key="status" value={task.status} />,
                   <Badge key="priority" value={task.priority} />,
                   `${task.progress_percent}%`,
                   shortDate(task.due_date),
-                  task.status !== 'done' ? (
-                    <button
-                      key="complete"
-                      type="button"
-                      className="table-action"
-                      onClick={() =>
-                        runAction(
-                          () => api.updateTask(selectedProject.id, task.id, { status: 'done' }),
-                          'Task completed.',
-                        )
-                      }
-                    >
-                      Done
+                  <div key="actions" className="row-actions">
+                    <button type="button" className="table-action" onClick={() => editTask(task)}>
+                      Edit
                     </button>
-                  ) : (
-                    ''
-                  ),
+                    {task.status !== 'done' && (
+                      <button
+                        type="button"
+                        className="table-action"
+                        onClick={() =>
+                          runAction(
+                            () => api.updateTask(selectedProject.id, task.id, { status: 'done' }),
+                            'Task completed.',
+                            { refreshProjectOnly: true },
+                          )
+                        }
+                      >
+                        Done
+                      </button>
+                    )}
+                    <button type="button" className="table-action danger" onClick={() => archiveTask(task)}>
+                      Archive
+                    </button>
+                  </div>,
                 ])}
               />
             </section>
 
             <section className="panel">
-              <PanelTitle icon={WalletCards} title="Budget Lines" />
-              <form className="inline-form" onSubmit={createBudgetLine}>
-                <Field label="Code" name="cost_code" value={budgetForm.cost_code} onChange={setForm(setBudgetForm)} required />
+              <PanelTitle icon={WalletCards} title={editingBudgetLineId ? 'Edit Budget Line' : 'Budget Lines'} />
+              <form className="inline-form" onSubmit={saveBudgetLine}>
+                <Field label="Cost Code" name="cost_code" value={budgetForm.cost_code} onChange={setForm(setBudgetForm)} placeholder="Auto-generated" />
                 <Field label="Description" name="description" value={budgetForm.description} onChange={setForm(setBudgetForm)} required />
                 <Select label="Category" name="category" value={budgetForm.category} onChange={setForm(setBudgetForm)}>
                   <option value="materials">Materials</option>
@@ -878,12 +3099,17 @@ function ProjectsView({
                   <option value="overheads">Overheads</option>
                 </Select>
                 <Field label="Budget" type="number" name="budget_amount" value={budgetForm.budget_amount} onChange={setForm(setBudgetForm)} required />
-                <button type="submit" className="icon-button solid" title="Add budget line">
-                  <Plus size={17} />
+                <button type="submit" className="icon-button solid" title={editingBudgetLineId ? 'Save budget line' : 'Add budget line'}>
+                  {editingBudgetLineId ? <CheckCircle2 size={17} /> : <Plus size={17} />}
                 </button>
+                {editingBudgetLineId && (
+                  <button type="button" className="table-action" onClick={cancelBudgetLineEdit}>
+                    Cancel
+                  </button>
+                )}
               </form>
               <DataTable
-                columns={['Code', 'Description', 'Category', 'Budget', 'Committed', 'Actual', 'Forecast']}
+                columns={['Code', 'Description', 'Category', 'Budget', 'Committed', 'Actual', 'Forecast', 'Actions']}
                 rows={(selectedProject.budget_lines || []).map((line) => [
                   line.cost_code,
                   line.description,
@@ -892,6 +3118,14 @@ function ProjectsView({
                   money(line.committed_amount),
                   money(line.actual_amount),
                   money(line.forecast_amount),
+                  <div key="actions" className="row-actions">
+                    <button type="button" className="table-action" onClick={() => editBudgetLine(line)}>
+                      Edit
+                    </button>
+                    <button type="button" className="table-action danger" onClick={() => archiveBudgetLine(line)}>
+                      Archive
+                    </button>
+                  </div>,
                 ])}
               />
             </section>
@@ -904,99 +3138,4776 @@ function ProjectsView({
 
 function ProcurementView({
   selectedProject,
+  projects,
   suppliers,
-  reqForm,
-  setReqForm,
-  createRequisition,
+  procurement = {},
   requisitions,
   purchaseOrders,
   selectedProjectRequisitions,
   selectedProjectOrders,
+  currentUser,
   runAction,
 }) {
-  const visibleRequisitions = selectedProject ? selectedProjectRequisitions : requisitions
-  const visibleOrders = selectedProject ? selectedProjectOrders : purchaseOrders
+  const today = new Date().toISOString().slice(0, 10)
+  const selectedProjectId = selectedProject?.id || ''
+  const allRequisitions = useMemo(() => (procurement.requisitions?.length ? procurement.requisitions : requisitions), [procurement.requisitions, requisitions])
+  const allOrders = useMemo(() => (procurement.purchase_orders?.length ? procurement.purchase_orders : purchaseOrders), [procurement.purchase_orders, purchaseOrders])
+  const visibleRequisitions = useMemo(() => {
+    const source = selectedProjectId ? selectedProjectRequisitions : allRequisitions
+    return (source || []).filter((item) => !selectedProjectId || Number(item.project_id || item.project?.id) === Number(selectedProjectId))
+  }, [allRequisitions, selectedProjectId, selectedProjectRequisitions])
+  const visibleOrders = useMemo(() => {
+    const source = selectedProjectId ? selectedProjectOrders : allOrders
+    return (source || []).filter((item) => !selectedProjectId || Number(item.project_id || item.project?.id) === Number(selectedProjectId))
+  }, [allOrders, selectedProjectId, selectedProjectOrders])
+  const visibleRfqs = useMemo(
+    () => (procurement.rfqs || []).filter((item) => !selectedProjectId || Number(item.project_id || item.project?.id) === Number(selectedProjectId)),
+    [procurement.rfqs, selectedProjectId],
+  )
+  const visibleQuotations = useMemo(
+    () =>
+      (procurement.quotations || []).filter((item) => {
+        if (!selectedProjectId) return true
+        return visibleRequisitions.some((request) => Number(request.id) === Number(item.purchase_requisition_id || item.requisition?.id))
+      }),
+    [procurement.quotations, selectedProjectId, visibleRequisitions],
+  )
+  const visibleReceipts = useMemo(
+    () => (procurement.goods_receipts || []).filter((item) => !selectedProjectId || Number(item.project_id || item.project?.id) === Number(selectedProjectId)),
+    [procurement.goods_receipts, selectedProjectId],
+  )
+  const visibleInspections = useMemo(
+    () => (procurement.quality_inspections || []).filter((item) => !selectedProjectId || Number(item.project_id || item.project?.id) === Number(selectedProjectId)),
+    [procurement.quality_inspections, selectedProjectId],
+  )
+  const visibleInvoices = useMemo(
+    () => (procurement.supplier_invoices || []).filter((item) => !selectedProjectId || Number(item.project_id || item.project?.id) === Number(selectedProjectId)),
+    [procurement.supplier_invoices, selectedProjectId],
+  )
+  const visibleContracts = useMemo(
+    () => (procurement.contracts || []).filter((item) => !selectedProjectId || Number(item.project_id || item.project?.id) === Number(selectedProjectId)),
+    [procurement.contracts, selectedProjectId],
+  )
+  const visibleTraceability = useMemo(
+    () =>
+      (procurement.traceability || []).filter((row) => {
+        if (!selectedProjectId) return true
+        return visibleRequisitions.some((request) => request.requisition_number === row.material_request)
+      }),
+    [procurement.traceability, selectedProjectId, visibleRequisitions],
+  )
+  const [activeTab, setActiveTab] = useState('dashboard')
+  const [materialForm, setMaterialForm] = useState({
+    project_id: selectedProject?.id ? String(selectedProject.id) : String(projects[0]?.id || ''),
+    department: 'Construction',
+    priority: 'medium',
+    required_by: '',
+    delivery_location: '',
+    purpose: '',
+    discount_amount: 0,
+    drawings: [],
+    boq: [],
+    specifications: [],
+  })
+  const [materialLines, setMaterialLines] = useState([emptyMaterialLine()])
+  const [rfqForm, setRfqForm] = useState({ requisition_id: '', closing_date: '', terms: '', notes: '', supplier_ids: [] })
+  const [quotationForm, setQuotationForm] = useState({ rfq_id: '', supplier_id: '', supplier_reference: '', valid_until: '', lead_time_days: 7, payment_terms: '', warranty_included: 'false', notes: '' })
+  const [quoteLines, setQuoteLines] = useState([emptyQuoteLine()])
+  const [grnForm, setGrnForm] = useState({ purchase_order_id: '', delivery_note_number: '', delivered_by: '', warehouse: '', received_date: today, notes: '' })
+  const [inspectionForm, setInspectionForm] = useState({ goods_receipt_id: '', status: 'passed', result_summary: '', corrective_action: '' })
+  const [invoiceForm, setInvoiceForm] = useState({ purchase_order_id: '', goods_receipt_id: '', supplier_reference: '', due_date: '', subtotal_amount: '', tax_amount: 0, discount_amount: 0, notes: '' })
+  const [paymentForm, setPaymentForm] = useState({ supplier_invoice_id: '', amount: '', method: 'bank_transfer', reference: '' })
+  const [contractForm, setContractForm] = useState({ supplier_id: '', project_id: selectedProject?.id ? String(selectedProject.id) : '', title: '', start_date: '', end_date: '', contract_value: '', terms: '' })
+  const [selectedRequestId, setSelectedRequestId] = useState('')
+  const [editingRequestId, setEditingRequestId] = useState('')
+
+  const procurementTabs = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'material_requests', label: 'Material Requests', icon: Send },
+    { id: 'approvals', label: 'Approvals', icon: CheckCircle2 },
+    { id: 'rfqs', label: 'RFQs', icon: ClipboardList },
+    { id: 'quotations', label: 'Supplier Quotations', icon: FileText },
+    { id: 'comparison', label: 'Quotation Comparison', icon: Calculator },
+    { id: 'purchase_orders', label: 'Purchase Orders', icon: Truck },
+    { id: 'goods_receipts', label: 'Goods Receipts (GRN)', icon: Package },
+    { id: 'supplier_invoices', label: 'Supplier Invoices', icon: WalletCards },
+    { id: 'suppliers', label: 'Suppliers', icon: Users },
+    { id: 'contracts', label: 'Contracts', icon: Handshake },
+    { id: 'reports', label: 'Reports', icon: Download },
+    { id: 'settings', label: 'Settings', icon: Settings },
+  ]
+  const summary = procurement.summary || {}
+  const analytics = procurement.analytics || {}
+  const supplierProfiles = procurement.supplier_profiles || []
+  const approvedRequisitions = useMemo(() => visibleRequisitions.filter((item) => ['approved', 'rfq_sent'].includes(item.status)), [visibleRequisitions])
+  const pendingApprovals = useMemo(() => visibleRequisitions.filter((item) => item.status === 'submitted'), [visibleRequisitions])
+  const receivableOrders = useMemo(() => visibleOrders.filter((order) => ['issued', 'approved', 'delivered'].includes(order.status)), [visibleOrders])
+  const selectedQuotationRfq = visibleRfqs.find((rfq) => String(rfq.id) === String(quotationForm.rfq_id))
+  const selectedRfqSuppliers = (selectedQuotationRfq?.suppliers || []).map((item) => item.supplier).filter(Boolean)
+  const selectedInvoiceOrder = visibleOrders.find((order) => String(order.id) === String(invoiceForm.purchase_order_id))
+  const invoiceReceipts = visibleReceipts.filter((receipt) => String(receipt.purchase_order_id || receipt.purchase_order?.id) === String(invoiceForm.purchase_order_id))
+  const payableInvoices = useMemo(() => visibleInvoices.filter((invoice) => ['finance_approved', 'partially_paid'].includes(invoice.status) && Number(invoice.balance_due || 0) > 0), [visibleInvoices])
+  const selectedRequest = visibleRequisitions.find((request) => String(request.id) === String(selectedRequestId)) || visibleRequisitions[0]
+  const materialTotals = useMemo(() => procurementTotals(materialLines, materialForm.discount_amount), [materialLines, materialForm.discount_amount])
+  const quotationTotals = useMemo(() => procurementTotals(quoteLines), [quoteLines])
+  const bestQuotationByRfq = useMemo(() => {
+    const map = new Map()
+
+    visibleQuotations.forEach((quotation) => {
+      const rfqId = String(quotation.procurement_rfq_id || quotation.rfq?.id || '')
+      const current = map.get(rfqId)
+
+      const quotationScore = Number(quotation.recommendation_score || 0)
+      const currentScore = Number(current?.recommendation_score || 0)
+
+      if (!current || quotationScore > currentScore || (quotationScore === currentScore && Number(quotation.total_amount || 0) < Number(current.total_amount || 0))) {
+        map.set(rfqId, quotation)
+      }
+    })
+
+    return map
+  }, [visibleQuotations])
+  const recommendedQuotation = useMemo(
+    () =>
+      visibleQuotations.reduce((best, quotation) => {
+        if (!best) return quotation
+
+        const quotationScore = Number(quotation.recommendation_score || 0)
+        const bestScore = Number(best.recommendation_score || 0)
+
+        if (quotationScore > bestScore) return quotation
+        if (quotationScore === bestScore && Number(quotation.total_amount || 0) < Number(best.total_amount || 0)) return quotation
+
+        return best
+      }, null),
+    [visibleQuotations],
+  )
+  const traceabilityColumns = ['Material Request', 'Request Status', 'Approval Progress', 'RFQ', 'Quotation', 'Purchase Order', 'GRN', 'Quality', 'Supplier Invoice', 'Invoice Status', 'Payment']
+  const traceabilityRows = visibleTraceability.map((row) => [
+    row.material_request || '',
+    row.request_status || '',
+    row.approval_progress || '',
+    row.rfq || '',
+    row.quotation || '',
+    row.purchase_order || '',
+    row.goods_receipt || '',
+    row.quality || '',
+    row.supplier_invoice || '',
+    row.invoice_status || '',
+    row.payment_status || '',
+  ])
+  const invoiceReportColumns = ['Invoice', 'Supplier', 'Purchase Order', 'Status', 'Total', 'Paid', 'Balance', 'Due Date']
+  const invoiceReportRows = visibleInvoices.map((invoice) => [
+    invoice.invoice_number,
+    invoice.supplier?.name || '',
+    invoice.purchase_order?.po_number || '',
+    invoice.status,
+    invoice.total_amount,
+    invoice.amount_paid,
+    invoice.balance_due,
+    shortDate(invoice.due_date),
+  ])
+  const poReportColumns = ['PO', 'Supplier', 'Status', 'Delivery', 'Payment', 'Total', 'Project']
+  const poReportRows = visibleOrders.map((order) => [
+    order.po_number,
+    order.supplier?.name || '',
+    order.status,
+    order.delivery_status,
+    order.payment_status,
+    order.total_amount,
+    order.project?.name || '',
+  ])
+
+  useEffect(() => {
+    const projectId = selectedProject?.id || projects[0]?.id || ''
+
+    if (!projectId) return
+
+    setMaterialForm((current) => {
+      if (current.project_id === String(projectId)) return current
+      return { ...current, project_id: String(projectId) }
+    })
+    setContractForm((current) => {
+      if (current.project_id || !selectedProject?.id) return current
+      return { ...current, project_id: String(projectId) }
+    })
+  }, [selectedProject?.id, projects])
+
+  useEffect(() => {
+    if (rfqForm.requisition_id || approvedRequisitions.length === 0) return
+    setRfqForm((current) => ({ ...current, requisition_id: String(approvedRequisitions[0].id) }))
+  }, [approvedRequisitions, rfqForm.requisition_id])
+
+  useEffect(() => {
+    if (quotationForm.rfq_id || visibleRfqs.length === 0) return
+    setQuotationForm((current) => ({ ...current, rfq_id: String(visibleRfqs[0].id) }))
+  }, [quotationForm.rfq_id, visibleRfqs])
+
+  useEffect(() => {
+    if (!quotationForm.rfq_id) return
+
+    const rfq = visibleRfqs.find((item) => String(item.id) === String(quotationForm.rfq_id))
+    const supplier = (rfq?.suppliers || []).map((item) => item.supplier).find(Boolean)
+    const requisition = visibleRequisitions.find((item) => Number(item.id) === Number(rfq?.purchase_requisition_id || rfq?.requisition?.id))
+    const lines = (requisition?.lines || []).map((line) => ({
+      item_name: line.item_name || line.description || '',
+      description: line.description || '',
+      cost_code: line.cost_code || '',
+      quantity: line.quantity || 1,
+      unit: line.unit || 'each',
+      unit_price: line.estimated_unit_cost || '',
+      tax_rate: line.tax_rate || 0,
+      discount_amount: line.discount_amount || 0,
+    }))
+
+    setQuotationForm((current) => {
+      const supplierStillValid = (rfq?.suppliers || []).some((item) => String(item.supplier_id || item.supplier?.id) === String(current.supplier_id))
+
+      if (supplierStillValid || !supplier?.id) return current
+      return { ...current, supplier_id: String(supplier.id) }
+    })
+
+    if (lines.length > 0) {
+      setQuoteLines(lines)
+    }
+  }, [quotationForm.rfq_id, visibleRfqs, visibleRequisitions])
+
+  useEffect(() => {
+    if (!grnForm.purchase_order_id && receivableOrders.length > 0) {
+      setGrnForm((current) => ({ ...current, purchase_order_id: String(receivableOrders[0].id) }))
+    }
+  }, [grnForm.purchase_order_id, receivableOrders])
+
+  useEffect(() => {
+    if (!inspectionForm.goods_receipt_id && visibleReceipts.length > 0) {
+      setInspectionForm((current) => ({ ...current, goods_receipt_id: String(visibleReceipts[0].id) }))
+    }
+  }, [inspectionForm.goods_receipt_id, visibleReceipts])
+
+  useEffect(() => {
+    if (!invoiceForm.purchase_order_id && visibleOrders.length > 0) {
+      const order = visibleOrders.find((item) => item.status !== 'cancelled') || visibleOrders[0]
+      setInvoiceForm((current) => ({
+        ...current,
+        purchase_order_id: String(order.id),
+        subtotal_amount: current.subtotal_amount || order.subtotal || order.total_amount || '',
+        tax_amount: current.tax_amount || order.tax_amount || 0,
+      }))
+    }
+  }, [invoiceForm.purchase_order_id, visibleOrders])
+
+  useEffect(() => {
+    if (!invoiceForm.purchase_order_id) return
+    const order = visibleOrders.find((item) => String(item.id) === String(invoiceForm.purchase_order_id))
+
+    if (!order) return
+
+    setInvoiceForm((current) => ({
+      ...current,
+      subtotal_amount: current.subtotal_amount || order.subtotal || order.total_amount || '',
+      tax_amount: current.tax_amount || order.tax_amount || 0,
+    }))
+  }, [invoiceForm.purchase_order_id, visibleOrders])
+
+  useEffect(() => {
+    if (!paymentForm.supplier_invoice_id && payableInvoices.length > 0) {
+      setPaymentForm((current) => ({ ...current, supplier_invoice_id: String(payableInvoices[0].id), amount: payableInvoices[0].balance_due || '' }))
+    }
+  }, [payableInvoices, paymentForm.supplier_invoice_id])
+
+  useEffect(() => {
+    if (!contractForm.supplier_id && suppliers.length > 0) {
+      setContractForm((current) => ({ ...current, supplier_id: String(suppliers[0].id) }))
+    }
+  }, [contractForm.supplier_id, suppliers])
+
+  useEffect(() => {
+    if (selectedRequestId || visibleRequisitions.length === 0) return
+    setSelectedRequestId(String(visibleRequisitions[0].id))
+  }, [selectedRequestId, visibleRequisitions])
+
+  function updateMaterialLine(index, field, value) {
+    setMaterialLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, [field]: value } : line)))
+  }
+
+  function updateQuoteLine(index, field, value) {
+    setQuoteLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, [field]: value } : line)))
+  }
+
+  function toggleRfqSupplier(supplierId) {
+    const id = String(supplierId)
+    setRfqForm((current) => ({
+      ...current,
+      supplier_ids: current.supplier_ids.includes(id)
+        ? current.supplier_ids.filter((item) => item !== id)
+        : [...current.supplier_ids, id],
+    }))
+  }
+
+  function attachFiles(field) {
+    return (event) => {
+      setMaterialForm((current) => ({ ...current, [field]: Array.from(event.target.files || []) }))
+    }
+  }
+
+  async function submitMaterialRequest(event) {
+    event.preventDefault()
+    const projectId = materialForm.project_id || selectedProject?.id
+    const lines = materialLines
+      .filter((line) => line.item_name || line.description)
+      .map((line) => ({
+        item_name: line.item_name || line.description,
+        description: line.description || line.item_name,
+        cost_code: line.cost_code || null,
+        quantity: Number(line.quantity || 1),
+        unit: line.unit || 'each',
+        estimated_unit_cost: Number(line.estimated_unit_cost || 0),
+        tax_rate: Number(line.tax_rate || 0),
+        discount_amount: Number(line.discount_amount || 0),
+      }))
+
+    if (!projectId || lines.length === 0) return
+
+    const payload = {
+      title: materialForm.purpose || lines[0].description || 'Material request',
+      department: materialForm.department || 'Construction',
+      priority: materialForm.priority || 'medium',
+      required_by: materialForm.required_by || null,
+      delivery_location: materialForm.delivery_location || '',
+      purpose: materialForm.purpose || '',
+      discount_amount: Number(materialForm.discount_amount || 0),
+      lines,
+    }
+    const formData = new FormData()
+    Object.entries(payload).forEach(([key, value]) => {
+      if (key === 'lines') return
+      if (value !== null && value !== undefined) formData.append(key, value)
+    })
+    formData.append('lines_payload', JSON.stringify(lines))
+
+    ;['drawings', 'boq', 'specifications'].forEach((field) => {
+      ;(materialForm[field] || []).forEach((file) => formData.append(`${field}[]`, file))
+    })
+
+    const result = await runAction(
+      () => (editingRequestId ? api.updateRequisition(editingRequestId, payload) : api.createRequisition(projectId, formData)),
+      editingRequestId ? 'Material request updated.' : 'Material request created.',
+    )
+
+    if (!result) return
+
+    setMaterialForm((current) => ({
+      ...current,
+      priority: 'medium',
+      required_by: '',
+      delivery_location: '',
+      purpose: '',
+      discount_amount: 0,
+      drawings: [],
+      boq: [],
+      specifications: [],
+    }))
+    setEditingRequestId('')
+    setMaterialLines([emptyMaterialLine()])
+  }
+
+  async function submitRfq(event) {
+    event.preventDefault()
+    if (!rfqForm.requisition_id || rfqForm.supplier_ids.length === 0) return
+
+    const result = await runAction(
+      () =>
+        api.createRfq(rfqForm.requisition_id, {
+          supplier_ids: rfqForm.supplier_ids.map(Number),
+          closing_date: rfqForm.closing_date || null,
+          terms: rfqForm.terms || null,
+          notes: rfqForm.notes || null,
+        }),
+      'RFQ sent to selected suppliers.',
+    )
+
+    if (result) {
+      setRfqForm({ requisition_id: '', closing_date: '', terms: '', notes: '', supplier_ids: [] })
+    }
+  }
+
+  async function submitQuotation(event) {
+    event.preventDefault()
+    const lines = quoteLines
+      .filter((line) => line.item_name || line.description)
+      .map((line) => ({
+        item_name: line.item_name || line.description,
+        description: line.description || line.item_name,
+        cost_code: line.cost_code || null,
+        quantity: Number(line.quantity || 1),
+        unit: line.unit || 'each',
+        unit_price: Number(line.unit_price || 0),
+        tax_rate: Number(line.tax_rate || 0),
+        discount_amount: Number(line.discount_amount || 0),
+      }))
+
+    if (!quotationForm.rfq_id || !quotationForm.supplier_id || lines.length === 0) return
+
+    const result = await runAction(
+      () =>
+        api.createSupplierQuotation(quotationForm.rfq_id, {
+          supplier_id: Number(quotationForm.supplier_id),
+          supplier_reference: quotationForm.supplier_reference || null,
+          valid_until: quotationForm.valid_until || null,
+          lead_time_days: Number(quotationForm.lead_time_days || 0),
+          payment_terms: quotationForm.payment_terms || null,
+          warranty_included: quotationForm.warranty_included === 'true',
+          notes: quotationForm.notes || null,
+          lines,
+        }),
+      'Supplier quotation captured.',
+    )
+
+    if (result) {
+      setQuotationForm((current) => ({ ...current, supplier_reference: '', valid_until: '', payment_terms: '', warranty_included: 'false', notes: '' }))
+    }
+  }
+
+  async function submitGoodsReceipt(event) {
+    event.preventDefault()
+    if (!grnForm.purchase_order_id) return
+
+    const result = await runAction(
+      () =>
+        api.createGoodsReceipt(grnForm.purchase_order_id, {
+          delivery_note_number: grnForm.delivery_note_number || null,
+          delivered_by: grnForm.delivered_by || null,
+          warehouse: grnForm.warehouse || null,
+          received_date: grnForm.received_date || null,
+          notes: grnForm.notes || null,
+        }),
+      'Goods receipt recorded.',
+    )
+
+    if (result) {
+      setGrnForm((current) => ({ ...current, delivery_note_number: '', delivered_by: '', warehouse: '', received_date: today, notes: '' }))
+    }
+  }
+
+  async function submitQualityInspection(event) {
+    event.preventDefault()
+    if (!inspectionForm.goods_receipt_id) return
+
+    const result = await runAction(
+      () =>
+        api.createProcurementQualityInspection(inspectionForm.goods_receipt_id, {
+          status: inspectionForm.status,
+          result_summary: inspectionForm.result_summary || null,
+          corrective_action: inspectionForm.corrective_action || null,
+        }),
+      'Procurement quality inspection saved.',
+    )
+
+    if (result) {
+      setInspectionForm((current) => ({ ...current, status: 'passed', result_summary: '', corrective_action: '' }))
+    }
+  }
+
+  async function submitSupplierInvoice(event) {
+    event.preventDefault()
+    if (!invoiceForm.purchase_order_id) return
+
+    const result = await runAction(
+      () =>
+        api.createSupplierInvoice(invoiceForm.purchase_order_id, {
+          goods_receipt_id: invoiceForm.goods_receipt_id || null,
+          supplier_reference: invoiceForm.supplier_reference || null,
+          due_date: invoiceForm.due_date || null,
+          subtotal_amount: Number(invoiceForm.subtotal_amount || selectedInvoiceOrder?.subtotal || selectedInvoiceOrder?.total_amount || 0),
+          tax_amount: Number(invoiceForm.tax_amount || 0),
+          discount_amount: Number(invoiceForm.discount_amount || 0),
+          notes: invoiceForm.notes || null,
+        }),
+      'Supplier invoice submitted.',
+    )
+
+    if (result) {
+      setInvoiceForm((current) => ({ ...current, goods_receipt_id: '', supplier_reference: '', due_date: '', discount_amount: 0, notes: '' }))
+    }
+  }
+
+  async function submitSupplierPayment(event) {
+    event.preventDefault()
+    if (!paymentForm.supplier_invoice_id || !paymentForm.amount) return
+
+    const result = await runAction(
+      () =>
+        api.paySupplierInvoice(paymentForm.supplier_invoice_id, {
+          amount: Number(paymentForm.amount || 0),
+          method: paymentForm.method,
+          reference: paymentForm.reference || null,
+        }),
+      'Supplier payment recorded.',
+    )
+
+    if (result) {
+      setPaymentForm((current) => ({ ...current, amount: '', reference: '' }))
+    }
+  }
+
+  async function submitSupplierContract(event) {
+    event.preventDefault()
+    if (!contractForm.supplier_id || !contractForm.title) return
+
+    const result = await runAction(
+      () =>
+        api.createSupplierContract(contractForm.supplier_id, {
+          project_id: contractForm.project_id || null,
+          title: contractForm.title,
+          start_date: contractForm.start_date || null,
+          end_date: contractForm.end_date || null,
+          contract_value: Number(contractForm.contract_value || 0),
+          terms: contractForm.terms || null,
+        }),
+      'Supplier contract created.',
+    )
+
+    if (result) {
+      setContractForm((current) => ({ ...current, title: '', start_date: '', end_date: '', contract_value: '', terms: '' }))
+    }
+  }
+
+  function viewMaterialRequest(request) {
+    setSelectedRequestId(String(request.id))
+    setActiveTab('approvals')
+  }
+
+  function editMaterialRequest(request) {
+    setEditingRequestId(String(request.id))
+    setSelectedRequestId(String(request.id))
+    setMaterialForm((current) => ({
+      ...current,
+      project_id: String(request.project_id || request.project?.id || current.project_id),
+      department: request.department || 'Construction',
+      priority: request.priority || 'medium',
+      required_by: dateInputValue(request.required_by),
+      delivery_location: request.delivery_location || '',
+      purpose: request.purpose || request.title || '',
+      discount_amount: request.discount_amount || 0,
+      drawings: [],
+      boq: [],
+      specifications: [],
+    }))
+    setMaterialLines((request.lines || []).map((line) => ({
+      item_name: line.item_name || '',
+      description: line.description || '',
+      cost_code: line.cost_code || '',
+      quantity: line.quantity || 1,
+      unit: line.unit || 'each',
+      estimated_unit_cost: line.estimated_unit_cost || '',
+      tax_rate: line.tax_rate || 0,
+      discount_amount: line.discount_amount || 0,
+    })))
+    setActiveTab('material_requests')
+  }
+
+  async function duplicateMaterialRequest(request) {
+    const projectId = request.project_id || request.project?.id
+    if (!projectId) return
+
+    await runAction(
+      () =>
+        api.createRequisition(projectId, {
+          title: `${request.title || request.purpose || request.requisition_number} copy`,
+          department: request.department || 'Construction',
+          priority: request.priority || 'medium',
+          required_by: request.required_by || null,
+          delivery_location: request.delivery_location || '',
+          purpose: request.purpose || request.title || '',
+          discount_amount: 0,
+          lines: (request.lines || []).map((line) => ({
+            item_name: line.item_name || line.description,
+            description: line.description || line.item_name,
+            cost_code: line.cost_code || null,
+            quantity: Number(line.quantity || 1),
+            unit: line.unit || 'each',
+            estimated_unit_cost: Number(line.estimated_unit_cost || 0),
+            tax_rate: Number(line.tax_rate || 0),
+            discount_amount: Number(line.discount_amount || 0),
+          })),
+        }),
+      'Material request duplicated.',
+    )
+  }
+
+  function archiveMaterialRequest(request) {
+    if (!window.confirm(`Archive material request ${request.requisition_number}?`)) {
+      return
+    }
+
+    runAction(() => api.deleteRequisition(request.id), 'Material request archived.').then(() => {
+      if (editingRequestId === String(request.id)) {
+        setEditingRequestId('')
+        setMaterialLines([emptyMaterialLine()])
+      }
+    })
+  }
+
+  function convertRequestToRfq(request) {
+    setRfqForm((current) => ({ ...current, requisition_id: String(request.id) }))
+    setSelectedRequestId(String(request.id))
+    setActiveTab('rfqs')
+  }
+
+  function exportRequestPdf(request) {
+    downloadSimplePdf(`${request.requisition_number || `material-request-${request.id}`}.pdf`, request.requisition_number || 'Material Request', [
+      ['Project', request.project?.name || ''],
+      ['Requested By', request.requested_by?.name || request.requestedBy?.name || ''],
+      ['Priority', labelize(request.priority || '')],
+      ['Status', requestStatusLabel(request)],
+      ['Value', money(request.grand_total || request.total_estimated)],
+      ['Required Date', shortDate(request.required_by)],
+      ['Purpose', request.purpose || request.title || ''],
+      ['Progress', approvalProgressLabel(request)],
+      ['Lines', (request.lines || []).map((line) => `${line.item_name || line.description}: ${line.quantity} ${line.unit} @ ${money(line.estimated_unit_cost)}`).join('; ')],
+    ])
+  }
 
   return (
     <section className="view-stack">
-      <section className="panel">
-        <PanelTitle icon={Send} title="Material Request" />
-        <form className="form-grid procurement-form" onSubmit={createRequisition}>
-          <Field label="Title" name="title" value={reqForm.title} onChange={setForm(setReqForm)} required />
-          <Select label="Supplier" name="supplier_id" value={reqForm.supplier_id} onChange={setForm(setReqForm)}>
-            <option value="">Unassigned</option>
-            {suppliers.map((supplier) => (
-              <option value={supplier.id} key={supplier.id}>
-                {supplier.name}
-              </option>
-            ))}
-          </Select>
-          <Select label="Priority" name="priority" value={reqForm.priority} onChange={setForm(setReqForm)}>
-            <option value="normal">Normal</option>
-            <option value="high">High</option>
-            <option value="urgent">Urgent</option>
-          </Select>
-          <Field label="Required by" type="date" name="required_by" value={reqForm.required_by} onChange={setForm(setReqForm)} />
-          <Field label="Line item" name="description" value={reqForm.description} onChange={setForm(setReqForm)} required />
-          <Field label="Cost code" name="cost_code" value={reqForm.cost_code} onChange={setForm(setReqForm)} />
-          <Field label="Qty" type="number" name="quantity" value={reqForm.quantity} onChange={setForm(setReqForm)} required />
-          <Field label="Unit" name="unit" value={reqForm.unit} onChange={setForm(setReqForm)} />
-          <Field label="Unit cost" type="number" name="estimated_unit_cost" value={reqForm.estimated_unit_cost} onChange={setForm(setReqForm)} required />
-          <button type="submit" className="primary-action">
-            <Send size={17} />
-            Create requisition
-          </button>
-        </form>
-      </section>
+      <nav className="module-tabs" aria-label="Procurement module navigation">
+        {procurementTabs.map((tab) => {
+          const Icon = tab.icon
 
-      <div className="grid-main">
+          return (
+            <button key={tab.id} type="button" className={activeTab === tab.id ? 'active' : ''} onClick={() => setActiveTab(tab.id)}>
+              <Icon size={15} />
+              <span>{tab.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      {activeTab === 'dashboard' && (
+        <>
+          <section className="panel">
+            <PanelTitle icon={BarChart3} title="Procurement Analytics" />
+            <div className="kpi-grid">
+              <Kpi icon={BarChart3} label="Spend This Month" value={money(analytics.spend_this_month ?? summary.month_spend)} sub="Supplier payments posted" />
+              <Kpi icon={Clock3} label="Average Approval Time" value={`${analytics.average_approval_time_days ?? summary.average_approval_time_days ?? 0} days`} sub="Submitted to final approval" />
+              <Kpi icon={Users} label="Supplier Performance" value={`${analytics.supplier_performance ?? summary.supplier_performance ?? 0}%`} sub="Rating and delivery blend" />
+              <Kpi icon={Truck} label="On-Time Delivery" value={`${analytics.on_time_delivery ?? summary.on_time_delivery ?? 0}%`} sub="Against expected delivery" />
+              <Kpi icon={ClipboardList} label="Open POs" value={analytics.open_pos ?? summary.open_purchase_orders ?? 0} sub="Issued or awaiting closure" />
+              <Kpi icon={WalletCards} label="Pending Payments" value={money(analytics.pending_payments ?? summary.pending_payments)} sub="Supplier invoice balance" />
+            </div>
+          </section>
+
+          <div className="grid-main">
+            <section className="panel">
+              <PanelTitle icon={CheckCircle2} title="Recent Activity" />
+              <MiniList items={(procurement.recent_activity || []).map((item) => `Done - ${item.label}`)} />
+            </section>
+
+            <section className="panel">
+              <PanelTitle icon={Workflow} title="Lifecycle Traceability" />
+              <DataTable
+                columns={['MR', 'RFQ', 'Quote', 'PO', 'GRN', 'Quality', 'Invoice', 'Payment']}
+                rows={visibleTraceability.slice(0, 8).map((row) => [
+                  row.material_request || '',
+                  row.rfq || '',
+                  row.quotation || '',
+                  row.purchase_order || '',
+                  row.goods_receipt || '',
+                  row.quality ? <Badge key="quality" value={row.quality} /> : '',
+                  row.supplier_invoice || '',
+                  row.payment_status ? <Badge key="payment" value={row.payment_status} /> : '',
+                ])}
+              />
+            </section>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'material_requests' && (
+        <>
+          <section className="panel">
+            <PanelTitle icon={Send} title="Material Request" />
+            <form className="procurement-request" onSubmit={submitMaterialRequest}>
+              <div className="form-grid two">
+                <Field label="Request No." value="Generated automatically" disabled />
+                <Select label="Project" name="project_id" value={materialForm.project_id} onChange={setForm(setMaterialForm)} required>
+                  <option value="">Select project</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </Select>
+                <Field label="Requested By" value={currentUser?.name || ''} disabled />
+                <Field label="Department" name="department" value={materialForm.department} onChange={setForm(setMaterialForm)} />
+                <Field label="Required Date" type="date" name="required_by" value={materialForm.required_by} onChange={setForm(setMaterialForm)} />
+                <Field label="Delivery Location" name="delivery_location" value={materialForm.delivery_location} onChange={setForm(setMaterialForm)} />
+                <div className="field span-2">
+                  <span>Priority</span>
+                  <div className="priority-options">
+                    {['low', 'medium', 'high', 'critical'].map((priority) => (
+                      <label key={priority}>
+                        <input
+                          type="radio"
+                          name="priority"
+                          value={priority}
+                          checked={materialForm.priority === priority}
+                          onChange={setForm(setMaterialForm)}
+                        />
+                        <span>{labelize(priority)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <TextArea className="span-2" label="Purpose" name="purpose" value={materialForm.purpose} onChange={setForm(setMaterialForm)} placeholder="Foundation concrete works, facade procurement, MEP first fix..." />
+              </div>
+
+              <div className="file-grid">
+                <Field label="Upload Drawings" type="file" multiple onChange={attachFiles('drawings')} />
+                <Field label="Upload BOQ" type="file" multiple onChange={attachFiles('boq')} />
+                <Field label="Upload Specifications" type="file" multiple onChange={attachFiles('specifications')} />
+              </div>
+
+              <div className="section-heading">
+                <strong>Line Items</strong>
+                <button type="button" className="table-action" onClick={() => setMaterialLines((current) => [...current, emptyMaterialLine()])}>
+                  <Plus size={14} />
+                  Add Line Item
+                </button>
+              </div>
+              <div className="table-wrap input-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Description</th>
+                      <th>Cost Code</th>
+                      <th>Qty</th>
+                      <th>Unit</th>
+                      <th>Unit Cost</th>
+                      <th>Tax %</th>
+                      <th>Total</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {materialLines.map((line, index) => (
+                      <tr key={index}>
+                        <td><input value={line.item_name} onChange={(event) => updateMaterialLine(index, 'item_name', event.target.value)} /></td>
+                        <td><input value={line.description} onChange={(event) => updateMaterialLine(index, 'description', event.target.value)} required /></td>
+                        <td><input value={line.cost_code} onChange={(event) => updateMaterialLine(index, 'cost_code', event.target.value)} placeholder="Auto-generated" /></td>
+                        <td><input type="number" min="0.01" step="0.01" value={line.quantity} onChange={(event) => updateMaterialLine(index, 'quantity', event.target.value)} required /></td>
+                        <td><input value={line.unit} onChange={(event) => updateMaterialLine(index, 'unit', event.target.value)} /></td>
+                        <td><input type="number" min="0" step="0.01" value={line.estimated_unit_cost} onChange={(event) => updateMaterialLine(index, 'estimated_unit_cost', event.target.value)} required /></td>
+                        <td><input type="number" min="0" max="100" step="0.01" value={line.tax_rate} onChange={(event) => updateMaterialLine(index, 'tax_rate', event.target.value)} /></td>
+                        <td>{money(lineTotal(line, 'estimated_unit_cost'))}</td>
+                        <td>
+                          <button type="button" className="table-action danger" onClick={() => setMaterialLines((current) => current.length === 1 ? current : current.filter((_, lineIndex) => lineIndex !== index))}>
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="procurement-totals">
+                <span>Subtotal <strong>{money(materialTotals.subtotal)}</strong></span>
+                <span>Tax <strong>{money(materialTotals.tax)}</strong></span>
+                <label>
+                  Discount
+                  <input type="number" min="0" step="0.01" name="discount_amount" value={materialForm.discount_amount} onChange={setForm(setMaterialForm)} />
+                </label>
+                <span>Grand Total <strong>{money(materialTotals.grandTotal)}</strong></span>
+              </div>
+
+              <div className="row-actions">
+                <button type="submit" className="primary-action compact-action">
+                  <Send size={17} />
+                  {editingRequestId ? 'Save Material Request' : 'Create Material Request'}
+                </button>
+                {editingRequestId && (
+                  <button
+                    type="button"
+                    className="table-action"
+                    onClick={() => {
+                      setEditingRequestId('')
+                      setMaterialLines([emptyMaterialLine()])
+                    }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Material Request Register" />
+            <DataTable
+              columns={['Request No', 'Project', 'Requested By', 'Priority', 'Status', 'Value', 'Progress', 'Required Date', 'Actions']}
+              rows={visibleRequisitions.map((item) => [
+                item.requisition_number,
+                item.project?.name || '',
+                item.requested_by?.name || item.requestedBy?.name || '',
+                <Badge key="priority" value={item.priority} />,
+                requestStatusLabel(item),
+                money(item.grand_total || item.total_estimated),
+                approvalProgressLabel(item),
+                shortDate(item.required_by),
+                <div key="actions" className="row-actions">
+                  <button type="button" className="table-action" onClick={() => viewMaterialRequest(item)}>
+                    View
+                  </button>
+                  {['draft', 'rejected'].includes(item.status) && (
+                    <>
+                      <button type="button" className="table-action" onClick={() => editMaterialRequest(item)}>
+                        Edit
+                      </button>
+                      <button type="button" className="table-action" onClick={() => runAction(() => api.submitRequisition(item.id), 'Material request submitted.')}>
+                        Submit
+                      </button>
+                      <button type="button" className="table-action danger" onClick={() => archiveMaterialRequest(item)}>
+                        Archive
+                      </button>
+                    </>
+                  )}
+                  {item.status === 'submitted' && (
+                    <>
+                      <button type="button" className="table-action" onClick={() => runAction(() => api.reviewRequisition(item.id, 'approved'), 'Approval step completed.')}>
+                        Approve
+                      </button>
+                      <button type="button" className="table-action danger" onClick={() => runAction(() => api.reviewRequisition(item.id, 'rejected'), 'Material request rejected.')}>
+                        Reject
+                      </button>
+                    </>
+                  )}
+                  <button type="button" className="table-action" onClick={() => duplicateMaterialRequest(item)}>
+                    Duplicate
+                  </button>
+                  {['approved', 'rfq_sent'].includes(item.status) && (
+                    <button type="button" className="table-action" onClick={() => convertRequestToRfq(item)}>
+                      Convert to RFQ
+                    </button>
+                  )}
+                  <button type="button" className="table-action" onClick={() => exportRequestPdf(item)}>
+                    Export PDF
+                  </button>
+                </div>,
+              ])}
+            />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'approvals' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={CheckCircle2} title="Approval Queue" />
+            <DataTable
+              columns={['Request', 'Project', 'Requested By', 'Priority', 'Status', 'Progress', 'Value', 'Decision']}
+              rows={pendingApprovals.map((item) => [
+                item.requisition_number,
+                item.project?.name || '',
+                item.requested_by?.name || item.requestedBy?.name || '',
+                <Badge key="priority" value={item.priority} />,
+                requestStatusLabel(item),
+                approvalProgressLabel(item),
+                money(item.grand_total || item.total_estimated),
+                <div key="actions" className="row-actions">
+                  <button type="button" className="table-action" onClick={() => setSelectedRequestId(String(item.id))}>
+                    View
+                  </button>
+                  <button type="button" className="table-action" onClick={() => runAction(() => api.reviewRequisition(item.id, 'approved'), 'Approval step completed.')}>
+                    Approve
+                  </button>
+                  <button type="button" className="table-action danger" onClick={() => runAction(() => api.reviewRequisition(item.id, 'rejected'), 'Material request rejected.')}>
+                    Reject
+                  </button>
+                </div>,
+              ])}
+            />
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={Workflow} title="Document Workflow" />
+            {selectedRequest ? (
+              <>
+                <div className="request-summary">
+                  <strong>{selectedRequest.requisition_number}</strong>
+                  <span>{selectedRequest.project?.name || ''}</span>
+                  <span>{requestStatusLabel(selectedRequest)} - {approvalProgressLabel(selectedRequest)}</span>
+                </div>
+                <ApprovalWorkflowPanel workflow={selectedRequest.approval_workflow || []} />
+                <TimelinePanel items={selectedRequest.timeline || []} />
+              </>
+            ) : (
+              <MiniList items={['No requisition selected']} />
+            )}
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'rfqs' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Request for Quotation" />
+            <form className="form-grid two" onSubmit={submitRfq}>
+              <Select label="Material Request" name="requisition_id" value={rfqForm.requisition_id} onChange={setForm(setRfqForm)} required>
+                <option value="">Select approved request</option>
+                {approvedRequisitions.map((request) => (
+                  <option key={request.id} value={request.id}>
+                    {request.requisition_number} - {request.title}
+                  </option>
+                ))}
+              </Select>
+              <Field label="Closing Date" type="date" name="closing_date" value={rfqForm.closing_date} onChange={setForm(setRfqForm)} />
+              <TextArea className="span-2" label="Commercial Terms" name="terms" value={rfqForm.terms} onChange={setForm(setRfqForm)} />
+              <TextArea className="span-2" label="Notes" name="notes" value={rfqForm.notes} onChange={setForm(setRfqForm)} />
+              <div className="field span-2">
+                <span>Suppliers</span>
+                <div className="check-list">
+                  {suppliers.map((supplier) => (
+                    <label key={supplier.id} className="check-row">
+                      <input type="checkbox" checked={rfqForm.supplier_ids.includes(String(supplier.id))} onChange={() => toggleRfqSupplier(supplier.id)} />
+                      <span>{supplier.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <button type="submit" className="primary-action span-2">
+                <Send size={17} />
+                Send RFQ
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="RFQ Register" />
+            <DataTable
+              columns={['RFQ', 'Request', 'Suppliers', 'Closing', 'Status']}
+              rows={visibleRfqs.map((rfq) => [
+                rfq.rfq_number,
+                rfq.requisition?.requisition_number || '',
+                rfq.suppliers?.length || 0,
+                shortDate(rfq.closing_date),
+                <Badge key="status" value={rfq.status} />,
+              ])}
+            />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'quotations' && (
+        <>
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Supplier Quotation" />
+            <form className="procurement-request" onSubmit={submitQuotation}>
+              <div className="form-grid two">
+                <Select label="RFQ" name="rfq_id" value={quotationForm.rfq_id} onChange={setForm(setQuotationForm)} required>
+                  <option value="">Select RFQ</option>
+                  {visibleRfqs.map((rfq) => (
+                    <option key={rfq.id} value={rfq.id}>
+                      {rfq.rfq_number} - {rfq.title}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Supplier" name="supplier_id" value={quotationForm.supplier_id} onChange={setForm(setQuotationForm)} required>
+                  <option value="">Select supplier</option>
+                  {selectedRfqSuppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </option>
+                  ))}
+                </Select>
+                <Field label="Supplier Reference" name="supplier_reference" value={quotationForm.supplier_reference} onChange={setForm(setQuotationForm)} />
+                <Field label="Valid Until" type="date" name="valid_until" value={quotationForm.valid_until} onChange={setForm(setQuotationForm)} />
+                <Field label="Lead Time Days" type="number" min="0" name="lead_time_days" value={quotationForm.lead_time_days} onChange={setForm(setQuotationForm)} />
+                <Field label="Payment Terms" name="payment_terms" value={quotationForm.payment_terms} onChange={setForm(setQuotationForm)} />
+                <Select label="Warranty" name="warranty_included" value={quotationForm.warranty_included} onChange={setForm(setQuotationForm)}>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </Select>
+                <TextArea className="span-2" label="Notes" name="notes" value={quotationForm.notes} onChange={setForm(setQuotationForm)} />
+              </div>
+
+              <div className="section-heading">
+                <strong>Quotation Lines</strong>
+                <button type="button" className="table-action" onClick={() => setQuoteLines((current) => [...current, emptyQuoteLine()])}>
+                  <Plus size={14} />
+                  Add Line
+                </button>
+              </div>
+              <div className="table-wrap input-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Description</th>
+                      <th>Cost Code</th>
+                      <th>Qty</th>
+                      <th>Unit</th>
+                      <th>Unit Price</th>
+                      <th>Tax %</th>
+                      <th>Total</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quoteLines.map((line, index) => (
+                      <tr key={index}>
+                        <td><input value={line.item_name} onChange={(event) => updateQuoteLine(index, 'item_name', event.target.value)} /></td>
+                        <td><input value={line.description} onChange={(event) => updateQuoteLine(index, 'description', event.target.value)} required /></td>
+                        <td><input value={line.cost_code} onChange={(event) => updateQuoteLine(index, 'cost_code', event.target.value)} placeholder="Auto-generated" /></td>
+                        <td><input type="number" min="0.01" step="0.01" value={line.quantity} onChange={(event) => updateQuoteLine(index, 'quantity', event.target.value)} required /></td>
+                        <td><input value={line.unit} onChange={(event) => updateQuoteLine(index, 'unit', event.target.value)} /></td>
+                        <td><input type="number" min="0" step="0.01" value={line.unit_price} onChange={(event) => updateQuoteLine(index, 'unit_price', event.target.value)} required /></td>
+                        <td><input type="number" min="0" max="100" step="0.01" value={line.tax_rate} onChange={(event) => updateQuoteLine(index, 'tax_rate', event.target.value)} /></td>
+                        <td>{money(lineTotal(line, 'unit_price'))}</td>
+                        <td>
+                          <button type="button" className="table-action danger" onClick={() => setQuoteLines((current) => current.length === 1 ? current : current.filter((_, lineIndex) => lineIndex !== index))}>
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="procurement-totals">
+                <span>Subtotal <strong>{money(quotationTotals.subtotal)}</strong></span>
+                <span>Tax <strong>{money(quotationTotals.tax)}</strong></span>
+                <span>Discount <strong>{money(quotationTotals.discount)}</strong></span>
+                <span>Grand Total <strong>{money(quotationTotals.grandTotal)}</strong></span>
+              </div>
+              <button type="submit" className="primary-action compact-action">
+                <CheckCircle2 size={17} />
+                Capture Quotation
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Supplier Quotations" />
+            <div className="procurement-cards">
+              {visibleQuotations.slice(0, 6).map((quotation) => (
+                <article key={quotation.id} className="mini-card">
+                  <strong>{quotation.supplier?.name || 'Supplier'}</strong>
+                  <span>Total {money(quotation.total_amount)}</span>
+                  <span>Delivery {quotation.lead_time_days || 0} days</span>
+                  <span>Warranty {quotation.warranty_included ? 'Yes' : 'No'}</span>
+                  <Badge value={`${quotation.recommendation_score || 0} score`} />
+                </article>
+              ))}
+            </div>
+            <DataTable
+              columns={['Quotation', 'RFQ', 'Supplier', 'Delivery', 'Warranty', 'Score', 'Valid Until', 'Total', 'Status']}
+              rows={visibleQuotations.map((quotation) => [
+                quotation.quotation_number,
+                quotation.rfq?.rfq_number || '',
+                quotation.supplier?.name || '',
+                `${quotation.lead_time_days || 0} days`,
+                quotation.warranty_included ? 'Yes' : 'No',
+                quotation.recommendation_score || 0,
+                shortDate(quotation.valid_until),
+                money(quotation.total_amount),
+                <Badge key="status" value={quotation.status} />,
+              ])}
+            />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'comparison' && (
         <section className="panel">
-          <PanelTitle icon={ClipboardList} title="Requisitions" />
+          <PanelTitle icon={Calculator} title="Quotation Comparison" />
+          <div className="recommendation-strip">
+            <span>Recommended Supplier</span>
+            <strong>{recommendedQuotation?.supplier?.name || 'No quotations yet'}</strong>
+          </div>
           <DataTable
-            columns={['No.', 'Project', 'Status', 'Value', 'Required', 'Actions']}
-            rows={visibleRequisitions.map((item) => [
-              item.requisition_number,
-              item.project?.name || '',
-              <Badge key="status" value={item.status} />,
-              money(item.total_estimated),
-              shortDate(item.required_by),
-              <WorkflowButtons
-                key="workflow"
-                item={item}
-                suppliers={suppliers}
-                runAction={runAction}
-              />,
-            ])}
+            columns={['Supplier', 'Price', 'Delivery', 'Payment Terms', 'Score', 'RFQ', 'Status', 'Actions']}
+            rows={visibleQuotations.map((quotation) => {
+              const rfqId = String(quotation.procurement_rfq_id || quotation.rfq?.id || '')
+              const isBest = bestQuotationByRfq.get(rfqId)?.id === quotation.id
+
+              return [
+                quotation.supplier?.name || '',
+                money(quotation.total_amount),
+                `${quotation.lead_time_days || 0} days`,
+                quotation.payment_terms || '',
+                <strong key="score">{quotation.recommendation_score || 0}</strong>,
+                quotation.rfq?.rfq_number || '',
+                <Badge key="status" value={quotation.status} />,
+                <div key="actions" className="row-actions">
+                  {isBest && <Badge value="recommended" />}
+                  {quotation.status === 'submitted' && (
+                    <button type="button" className="table-action" onClick={() => runAction(() => api.acceptQuotation(quotation.id), 'Quotation accepted.')}>
+                      Accept
+                    </button>
+                  )}
+                  {quotation.status === 'accepted' && !quotation.purchase_order && (
+                    <button type="button" className="table-action" onClick={() => runAction(() => api.createPoFromQuotation(quotation.id), 'Purchase order created from quotation.')}>
+                      Create PO
+                    </button>
+                  )}
+                </div>,
+              ]
+            })}
           />
         </section>
+      )}
 
+      {activeTab === 'purchase_orders' && (
         <section className="panel">
           <PanelTitle icon={Truck} title="Purchase Orders" />
           <DataTable
-            columns={['No.', 'Supplier', 'Status', 'Delivery', 'Value', 'Next']}
+            columns={['PO', 'Supplier', 'Status', 'Expected Delivery', 'Terms', 'Items', 'Total', 'Payment', 'Next']}
             rows={visibleOrders.map((order) => [
               order.po_number,
-              order.supplier?.name,
+              order.supplier?.name || '',
               <Badge key="status" value={order.status} />,
-              <Badge key="delivery" value={order.delivery_status} />,
+              shortDate(order.expected_delivery_date),
+              order.terms || '',
+              order.lines?.length || 0,
               money(order.total_amount),
+              <Badge key="payment" value={order.payment_status} />,
               nextPoStatus(order.status) ? (
                 <button
                   key="transition"
                   type="button"
                   className="table-action"
-                  onClick={() =>
-                    runAction(
-                      () => api.transitionPurchaseOrder(order.id, nextPoStatus(order.status)),
-                      `PO moved to ${labelize(nextPoStatus(order.status))}.`,
-                    )
-                  }
+                  onClick={() => runAction(() => api.transitionPurchaseOrder(order.id, nextPoStatus(order.status)), `PO moved to ${labelize(nextPoStatus(order.status))}.`)}
                 >
                   {labelize(nextPoStatus(order.status))}
                 </button>
-              ) : (
-                ''
-              ),
+              ) : '',
+            ])}
+          />
+        </section>
+      )}
+
+      {activeTab === 'goods_receipts' && (
+        <>
+          <div className="grid-main">
+            <section className="panel">
+              <PanelTitle icon={Package} title="Goods Receipt Note" />
+              <form className="form-grid two" onSubmit={submitGoodsReceipt}>
+                <Select label="Purchase Order" name="purchase_order_id" value={grnForm.purchase_order_id} onChange={setForm(setGrnForm)} required>
+                  <option value="">Select PO</option>
+                  {receivableOrders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {order.po_number} - {order.supplier?.name || ''}
+                    </option>
+                  ))}
+                </Select>
+                <Field label="Received Date" type="date" name="received_date" value={grnForm.received_date} onChange={setForm(setGrnForm)} />
+                <Field label="Delivery Note No." name="delivery_note_number" value={grnForm.delivery_note_number} onChange={setForm(setGrnForm)} />
+                <Field label="Delivered By" name="delivered_by" value={grnForm.delivered_by} onChange={setForm(setGrnForm)} />
+                <Field label="Warehouse" name="warehouse" value={grnForm.warehouse} onChange={setForm(setGrnForm)} />
+                <TextArea label="Notes" name="notes" value={grnForm.notes} onChange={setForm(setGrnForm)} />
+                <button type="submit" className="primary-action span-2">
+                  <CheckCircle2 size={17} />
+                  Record GRN
+                </button>
+              </form>
+            </section>
+
+            <section className="panel">
+              <PanelTitle icon={ShieldCheck} title="Quality Inspection" />
+              <form className="form-grid two" onSubmit={submitQualityInspection}>
+                <Select label="GRN" name="goods_receipt_id" value={inspectionForm.goods_receipt_id} onChange={setForm(setInspectionForm)} required>
+                  <option value="">Select GRN</option>
+                  {visibleReceipts.map((receipt) => (
+                    <option key={receipt.id} value={receipt.id}>
+                      {receipt.grn_number} - {receipt.purchase_order?.po_number || ''}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Result" name="status" value={inspectionForm.status} onChange={setForm(setInspectionForm)}>
+                  <option value="passed">Passed</option>
+                  <option value="failed">Failed</option>
+                </Select>
+                <TextArea label="Result Summary" name="result_summary" value={inspectionForm.result_summary} onChange={setForm(setInspectionForm)} />
+                <TextArea label="Corrective Action" name="corrective_action" value={inspectionForm.corrective_action} onChange={setForm(setInspectionForm)} />
+                <button type="submit" className="primary-action span-2">
+                  <ShieldCheck size={17} />
+                  Save Inspection
+                </button>
+              </form>
+            </section>
+          </div>
+
+          <div className="grid-main">
+            <section className="panel">
+              <PanelTitle icon={Package} title="Goods Receipts" />
+              <DataTable
+                columns={['GRN', 'PO', 'Delivered By', 'Delivery Note', 'Items Received', 'Inspection', 'Warehouse', 'Status']}
+                rows={visibleReceipts.map((receipt) => [
+                  receipt.grn_number,
+                  receipt.purchase_order?.po_number || '',
+                  receipt.delivered_by || receipt.supplier?.name || '',
+                  receipt.delivery_note_number || '',
+                  (receipt.lines || []).map((line) => `${Number(line.received_quantity || 0)} ${line.description}`).join(', '),
+                  receipt.quality_inspections?.[0]?.status || receipt.qualityInspections?.[0]?.status || '',
+                  receipt.warehouse || '',
+                  <Badge key="status" value={receipt.status} />,
+                ])}
+              />
+            </section>
+
+            <section className="panel">
+              <PanelTitle icon={ShieldCheck} title="Quality Inspections" />
+              <DataTable
+                columns={['Inspection', 'GRN', 'PO', 'Result', 'Inspected']}
+                rows={visibleInspections.map((inspection) => [
+                  inspection.inspection_number,
+                  inspection.goods_receipt?.grn_number || '',
+                  inspection.purchase_order?.po_number || '',
+                  <Badge key="status" value={inspection.status} />,
+                  shortDate(inspection.inspected_at),
+                ])}
+              />
+            </section>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'supplier_invoices' && (
+        <>
+          <div className="grid-main">
+            <section className="panel">
+              <PanelTitle icon={WalletCards} title="Supplier Invoice" />
+              <form className="form-grid two" onSubmit={submitSupplierInvoice}>
+                <Select label="Purchase Order" name="purchase_order_id" value={invoiceForm.purchase_order_id} onChange={setForm(setInvoiceForm)} required>
+                  <option value="">Select PO</option>
+                  {visibleOrders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {order.po_number} - {order.supplier?.name || ''}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Goods Receipt" name="goods_receipt_id" value={invoiceForm.goods_receipt_id} onChange={setForm(setInvoiceForm)}>
+                  <option value="">No GRN linked</option>
+                  {invoiceReceipts.map((receipt) => (
+                    <option key={receipt.id} value={receipt.id}>
+                      {receipt.grn_number}
+                    </option>
+                  ))}
+                </Select>
+                <Field label="Supplier Reference" name="supplier_reference" value={invoiceForm.supplier_reference} onChange={setForm(setInvoiceForm)} />
+                <Field label="Due Date" type="date" name="due_date" value={invoiceForm.due_date} onChange={setForm(setInvoiceForm)} />
+                <Field label="Subtotal" type="number" min="0" step="0.01" name="subtotal_amount" value={invoiceForm.subtotal_amount} onChange={setForm(setInvoiceForm)} />
+                <Field label="Tax" type="number" min="0" step="0.01" name="tax_amount" value={invoiceForm.tax_amount} onChange={setForm(setInvoiceForm)} />
+                <Field label="Discount" type="number" min="0" step="0.01" name="discount_amount" value={invoiceForm.discount_amount} onChange={setForm(setInvoiceForm)} />
+                <TextArea label="Notes" name="notes" value={invoiceForm.notes} onChange={setForm(setInvoiceForm)} />
+                <button type="submit" className="primary-action span-2">
+                  <WalletCards size={17} />
+                  Submit Invoice
+                </button>
+              </form>
+            </section>
+
+            <section className="panel">
+              <PanelTitle icon={WalletCards} title="Payment" />
+              <form className="form-grid two" onSubmit={submitSupplierPayment}>
+                <Select label="Approved Invoice" name="supplier_invoice_id" value={paymentForm.supplier_invoice_id} onChange={setForm(setPaymentForm)} required>
+                  <option value="">Select invoice</option>
+                  {payableInvoices.map((invoice) => (
+                    <option key={invoice.id} value={invoice.id}>
+                      {invoice.invoice_number} - {money(invoice.balance_due)}
+                    </option>
+                  ))}
+                </Select>
+                <Field label="Amount" type="number" min="0.01" step="0.01" name="amount" value={paymentForm.amount} onChange={setForm(setPaymentForm)} required />
+                <Select label="Method" name="method" value={paymentForm.method} onChange={setForm(setPaymentForm)}>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="cash">Cash</option>
+                  <option value="mobile_money">Mobile money</option>
+                </Select>
+                <Field label="Reference" name="reference" value={paymentForm.reference} onChange={setForm(setPaymentForm)} />
+                <button type="submit" className="primary-action span-2">
+                  <CheckCircle2 size={17} />
+                  Record Payment
+                </button>
+              </form>
+            </section>
+          </div>
+
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Supplier Invoices" />
+            <DataTable
+              columns={['Invoice', 'Supplier', 'PO', 'GRN', 'Status', 'Total', 'Balance', 'Actions']}
+              rows={visibleInvoices.map((invoice) => [
+                invoice.invoice_number,
+                invoice.supplier?.name || '',
+                invoice.purchase_order?.po_number || '',
+                invoice.goods_receipt?.grn_number || '',
+                <Badge key="status" value={invoice.status} />,
+                money(invoice.total_amount),
+                money(invoice.balance_due),
+                <div key="actions" className="row-actions">
+                  {invoice.status === 'submitted' && (
+                    <>
+                      <button type="button" className="table-action" onClick={() => runAction(() => api.approveSupplierInvoice(invoice.id, { decision: 'approved' }), 'Supplier invoice approved.')}>
+                        Finance Approve
+                      </button>
+                      <button type="button" className="table-action danger" onClick={() => runAction(() => api.approveSupplierInvoice(invoice.id, { decision: 'rejected' }), 'Supplier invoice rejected.')}>
+                        Reject
+                      </button>
+                    </>
+                  )}
+                </div>,
+              ])}
+            />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'suppliers' && (
+        <section className="panel">
+          <PanelTitle icon={Users} title="Supplier Management" />
+          <div className="supplier-card-grid">
+            {(supplierProfiles.length ? supplierProfiles : suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name, rating: supplier.rating || 0, orders: 0, total_spend: 0, on_time_delivery: 0, late_deliveries: 0, open_pos: 0, outstanding_invoices: 0 }))).map((profile) => (
+              <article key={profile.id} className="supplier-card">
+                <header>
+                  <strong>{profile.name}</strong>
+                  <span>{ratingStars(profile.rating)}</span>
+                </header>
+                <div className="supplier-metrics">
+                  <span>Rating <strong>{Number(profile.rating || 0).toFixed(1)}</strong></span>
+                  <span>Orders <strong>{profile.orders || 0}</strong></span>
+                  <span>Total Spend <strong>{money(profile.total_spend)}</strong></span>
+                  <span>On-Time Delivery <strong>{profile.on_time_delivery || 0}%</strong></span>
+                  <span>Late Deliveries <strong>{profile.late_deliveries || 0}</strong></span>
+                  <span>Open POs <strong>{profile.open_pos || 0}</strong></span>
+                  <span>Outstanding Invoices <strong>{profile.outstanding_invoices || 0}</strong></span>
+                </div>
+              </article>
+            ))}
+          </div>
+          <DataTable
+            columns={['Supplier', 'Rating', 'Orders', 'Total Spend', 'On-Time Delivery', 'Open POs', 'Outstanding Invoices']}
+            rows={suppliers.map((supplier) => [
+              supplier.name,
+              Number(supplierProfiles.find((profile) => Number(profile.id) === Number(supplier.id))?.rating || supplier.rating || 0).toFixed(1),
+              supplierProfiles.find((profile) => Number(profile.id) === Number(supplier.id))?.orders || 0,
+              money(supplierProfiles.find((profile) => Number(profile.id) === Number(supplier.id))?.total_spend || 0),
+              `${supplierProfiles.find((profile) => Number(profile.id) === Number(supplier.id))?.on_time_delivery || 0}%`,
+              supplierProfiles.find((profile) => Number(profile.id) === Number(supplier.id))?.open_pos || 0,
+              supplierProfiles.find((profile) => Number(profile.id) === Number(supplier.id))?.outstanding_invoices || 0,
+            ])}
+          />
+        </section>
+      )}
+
+      {activeTab === 'contracts' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Handshake} title="Supplier Contract" />
+            <form className="form-grid two" onSubmit={submitSupplierContract}>
+              <Select label="Supplier" name="supplier_id" value={contractForm.supplier_id} onChange={setForm(setContractForm)} required>
+                <option value="">Select supplier</option>
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Project" name="project_id" value={contractForm.project_id} onChange={setForm(setContractForm)}>
+                <option value="">Company-wide</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </Select>
+              <Field label="Contract Title" name="title" value={contractForm.title} onChange={setForm(setContractForm)} required />
+              <Field label="Contract Value" type="number" min="0" step="0.01" name="contract_value" value={contractForm.contract_value} onChange={setForm(setContractForm)} />
+              <Field label="Start Date" type="date" name="start_date" value={contractForm.start_date} onChange={setForm(setContractForm)} />
+              <Field label="End Date" type="date" name="end_date" value={contractForm.end_date} onChange={setForm(setContractForm)} />
+              <TextArea className="span-2" label="Terms" name="terms" value={contractForm.terms} onChange={setForm(setContractForm)} />
+              <button type="submit" className="primary-action span-2">
+                <Handshake size={17} />
+                Create Contract
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={Handshake} title="Contracts" />
+            <DataTable
+              columns={['Contract', 'Supplier', 'Project', 'Value', 'Start', 'End', 'Status']}
+              rows={visibleContracts.map((contract) => [
+                contract.contract_number || contract.title,
+                contract.supplier?.name || '',
+                contract.project?.name || 'Company-wide',
+                money(contract.contract_value),
+                shortDate(contract.start_date),
+                shortDate(contract.end_date),
+                <Badge key="status" value={contract.status} />,
+              ])}
+            />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'reports' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Download} title="Lifecycle Report" />
+            <div className="panel-toolbar">
+              <DownloadButton filename="procurement-lifecycle-report.csv" columns={traceabilityColumns} rows={traceabilityRows} />
+            </div>
+            <DataTable columns={traceabilityColumns} rows={traceabilityRows} />
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={Download} title="Spend & Invoice Reports" />
+            <div className="panel-toolbar">
+              <DownloadButton filename="procurement-purchase-orders.csv" columns={poReportColumns} rows={poReportRows} label="PO CSV" />
+              <DownloadButton filename="procurement-supplier-invoices.csv" columns={invoiceReportColumns} rows={invoiceReportRows} label="Invoice CSV" />
+            </div>
+            <DataTable columns={invoiceReportColumns} rows={invoiceReportRows} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <section className="panel">
+          <PanelTitle icon={Settings} title="Procurement Settings" />
+          <MiniList
+            items={[
+              `Base currency: ${procurement.settings?.base_currency || 'GHS'}`,
+              `Approval thresholds: ${Object.keys(procurement.settings?.approval_thresholds || {}).length || 0} configured`,
+              `Traceability records: ${visibleTraceability.length}`,
+              `Open supplier contracts: ${visibleContracts.filter((contract) => contract.status === 'active').length}`,
+            ]}
+          />
+        </section>
+      )}
+    </section>
+  )
+}
+
+function ApprovalWorkflowPanel({ workflow = [] }) {
+  return (
+    <div className="workflow-steps">
+      {workflow.map((step) => (
+        <div key={step.key || step.label} className={`workflow-step ${step.status || 'waiting'}`}>
+          <span>{workflowStatusSymbol(step.status)}</span>
+          <div>
+            <strong>{step.label}</strong>
+            <small>{labelize(step.status || 'waiting')}{step.acted_by ? ` by ${step.acted_by}` : ''}</small>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TimelinePanel({ items = [] }) {
+  return (
+    <div className="timeline-list">
+      {items.length === 0 ? (
+        <span>No timeline events yet</span>
+      ) : (
+        items.map((item, index) => (
+          <div key={`${item.occurred_at}-${index}`} className="timeline-item">
+            <time>{timelineTime(item.occurred_at)}</time>
+            <div>
+              <strong>{item.label}</strong>
+              {item.actor && <small>{item.actor}</small>}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
+function InventoryView({
+  branches,
+  suppliers,
+  inventory,
+  forms,
+  setInventoryForm,
+  setInventoryForms,
+  createWarehouse,
+  createInventoryItem,
+  createStockMovement,
+  createSupplierPrice,
+  createSupplierReview,
+  runAction,
+}) {
+  const [editingWarehouseId, setEditingWarehouseId] = useState(null)
+  const [editingItemId, setEditingItemId] = useState(null)
+
+  function saveWarehouse(event) {
+    if (!editingWarehouseId) {
+      createWarehouse(event)
+      return
+    }
+
+    event.preventDefault()
+
+    runAction(
+      () =>
+        api.updateWarehouse(editingWarehouseId, {
+          ...forms.warehouse,
+          branch_id: Number(forms.warehouse.branch_id || branches[0]?.id || 0),
+        }),
+      'Warehouse updated.',
+    ).then(() => {
+      setEditingWarehouseId(null)
+      setInventoryForms((current) => ({
+        ...current,
+        warehouse: { branch_id: forms.warehouse.branch_id || branches[0]?.id || '', code: '', name: '', location: '' },
+      }))
+    })
+  }
+
+  function editWarehouse(warehouse) {
+    setEditingWarehouseId(warehouse.id)
+    setInventoryForms((current) => ({
+      ...current,
+      warehouse: {
+        branch_id: warehouse.branch_id || warehouse.branch?.id || branches[0]?.id || '',
+        code: warehouse.code || '',
+        name: warehouse.name || '',
+        location: warehouse.location || '',
+      },
+    }))
+  }
+
+  function cancelWarehouseEdit() {
+    setEditingWarehouseId(null)
+    setInventoryForms((current) => ({
+      ...current,
+      warehouse: { branch_id: forms.warehouse.branch_id || branches[0]?.id || '', code: '', name: '', location: '' },
+    }))
+  }
+
+  function archiveWarehouse(warehouse) {
+    if (!window.confirm(`Archive warehouse ${warehouse.code || warehouse.name}?`)) {
+      return
+    }
+
+    runAction(() => api.deleteWarehouse(warehouse.id), 'Warehouse archived.').then(() => {
+      if (editingWarehouseId === warehouse.id) {
+        cancelWarehouseEdit()
+      }
+    })
+  }
+
+  function saveInventoryItem(event) {
+    if (!editingItemId) {
+      createInventoryItem(event)
+      return
+    }
+
+    event.preventDefault()
+
+    runAction(
+      () =>
+        api.updateInventoryItem(editingItemId, {
+          ...forms.item,
+          reorder_level: Number(forms.item.reorder_level || 0),
+          average_cost: Number(forms.item.average_cost || 0),
+        }),
+      'Inventory item updated.',
+    ).then(() => {
+      setEditingItemId(null)
+      setInventoryForms((current) => ({ ...current, item: emptyInventoryForms.item }))
+    })
+  }
+
+  function editInventoryItem(item) {
+    setEditingItemId(item.id)
+    setInventoryForms((current) => ({
+      ...current,
+      item: {
+        sku: item.sku || '',
+        name: item.name || '',
+        category: item.category || 'materials',
+        unit: item.unit || 'each',
+        reorder_level: item.reorder_level ?? 0,
+        average_cost: item.average_cost ?? '',
+      },
+    }))
+  }
+
+  function cancelInventoryItemEdit() {
+    setEditingItemId(null)
+    setInventoryForms((current) => ({ ...current, item: emptyInventoryForms.item }))
+  }
+
+  function archiveInventoryItem(item) {
+    if (!window.confirm(`Archive stock item ${item.sku || item.name}?`)) {
+      return
+    }
+
+    runAction(() => api.deleteInventoryItem(item.id), 'Inventory item archived.').then(() => {
+      if (editingItemId === item.id) {
+        cancelInventoryItemEdit()
+      }
+    })
+  }
+
+  return (
+    <section className="view-stack">
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Package} title={editingWarehouseId ? 'Edit Warehouse' : 'Warehouses & Items'} />
+          <form className="form-grid two" onSubmit={saveWarehouse}>
+            <Select label="Branch" name="branch_id" value={forms.warehouse.branch_id} onChange={setInventoryForm('warehouse')} required>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Warehouse Code" name="code" value={forms.warehouse.code} onChange={setInventoryForm('warehouse')} placeholder="Auto-generated" />
+            <Field label="Name" name="name" value={forms.warehouse.name} onChange={setInventoryForm('warehouse')} required />
+            <Field label="Location" name="location" value={forms.warehouse.location} onChange={setInventoryForm('warehouse')} />
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">
+                {editingWarehouseId ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                {editingWarehouseId ? 'Save warehouse' : 'Add warehouse'}
+              </button>
+              {editingWarehouseId && (
+                <button type="button" className="table-action" onClick={cancelWarehouseEdit}>
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+
+          <form className="form-grid two section-form" onSubmit={saveInventoryItem}>
+            <Field label="Stock Keeping Unit (SKU)" name="sku" value={forms.item.sku} onChange={setInventoryForm('item')} placeholder="Auto-generated, e.g. CEM-000001" />
+            <Field label="Item" name="name" value={forms.item.name} onChange={setInventoryForm('item')} required />
+            <Field label="Category" name="category" value={forms.item.category} onChange={setInventoryForm('item')} placeholder="Cement" />
+            <Field label="Unit" name="unit" value={forms.item.unit} onChange={setInventoryForm('item')} />
+            <Field label="Reorder level" type="number" name="reorder_level" value={forms.item.reorder_level} onChange={setInventoryForm('item')} />
+            <Field label="Average cost" type="number" name="average_cost" value={forms.item.average_cost} onChange={setInventoryForm('item')} />
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">
+                {editingItemId ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                {editingItemId ? 'Save item' : 'Add item'}
+              </button>
+              {editingItemId && (
+                <button type="button" className="table-action" onClick={cancelInventoryItemEdit}>
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Truck} title="Stock Movement" />
+          <form className="form-grid two" onSubmit={createStockMovement}>
+            <Select label="Warehouse" name="warehouse_id" value={forms.movement.warehouse_id} onChange={setInventoryForm('movement')} required>
+              <option value="">Select</option>
+              {(inventory.warehouses || []).map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.code} - {warehouse.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Item" name="inventory_item_id" value={forms.movement.inventory_item_id} onChange={setInventoryForm('movement')} required>
+              <option value="">Select</option>
+              {(inventory.items || []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.sku} - {item.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Type" name="type" value={forms.movement.type} onChange={setInventoryForm('movement')}>
+              <option value="receipt">Receipt</option>
+              <option value="issue">Issue</option>
+              <option value="transfer">Transfer</option>
+              <option value="adjustment">Adjustment</option>
+              <option value="return">Return</option>
+            </Select>
+            <Select label="To warehouse" name="to_warehouse_id" value={forms.movement.to_warehouse_id} onChange={setInventoryForm('movement')}>
+              <option value="">None</option>
+              {(inventory.warehouses || []).map((warehouse) => (
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.code}
+                </option>
+              ))}
+            </Select>
+            <Field label="Qty" type="number" name="quantity" value={forms.movement.quantity} onChange={setInventoryForm('movement')} required />
+            <Field label="Unit cost" type="number" name="unit_cost" value={forms.movement.unit_cost} onChange={setInventoryForm('movement')} />
+            <Field className="span-2" label="Reason" name="reason" value={forms.movement.reason} onChange={setInventoryForm('movement')} />
+            <button type="submit" className="primary-action span-2">
+              <Send size={17} />
+              Record movement
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Building2} title="Warehouses" />
+          <DataTable
+            columns={['Code', 'Warehouse', 'Branch', 'Location', 'Actions']}
+            rows={(inventory.warehouses || []).map((warehouse) => [
+              warehouse.code,
+              warehouse.name,
+              warehouse.branch?.name || '',
+              warehouse.location || '',
+              <div key="actions" className="row-actions">
+                <button type="button" className="table-action" onClick={() => editWarehouse(warehouse)}>
+                  Edit
+                </button>
+                <button type="button" className="table-action danger" onClick={() => archiveWarehouse(warehouse)}>
+                  Archive
+                </button>
+              </div>,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Package} title="Stock Levels" />
+          <DataTable
+            columns={['Stock Keeping Unit (SKU)', 'Item', 'Category', 'On hand', 'Reorder', 'Avg cost', 'Actions']}
+            rows={(inventory.items || []).map((item) => [
+              item.sku,
+              item.name,
+              labelize(item.category),
+              `${item.quantity_on_hand} ${item.unit}`,
+              `${item.reorder_level} ${item.unit}`,
+              money(item.average_cost),
+              <div key="actions" className="row-actions">
+                <button type="button" className="table-action" onClick={() => editInventoryItem(item)}>
+                  Edit
+                </button>
+                <button type="button" className="table-action danger" onClick={() => archiveInventoryItem(item)}>
+                  Archive
+                </button>
+              </div>,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={AlertTriangle} title="Reorder Alerts" />
+          <DataTable
+            columns={['Stock Keeping Unit (SKU)', 'Item', 'On hand', 'Reorder']}
+            rows={(inventory.reorder_alerts || []).map((item) => [
+              item.sku,
+              item.name,
+              `${item.quantity_on_hand} ${item.unit}`,
+              `${item.reorder_level} ${item.unit}`,
+            ])}
+          />
+        </section>
+      </div>
+
+      <section className="panel">
+        <PanelTitle icon={Truck} title="Supplier Management" />
+        <div className="grid-main tight">
+          <form className="form-grid two" onSubmit={createSupplierPrice}>
+            <Select label="Supplier" name="supplier_id" value={forms.supplierPrice.supplier_id} onChange={setInventoryForm('supplierPrice')} required>
+              <option value="">Select</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Inventory item" name="inventory_item_id" value={forms.supplierPrice.inventory_item_id} onChange={setInventoryForm('supplierPrice')}>
+              <option value="">None</option>
+              {(inventory.items || []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Description" name="description" value={forms.supplierPrice.description} onChange={setInventoryForm('supplierPrice')} required />
+            <Field label="Unit price" type="number" name="unit_price" value={forms.supplierPrice.unit_price} onChange={setInventoryForm('supplierPrice')} required />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Add supplier price
+            </button>
+          </form>
+
+          <form className="form-grid two" onSubmit={createSupplierReview}>
+            <Select label="Supplier" name="supplier_id" value={forms.supplierReview.supplier_id} onChange={setInventoryForm('supplierReview')} required>
+              <option value="">Select</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Rating" type="number" min="1" max="5" name="rating" value={forms.supplierReview.rating} onChange={setInventoryForm('supplierReview')} />
+            <Field label="Quality" type="number" min="1" max="5" name="quality_score" value={forms.supplierReview.quality_score} onChange={setInventoryForm('supplierReview')} />
+            <Field label="Delivery" type="number" min="1" max="5" name="delivery_score" value={forms.supplierReview.delivery_score} onChange={setInventoryForm('supplierReview')} />
+            <Field className="span-2" label="Notes" name="notes" value={forms.supplierReview.notes} onChange={setInventoryForm('supplierReview')} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Add review
+            </button>
+          </form>
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function FieldOpsView({
+  projects,
+  fieldOps,
+  forms,
+  setFieldForm,
+  setFieldForms,
+  createDailyReport,
+  createFieldIssue,
+  clockIn,
+  clockOut,
+  runAction,
+}) {
+  const [editingIssueId, setEditingIssueId] = useState(null)
+  const dailyReportColumns = ['No.', 'Project', 'Report date', 'Shift', 'Status', 'Labour', 'Weather', 'Progress notes', 'Safety notes']
+  const dailyReportRows = (fieldOps.daily_reports || []).map((report) => [
+    report.report_number || '',
+    report.project?.name || '',
+    shortDate(report.report_date),
+    labelize(report.shift || ''),
+    labelize(report.status || ''),
+    report.labour_count || 0,
+    report.weather || '',
+    report.progress_notes || '',
+    report.safety_notes || '',
+  ])
+
+  function saveFieldIssue(event) {
+    if (!editingIssueId) {
+      createFieldIssue(event)
+      return
+    }
+
+    event.preventDefault()
+    const form = forms.issue
+
+    runAction(
+      () =>
+        api.updateFieldIssue(editingIssueId, {
+          title: form.title,
+          description: form.description || null,
+          category: form.category,
+          severity: form.severity,
+          status: form.status || 'open',
+          due_date: form.due_date || null,
+        }),
+      'Field issue updated.',
+    ).then(() => {
+      setEditingIssueId(null)
+      setFieldForms((current) => ({ ...current, issue: emptyFieldForms.issue }))
+    })
+  }
+
+  function editFieldIssue(issue) {
+    setEditingIssueId(issue.id)
+    setFieldForms((current) => ({
+      ...current,
+      issue: {
+        project_id: issue.project_id || issue.project?.id || '',
+        title: issue.title || '',
+        category: issue.category || 'blocker',
+        severity: issue.severity || 'medium',
+        status: issue.status || 'open',
+        description: issue.description || '',
+        due_date: dateInputValue(issue.due_date),
+      },
+    }))
+  }
+
+  function cancelFieldIssueEdit() {
+    setEditingIssueId(null)
+    setFieldForms((current) => ({ ...current, issue: emptyFieldForms.issue }))
+  }
+
+  function archiveFieldIssue(issue) {
+    if (!window.confirm(`Archive field issue ${issue.title}?`)) {
+      return
+    }
+
+    runAction(() => api.deleteFieldIssue(issue.id), 'Field issue archived.').then(() => {
+      if (editingIssueId === issue.id) {
+        cancelFieldIssueEdit()
+      }
+    })
+  }
+
+  return (
+    <section className="view-stack">
+      <div className="kpi-grid">
+        <Kpi icon={ClipboardList} label="Daily reports" value={fieldOps.daily_reports?.length || 0} sub="Recent reports" />
+        <Kpi icon={AlertTriangle} label="Open issues" value={(fieldOps.issues || []).filter((issue) => !['resolved', 'closed'].includes(issue.status)).length} sub="Field blockers" />
+        <Kpi icon={Clock3} label="Clocked in" value={(fieldOps.attendance || []).filter((item) => item.status === 'open').length} sub="Open attendance" />
+        <Kpi icon={MapPinned} label="Site mode" value="Web" sub="Responsive browser app" />
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ClipboardList} title="Daily Site Diary" />
+          <form className="form-grid two" onSubmit={createDailyReport}>
+            <Select label="Project" name="project_id" value={forms.dailyReport.project_id} onChange={setFieldForm('dailyReport')} required>
+              <option value="">Select</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Date" type="date" name="report_date" value={forms.dailyReport.report_date} onChange={setFieldForm('dailyReport')} required />
+            <Field label="Weather" name="weather" value={forms.dailyReport.weather} onChange={setFieldForm('dailyReport')} />
+            <Field label="Labour count" type="number" name="labour_count" value={forms.dailyReport.labour_count} onChange={setFieldForm('dailyReport')} />
+            <Field className="span-2" label="Progress notes" name="progress_notes" value={forms.dailyReport.progress_notes} onChange={setFieldForm('dailyReport')} />
+            <Field className="span-2" label="Safety notes" name="safety_notes" value={forms.dailyReport.safety_notes} onChange={setFieldForm('dailyReport')} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Create report
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={AlertTriangle} title={editingIssueId ? 'Edit Issue' : 'Issue Log'} />
+          <form className="form-grid two" onSubmit={saveFieldIssue}>
+            <Select label="Project" name="project_id" value={forms.issue.project_id} onChange={setFieldForm('issue')} required>
+              <option value="">Select</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Title" name="title" value={forms.issue.title} onChange={setFieldForm('issue')} required />
+            <Select label="Category" name="category" value={forms.issue.category} onChange={setFieldForm('issue')}>
+              <option value="blocker">Blocker</option>
+              <option value="quality">Quality</option>
+              <option value="safety">Safety</option>
+              <option value="material">Material</option>
+              <option value="design">Design</option>
+            </Select>
+            <Select label="Severity" name="severity" value={forms.issue.severity} onChange={setFieldForm('issue')}>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </Select>
+            <Select label="Status" name="status" value={forms.issue.status || 'open'} onChange={setFieldForm('issue')}>
+              <option value="open">Open</option>
+              <option value="in_progress">In progress</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </Select>
+            <Field label="Due" type="date" name="due_date" value={forms.issue.due_date || ''} onChange={setFieldForm('issue')} />
+            <Field className="span-2" label="Description" name="description" value={forms.issue.description} onChange={setFieldForm('issue')} />
+            <label className="field span-2">
+              <span>Photo</span>
+              <input type="file" name="photo" onChange={(event) => setFieldForms((current) => ({ ...current, issue: { ...current.issue, photo: event.target.files[0] } }))} />
+            </label>
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">
+                {editingIssueId ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                {editingIssueId ? 'Save issue' : 'Log issue'}
+              </button>
+              {editingIssueId && (
+                <button type="button" className="table-action" onClick={cancelFieldIssueEdit}>
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <section className="panel">
+        <PanelTitle icon={Clock3} title="Time & Attendance" />
+        <form className="inline-form" onSubmit={fieldOps.open_attendance ? clockOut : clockIn}>
+          <Select label="Project" name="project_id" value={forms.clock.project_id} onChange={setFieldForm('clock')}>
+            <option value="">No project</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </Select>
+          <Field label="Latitude" name={fieldOps.open_attendance ? 'clock_out_latitude' : 'clock_in_latitude'} value={fieldOps.open_attendance ? forms.clock.clock_out_latitude : forms.clock.clock_in_latitude} onChange={setFieldForm('clock')} />
+          <Field label="Longitude" name={fieldOps.open_attendance ? 'clock_out_longitude' : 'clock_in_longitude'} value={fieldOps.open_attendance ? forms.clock.clock_out_longitude : forms.clock.clock_in_longitude} onChange={setFieldForm('clock')} />
+          <label className="field compact-file">
+            <span>Face check</span>
+            <input type="file" accept="image/*" capture="user" onChange={(event) => setFieldForms((current) => ({ ...current, clock: { ...current.clock, face: event.target.files[0] } }))} />
+          </label>
+          <button type="submit" className="primary-action">
+            <Clock3 size={17} />
+            {fieldOps.open_attendance ? 'Clock out' : 'Clock in'}
+          </button>
+        </form>
+        <DataTable
+          columns={['Person', 'Status', 'Clock in', 'Clock out', 'Minutes']}
+          rows={(fieldOps.attendance || []).map((record) => [
+            record.user?.name || '',
+            <Badge key="status" value={record.status} />,
+            shortDate(record.clock_in_at),
+            shortDate(record.clock_out_at),
+            record.total_minutes,
+          ])}
+        />
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={MapPinned} title="Recent Field Records" />
+        <div className="panel-toolbar">
+          <DownloadButton filename="field-daily-reports.csv" columns={dailyReportColumns} rows={dailyReportRows} />
+        </div>
+        <DataTable
+          columns={['Project', 'Report date', 'Status', 'Labour', 'Weather', 'Action']}
+          rows={(fieldOps.daily_reports || []).map((report, index) => [
+            report.project?.name,
+            shortDate(report.report_date),
+            <Badge key="status" value={report.status} />,
+            report.labour_count,
+            report.weather || '',
+            <div key="actions" className="row-actions">
+              {report.status === 'draft' && (
+                <button type="button" className="table-action" onClick={() => runAction(() => api.transitionDailyReport(report.id, 'submitted'), 'Daily report submitted.')}>
+                  Submit
+                </button>
+              )}
+              {report.status === 'submitted' && (
+                <button type="button" className="table-action" onClick={() => runAction(() => api.transitionDailyReport(report.id, 'approved'), 'Daily report approved.')}>
+                  Approve
+                </button>
+              )}
+              <DownloadButton filename={`${report.report_number || `daily-report-${report.id}`}.csv`} columns={dailyReportColumns} rows={[dailyReportRows[index]]} label="CSV" />
+            </div>,
+          ])}
+        />
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={AlertTriangle} title="Open Issues" />
+        <DataTable
+          columns={['Project', 'Title', 'Category', 'Severity', 'Status', 'Action']}
+          rows={(fieldOps.issues || []).map((issue) => [
+            issue.project?.name,
+            issue.title,
+            labelize(issue.category),
+            <Badge key="severity" value={issue.severity} />,
+            <Badge key="status" value={issue.status} />,
+            <div key="actions" className="row-actions">
+              <button type="button" className="table-action" onClick={() => editFieldIssue(issue)}>
+                Edit
+              </button>
+              {!['resolved', 'closed'].includes(issue.status) && (
+                <button type="button" className="table-action" onClick={() => runAction(() => api.updateFieldIssue(issue.id, { status: 'resolved' }), 'Issue resolved.')}>
+                  Resolve
+                </button>
+              )}
+              <button type="button" className="table-action danger" onClick={() => archiveFieldIssue(issue)}>
+                Archive
+              </button>
+            </div>,
+          ])}
+        />
+      </section>
+    </section>
+  )
+}
+
+function FinanceView({
+  branches,
+  projects,
+  clients,
+  suppliers,
+  finance,
+  forms,
+  setFinanceForm,
+  setFinanceForms,
+  createInvoice,
+  recordPayment,
+  createExpense,
+  createJournalEntry,
+  runAction,
+}) {
+  const openInvoices = (finance.invoices || []).filter((invoice) => invoice.status !== 'draft' && invoice.payment_status !== 'paid')
+  const issuedInvoices = (finance.invoices || []).filter((invoice) => !['draft', 'void'].includes(invoice.status))
+  const bankAccounts = finance.bank_accounts || []
+  const accountRows = finance.chart_of_accounts?.accounts || []
+  const ledgerRows = finance.general_ledger?.entries || []
+  const payableInvoices = [
+    ...(finance.accounts_payable?.blocked_invoices || []),
+    ...(finance.accounts_payable?.due_this_week || []),
+  ].filter((invoice, index, list) => list.findIndex((item) => item.id === invoice.id) === index)
+  const aging = finance.accounts_receivable?.aging || {}
+  const payableAging = finance.accounts_payable?.aging || {}
+  const tabs = [
+    ['dashboard', 'Dashboard', BarChart3],
+    ['ar', 'Accounts Receivable', WalletCards],
+    ['ap', 'Accounts Payable', Truck],
+    ['customers', 'Customers', Users],
+    ['suppliers', 'Suppliers', Truck],
+    ['invoices', 'Invoices', FileText],
+    ['credit-notes', 'Credit Notes', FileText],
+    ['payments', 'Payments', CheckCircle2],
+    ['expenses', 'Expenses', ClipboardList],
+    ['budgets', 'Budgets', Calculator],
+    ['cash-flow', 'Cash Flow', BarChart3],
+    ['bank-accounts', 'Bank Accounts', WalletCards],
+    ['bank-reconciliation', 'Bank Reconciliation', RefreshCcw],
+    ['chart-of-accounts', 'Chart of Accounts', Layers3],
+    ['general-ledger', 'General Ledger', FileText],
+    ['journal-entries', 'Journal Entries', Send],
+    ['cost-centers', 'Cost Centers', FolderKanban],
+    ['fixed-assets', 'Fixed Assets', Truck],
+    ['payroll', 'Payroll Integration', Users],
+    ['taxes', 'Taxes', Calculator],
+    ['retentions', 'Retentions', ShieldCheck],
+    ['progress-billing', 'Progress Billing', CalendarDays],
+    ['reports', 'Financial Reports', Download],
+    ['approvals', 'Approvals', CheckCircle2],
+    ['audit-trail', 'Audit Trail', Clock3],
+    ['automation', 'Automation', Workflow],
+    ['settings', 'Finance Settings', Settings],
+  ]
+  const [activeTab, setActiveTab] = useState('dashboard')
+
+  const resetFinanceSection = (section, overrides = {}) => {
+    setFinanceForms((current) => ({ ...current, [section]: { ...emptyFinanceForms[section], ...overrides } }))
+  }
+
+  const submitFinanceForm = async (event, section, action, payloadBuilder, message, overrides = {}) => {
+    event.preventDefault()
+    const result = await runAction(() => action(payloadBuilder(forms[section])), message)
+    if (result) {
+      resetFinanceSection(section, overrides)
+    }
+  }
+
+  const cleanPayload = (payload) =>
+    Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== '' && value !== null && value !== undefined))
+
+  const idOrNull = (value) => (value ? Number(value) : null)
+  const num = (value) => Number(value || 0)
+  const reportRows = (items = [], keys = []) => (items || []).map((item) => keys.map((key) => item?.[key] ?? ''))
+
+  return (
+    <section className="view-stack">
+      <nav className="module-tabs" aria-label="Finance module navigation">
+        {tabs.map(([key, label, Icon]) => (
+          <button key={key} type="button" className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}>
+            <Icon size={15} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === 'dashboard' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={WalletCards} label="Cash Balance" value={money(finance.summary?.cash_balance)} sub="Bank and cash accounts" />
+            <Kpi icon={FileText} label="Accounts Receivable" value={money(finance.summary?.accounts_receivable)} sub={`${money(finance.summary?.overdue)} overdue`} />
+            <Kpi icon={Truck} label="Accounts Payable" value={money(finance.summary?.accounts_payable)} sub={`${money(finance.summary?.upcoming_payments)} due soon`} />
+            <Kpi icon={BarChart3} label="Revenue This Month" value={money(finance.summary?.revenue_this_month)} sub={`${money(finance.summary?.profit)} profit`} />
+            <Kpi icon={ClipboardList} label="Expenses This Month" value={money(finance.summary?.expenses_this_month)} sub={`${money(finance.summary?.approved_expenses)} approved total`} />
+            <Kpi icon={RefreshCcw} label="Cash Flow" value={money(finance.summary?.cash_flow)} sub="Net movement this month" />
+            <Kpi icon={Calculator} label="Budget Utilization" value={`${finance.summary?.budget_utilization || 0}%`} sub="Actual plus committed" />
+            <Kpi icon={ShieldCheck} label="Retention Held" value={money(finance.summary?.retention_held)} sub="Client and supplier balances" />
+            <Kpi icon={Calculator} label="Taxes Payable" value={money(finance.summary?.taxes_payable)} sub="Sales, purchase, payroll tax" />
+            <Kpi icon={Users} label="Payroll" value={money(finance.summary?.payroll)} sub="Draft and approved runs" />
+            <Kpi icon={Truck} label="Open POs" value={money(finance.summary?.outstanding_purchase_orders)} sub="Approved commitments" />
+            <Kpi icon={FileText} label="Outstanding Invoices" value={money(finance.summary?.outstanding_invoices)} sub="Uncollected client billing" />
+          </div>
+
+          <div className="grid-main">
+            <ChartPanel icon={BarChart3} title="Cash Flow Forecast">
+              <AnalyticsBarChart data={finance.cash_flow?.forecast || []} xKey="period" bars={[{ key: 'inflows' }, { key: 'outflows' }, { key: 'net' }]} />
+            </ChartPanel>
+            <ChartPanel icon={Calculator} title="Budget Variance">
+              <AnalyticsBarChart data={finance.budgets?.by_project || []} xKey="project" bars={[{ key: 'budget' }, { key: 'actual' }, { key: 'committed' }]} />
+            </ChartPanel>
+          </div>
+
+          <section className="panel">
+            <PanelTitle icon={BarChart3} title="Project Profitability" />
+            <DataTable
+              columns={['Project', 'Client', 'Contract', 'Revenue', 'Cost', 'Profit', 'Margin']}
+              rows={(finance.financial_reports?.project_profitability || []).map((row) => [
+                row.project,
+                row.client || '',
+                money(row.contract_value),
+                money(row.recognized_revenue),
+                money(row.cost),
+                money(row.profit),
+                `${row.margin_percent || 0}%`,
+              ])}
+            />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'ar' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={WalletCards} label="Current" value={money(aging.current)} sub="Not yet overdue" />
+            <Kpi icon={Clock3} label="30 Days" value={money(aging['30_days'])} sub="Receivable aging" />
+            <Kpi icon={Clock3} label="60 Days" value={money(aging['60_days'])} sub="Collection pressure" />
+            <Kpi icon={AlertTriangle} label="120+ Days" value={money(aging['120_plus_days'])} sub="Critical collections" />
+          </div>
+          <section className="panel">
+            <PanelTitle icon={Users} title="Customer Aging" />
+            <div className="panel-toolbar">
+              <DownloadButton filename="accounts-receivable-aging.csv" columns={['Client', 'Outstanding', 'Current', '30 Days', '60 Days', '90 Days', '120+ Days']} rows={(finance.accounts_receivable?.customers || []).map((row) => [row.client, row.outstanding, row.aging?.current, row.aging?.['30_days'], row.aging?.['60_days'], row.aging?.['90_days'], row.aging?.['120_plus_days']])} />
+            </div>
+            <DataTable columns={['Client', 'Outstanding', 'Current', '30 Days', '60 Days', '90 Days', '120+ Days']} rows={(finance.accounts_receivable?.customers || []).map((row) => [row.client, money(row.outstanding), money(row.aging?.current), money(row.aging?.['30_days']), money(row.aging?.['60_days']), money(row.aging?.['90_days']), money(row.aging?.['120_plus_days'])])} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Collections" />
+            <DataTable columns={['Invoice', 'Client', 'Project', 'Due', 'Balance']} rows={(finance.accounts_receivable?.collections || []).map((invoice) => [invoice.invoice_number, invoice.client?.name || '', invoice.project?.name || '', shortDate(invoice.due_date), money(invoice.balance_due)])} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'ap' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={WalletCards} label="Current" value={money(payableAging.current)} sub="Not yet due" />
+            <Kpi icon={Clock3} label="30 Days" value={money(payableAging['30_days'])} sub="Supplier aging" />
+            <Kpi icon={Clock3} label="60 Days" value={money(payableAging['60_days'])} sub="Payment pressure" />
+            <Kpi icon={AlertTriangle} label="120+ Days" value={money(payableAging['120_plus_days'])} sub="Critical payables" />
+          </div>
+          <section className="panel">
+            <PanelTitle icon={Truck} title="Supplier Aging" />
+            <div className="panel-toolbar">
+              <DownloadButton filename="accounts-payable-aging.csv" columns={['Supplier', 'Outstanding', 'Current', '30 Days', '60 Days', '90 Days', '120+ Days']} rows={(finance.accounts_payable?.suppliers || []).map((row) => [row.supplier, row.outstanding, row.aging?.current, row.aging?.['30_days'], row.aging?.['60_days'], row.aging?.['90_days'], row.aging?.['120_plus_days']])} />
+            </div>
+            <DataTable columns={['Supplier', 'Outstanding', 'Current', '30 Days', '60 Days', '90 Days', '120+ Days']} rows={(finance.accounts_payable?.suppliers || []).map((row) => [row.supplier, money(row.outstanding), money(row.aging?.current), money(row.aging?.['30_days']), money(row.aging?.['60_days']), money(row.aging?.['90_days']), money(row.aging?.['120_plus_days'])])} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={CalendarDays} title="Due This Week" />
+            <DataTable columns={['Invoice', 'Supplier', 'PO', 'Due', 'Balance', 'Status']} rows={(finance.accounts_payable?.due_this_week || []).map((invoice) => [invoice.invoice_number, invoice.supplier?.name || '', invoice.purchase_order?.po_number || '', shortDate(invoice.due_date), money(invoice.balance_due), <Badge key="status" value={invoice.status} />])} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'customers' && (
+        <section className="panel">
+          <PanelTitle icon={Users} title="Customers" />
+          <DataTable columns={['Customer', 'Type', 'Contact', 'Email', 'Currency', 'Status']} rows={(finance.customers || clients).map((client) => [client.name, labelize(client.type || ''), client.contact_name || '', client.email || '', client.currency || '', <Badge key="status" value={client.status} />])} />
+        </section>
+      )}
+
+      {activeTab === 'suppliers' && (
+        <section className="panel">
+          <PanelTitle icon={Truck} title="Suppliers" />
+          <DataTable columns={['Supplier', 'Contact', 'Email', 'Currency', 'Rating', 'Status']} rows={(finance.suppliers || suppliers).map((supplier) => [supplier.name, supplier.contact_name || '', supplier.email || '', supplier.currency || '', supplier.rating || '', <Badge key="status" value={supplier.status} />])} />
+        </section>
+      )}
+
+      {activeTab === 'invoices' && (
+        <>
+          <section className="panel">
+            <PanelTitle icon={Plus} title="New Invoice" />
+            <form className="form-grid two" onSubmit={createInvoice}>
+              <Select label="Project" name="project_id" value={forms.invoice.project_id} onChange={setFinanceForm('invoice')}>
+                <option value="">No project</option>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </Select>
+              <Select label="Client" name="client_id" value={forms.invoice.client_id} onChange={setFinanceForm('invoice')}>
+                <option value="">Project client</option>
+                {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+              </Select>
+              <Field label="Title" name="title" value={forms.invoice.title} onChange={setFinanceForm('invoice')} required />
+              <Field label="Due date" type="date" name="due_date" value={forms.invoice.due_date} onChange={setFinanceForm('invoice')} />
+              <Field label="Retention %" type="number" step="0.01" name="retention_percent" value={forms.invoice.retention_percent} onChange={setFinanceForm('invoice')} />
+              <Field label="Progress %" type="number" step="0.01" name="progress_percent" value={forms.invoice.progress_percent} onChange={setFinanceForm('invoice')} />
+              <Field label="Billing stage" name="billing_stage" value={forms.invoice.billing_stage} onChange={setFinanceForm('invoice')} />
+              <Field label="Line item" name="line_description" value={forms.invoice.line_description} onChange={setFinanceForm('invoice')} required />
+              <Field label="Cost Code" name="cost_code" value={forms.invoice.cost_code} onChange={setFinanceForm('invoice')} placeholder="Auto-generated" />
+              <Field label="Qty" type="number" step="0.01" name="quantity" value={forms.invoice.quantity} onChange={setFinanceForm('invoice')} required />
+              <Field label="Unit price" type="number" step="0.01" name="unit_price" value={forms.invoice.unit_price} onChange={setFinanceForm('invoice')} required />
+              <Field label="Tax %" type="number" step="0.01" name="tax_rate" value={forms.invoice.tax_rate} onChange={setFinanceForm('invoice')} />
+              <button type="submit" className="primary-action span-2"><Plus size={17} />Create invoice</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Invoices" />
+            <div className="panel-toolbar">
+              <DownloadButton filename="invoices.csv" columns={['No.', 'Client', 'Project', 'Status', 'Payment', 'Total', 'Retention', 'Credit', 'Balance']} rows={(finance.invoices || []).map((invoice) => [invoice.invoice_number, invoice.client?.name || '', invoice.project?.name || '', invoice.status, invoice.payment_status, invoice.total_amount, invoice.retention_amount, invoice.credit_note_amount, invoice.balance_due])} />
+            </div>
+            <DataTable columns={['No.', 'Client', 'Project', 'Status', 'Payment', 'Total', 'Retention', 'Balance', 'Action']} rows={(finance.invoices || []).map((invoice) => [invoice.invoice_number, invoice.client?.name || '', invoice.project?.name || '', <Badge key="status" value={invoice.status} />, <Badge key="payment" value={invoice.payment_status} />, money(invoice.total_amount), money(invoice.retention_amount), money(invoice.balance_due), invoice.status === 'draft' ? <button key="issue" type="button" className="table-action" onClick={() => runAction(() => api.issueInvoice(invoice.id), 'Invoice issued.')}>Issue</button> : ''])} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'credit-notes' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Credit Note" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'creditNote', api.createFinanceCreditNote, (form) => cleanPayload({ invoice_id: idOrNull(form.invoice_id), amount: num(form.amount), tax_amount: num(form.tax_amount), reason: form.reason }), 'Credit note created.')}>
+              <Select label="Invoice" name="invoice_id" value={forms.creditNote.invoice_id} onChange={setFinanceForm('creditNote')} required>
+                <option value="">Select</option>
+                {issuedInvoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoice_number} - {money(invoice.balance_due)}</option>)}
+              </Select>
+              <Field label="Amount" type="number" step="0.01" name="amount" value={forms.creditNote.amount} onChange={setFinanceForm('creditNote')} required />
+              <Field label="Tax" type="number" step="0.01" name="tax_amount" value={forms.creditNote.tax_amount} onChange={setFinanceForm('creditNote')} />
+              <Field label="Reason" name="reason" value={forms.creditNote.reason} onChange={setFinanceForm('creditNote')} />
+              <button type="submit" className="primary-action span-2"><Plus size={17} />Create credit note</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Credit Notes" />
+            <DataTable columns={['No.', 'Invoice', 'Client', 'Amount', 'Tax', 'Status', 'Issued']} rows={(finance.credit_notes || []).map((note) => [note.credit_note_number, note.invoice?.invoice_number || '', note.client?.name || '', money(note.amount), money(note.tax_amount), <Badge key="status" value={note.status} />, shortDate(note.issue_date)])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'payments' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={CheckCircle2} title="Payment" />
+            <form className="form-grid two" onSubmit={recordPayment}>
+              <Select label="Invoice" name="invoice_id" value={forms.payment.invoice_id} onChange={setFinanceForm('payment')} required>
+                <option value="">Select</option>
+                {openInvoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoice_number} - {money(invoice.balance_due)}</option>)}
+              </Select>
+              <Select label="Bank Account" name="finance_bank_account_id" value={forms.payment.finance_bank_account_id} onChange={setFinanceForm('payment')}>
+                <option value="">Default account</option>
+                {bankAccounts.map((account) => <option key={account.id} value={account.id}>{account.account_name}</option>)}
+              </Select>
+              <Field label="Amount" type="number" step="0.01" name="amount" value={forms.payment.amount} onChange={setFinanceForm('payment')} required />
+              <Select label="Method" name="method" value={forms.payment.method} onChange={setFinanceForm('payment')}>
+                <option value="bank_transfer">Bank transfer</option>
+                <option value="cash">Cash</option>
+                <option value="mobile_money">Mobile money</option>
+                <option value="cheque">Cheque</option>
+                <option value="card">Card</option>
+              </Select>
+              <Field label="Reference" name="reference" value={forms.payment.reference} onChange={setFinanceForm('payment')} />
+              <button type="submit" className="primary-action span-2"><CheckCircle2 size={17} />Record payment</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Payments" />
+            <DataTable columns={['No.', 'Invoice', 'Client', 'Bank', 'Method', 'Amount', 'Received']} rows={(finance.payments || []).map((payment) => [payment.payment_number, payment.invoice?.invoice_number || '', payment.client?.name || '', payment.bank_account?.account_name || '', labelize(payment.method), money(payment.amount), shortDate(payment.received_at)])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'expenses' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Expense" />
+            <form className="form-grid two" onSubmit={createExpense}>
+              <Select label="Project" name="project_id" value={forms.expense.project_id} onChange={setFinanceForm('expense')}>
+                <option value="">No project</option>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </Select>
+              <Select label="Supplier" name="supplier_id" value={forms.expense.supplier_id} onChange={setFinanceForm('expense')}>
+                <option value="">None</option>
+                {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+              </Select>
+              <Field label="Description" name="description" value={forms.expense.description} onChange={setFinanceForm('expense')} required />
+              <Field label="Category" name="category" value={forms.expense.category} onChange={setFinanceForm('expense')} />
+              <Field label="Cost Code" name="cost_code" value={forms.expense.cost_code} onChange={setFinanceForm('expense')} placeholder="Auto-generated" />
+              <Field label="Amount" type="number" step="0.01" name="amount" value={forms.expense.amount} onChange={setFinanceForm('expense')} required />
+              <Field label="Tax" type="number" step="0.01" name="tax_amount" value={forms.expense.tax_amount} onChange={setFinanceForm('expense')} />
+              <button type="submit" className="primary-action span-2"><Plus size={17} />Submit expense</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Expenses" />
+            <DataTable columns={['No.', 'Project', 'Supplier', 'Status', 'Amount', 'Action']} rows={(finance.expenses || []).map((expense) => [expense.expense_number, expense.project?.name || '', expense.supplier?.name || '', <Badge key="status" value={expense.status} />, money(Number(expense.amount) + Number(expense.tax_amount)), expense.status === 'submitted' ? <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.reviewExpense(expense.id, 'approved'), 'Expense approved.')}>Approve</button> : expense.status === 'approved' ? <button key="pay" type="button" className="table-action" onClick={() => runAction(() => api.reviewExpense(expense.id, 'paid'), 'Expense paid.')}>Mark paid</button> : ''])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'budgets' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={Calculator} label="Budget" value={money(finance.budgets?.summary?.budget)} sub="Approved budget" />
+            <Kpi icon={WalletCards} label="Actual" value={money(finance.budgets?.summary?.actual)} sub="Posted cost" />
+            <Kpi icon={Truck} label="Committed" value={money(finance.budgets?.summary?.committed)} sub="Open commitments" />
+            <Kpi icon={CheckCircle2} label="Remaining" value={money(finance.budgets?.summary?.remaining)} sub={`${money(finance.budgets?.summary?.variance)} variance`} />
+          </div>
+          <ChartPanel icon={Calculator} title="Budget By Project">
+            <AnalyticsBarChart data={finance.budgets?.by_project || []} xKey="project" bars={[{ key: 'budget' }, { key: 'actual' }, { key: 'committed' }, { key: 'remaining' }]} />
+          </ChartPanel>
+          <section className="panel">
+            <PanelTitle icon={Calculator} title="Budget Lines" />
+            <DataTable columns={['Cost Code', 'Project', 'Category', 'Budget', 'Actual', 'Committed', 'Forecast']} rows={(finance.budgets?.lines || []).map((line) => [line.cost_code, line.project?.name || '', labelize(line.category), money(line.budget_amount), money(line.actual_amount), money(line.committed_amount), money(line.forecast_amount)])} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'cash-flow' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={WalletCards} label="Opening Cash" value={money(finance.cash_flow?.position?.opening_cash)} sub="Opening bank balance" />
+            <Kpi icon={WalletCards} label="Current Cash" value={money(finance.cash_flow?.position?.current_cash)} sub="Current bank balance" />
+            <Kpi icon={FileText} label="Expected Receipts" value={money(finance.cash_flow?.position?.expected_receipts)} sub="Open receivables" />
+            <Kpi icon={Truck} label="Supplier Obligations" value={money(finance.cash_flow?.position?.supplier_obligations)} sub="Open payables" />
+          </div>
+          <ChartPanel icon={BarChart3} title="Forecast">
+            <AnalyticsBarChart data={finance.cash_flow?.forecast || []} xKey="period" bars={[{ key: 'inflows' }, { key: 'outflows' }, { key: 'net' }]} />
+          </ChartPanel>
+        </>
+      )}
+
+      {activeTab === 'bank-accounts' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Bank Account" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'bankAccount', api.createFinanceBankAccount, (form) => cleanPayload({ branch_id: idOrNull(form.branch_id), account_name: form.account_name, bank_name: form.bank_name, account_number: form.account_number, currency: form.currency, opening_balance: num(form.opening_balance), is_default: form.is_default }), 'Bank account created.')}>
+              <Select label="Branch" name="branch_id" value={forms.bankAccount.branch_id} onChange={setFinanceForm('bankAccount')}>
+                <option value="">Company wide</option>
+                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </Select>
+              <Field label="Account Name" name="account_name" value={forms.bankAccount.account_name} onChange={setFinanceForm('bankAccount')} required />
+              <Field label="Bank Name" name="bank_name" value={forms.bankAccount.bank_name} onChange={setFinanceForm('bankAccount')} required />
+              <Field label="Account No." name="account_number" value={forms.bankAccount.account_number} onChange={setFinanceForm('bankAccount')} />
+              <Field label="Currency" name="currency" value={forms.bankAccount.currency} onChange={setFinanceForm('bankAccount')} maxLength={3} />
+              <Field label="Opening Balance" type="number" step="0.01" name="opening_balance" value={forms.bankAccount.opening_balance} onChange={setFinanceForm('bankAccount')} />
+              <Field label="Default" type="checkbox" name="is_default" checked={forms.bankAccount.is_default} onChange={setFinanceForm('bankAccount')} />
+              <button type="submit" className="primary-action"><Plus size={17} />Add bank</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Bank Accounts" />
+            <DataTable columns={['Account', 'Bank', 'No.', 'Currency', 'Current Balance', 'Default', 'Status']} rows={bankAccounts.map((account) => [account.account_name, account.bank_name, account.account_number || '', account.currency, money(account.current_balance), account.is_default ? 'Yes' : '', <Badge key="status" value={account.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'bank-reconciliation' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={RefreshCcw} title="Bank Reconciliation" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'reconciliation', api.createFinanceBankReconciliation, (form) => cleanPayload({ finance_bank_account_id: idOrNull(form.finance_bank_account_id), statement_date: form.statement_date, statement_balance: num(form.statement_balance), notes: form.notes }), 'Bank reconciliation created.')}>
+              <Select label="Bank Account" name="finance_bank_account_id" value={forms.reconciliation.finance_bank_account_id} onChange={setFinanceForm('reconciliation')} required>
+                <option value="">Select</option>
+                {bankAccounts.map((account) => <option key={account.id} value={account.id}>{account.account_name}</option>)}
+              </Select>
+              <Field label="Statement Date" type="date" name="statement_date" value={forms.reconciliation.statement_date} onChange={setFinanceForm('reconciliation')} required />
+              <Field label="Statement Balance" type="number" step="0.01" name="statement_balance" value={forms.reconciliation.statement_balance} onChange={setFinanceForm('reconciliation')} required />
+              <Field label="Notes" name="notes" value={forms.reconciliation.notes} onChange={setFinanceForm('reconciliation')} />
+              <button type="submit" className="primary-action span-2"><RefreshCcw size={17} />Reconcile</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={RefreshCcw} title="Reconciliations" />
+            <DataTable columns={['Bank', 'Statement Date', 'Statement', 'System', 'Difference', 'Status']} rows={(finance.bank_reconciliations || []).map((item) => [item.bank_account?.account_name || '', shortDate(item.statement_date), money(item.statement_balance), money(item.system_balance), money(item.difference), <Badge key="status" value={item.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'chart-of-accounts' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Layers3} title="Account" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'account', api.createFinanceAccount, (form) => cleanPayload({ account_code: form.account_code, account_name: form.account_name, account_type: form.account_type, normal_balance: form.normal_balance, description: form.description }), 'Account created.')}>
+              <Field label="Account Code" name="account_code" value={forms.account.account_code} onChange={setFinanceForm('account')} placeholder="Auto-generated" />
+              <Field label="Account Name" name="account_name" value={forms.account.account_name} onChange={setFinanceForm('account')} required />
+              <Select label="Type" name="account_type" value={forms.account.account_type} onChange={setFinanceForm('account')}>
+                <option value="asset">Asset</option>
+                <option value="liability">Liability</option>
+                <option value="equity">Equity</option>
+                <option value="revenue">Revenue</option>
+                <option value="expense">Expense</option>
+              </Select>
+              <Select label="Normal Balance" name="normal_balance" value={forms.account.normal_balance} onChange={setFinanceForm('account')}>
+                <option value="debit">Debit</option>
+                <option value="credit">Credit</option>
+              </Select>
+              <Field label="Description" name="description" value={forms.account.description} onChange={setFinanceForm('account')} />
+              <button type="submit" className="primary-action span-2"><Plus size={17} />Create account</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Layers3} title="Chart of Accounts" />
+            <DataTable columns={['Code', 'Account', 'Type', 'Normal', 'Debit', 'Credit', 'Balance', 'Active']} rows={accountRows.map((account) => [account.account_code, account.account_name, labelize(account.account_type), labelize(account.normal_balance), money(account.debit), money(account.credit), money(account.balance), account.is_active ? 'Yes' : 'No'])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'general-ledger' && (
+        <section className="panel">
+          <PanelTitle icon={FileText} title="General Ledger" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="general-ledger.csv" columns={['Date', 'Account', 'Reference', 'Description', 'Debit', 'Credit', 'Balance']} rows={ledgerRows.map((entry) => [entry.entry_date, `${entry.account?.account_code || ''} ${entry.account?.account_name || ''}`, entry.reference || '', entry.description || '', entry.debit, entry.credit, entry.running_balance])} />
+          </div>
+          <DataTable columns={['Date', 'Account', 'Project', 'Reference', 'Debit', 'Credit', 'Balance']} rows={ledgerRows.map((entry) => [shortDate(entry.entry_date), `${entry.account?.account_code || ''} ${entry.account?.account_name || ''}`, entry.project?.name || '', entry.reference || '', money(entry.debit), money(entry.credit), money(entry.running_balance)])} />
+        </section>
+      )}
+
+      {activeTab === 'journal-entries' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Send} title="Journal Entry" />
+            <form className="form-grid two" onSubmit={createJournalEntry}>
+              <Field label="Date" type="date" name="entry_date" value={forms.journal.entry_date} onChange={setFinanceForm('journal')} required />
+              <Field label="Reference" name="reference" value={forms.journal.reference} onChange={setFinanceForm('journal')} />
+              <Field label="Debit code" name="debit_account_code" value={forms.journal.debit_account_code} onChange={setFinanceForm('journal')} required />
+              <Field label="Debit account" name="debit_account_name" value={forms.journal.debit_account_name} onChange={setFinanceForm('journal')} required />
+              <Field label="Credit code" name="credit_account_code" value={forms.journal.credit_account_code} onChange={setFinanceForm('journal')} required />
+              <Field label="Credit account" name="credit_account_name" value={forms.journal.credit_account_name} onChange={setFinanceForm('journal')} required />
+              <Field label="Debit amount" type="number" step="0.01" name="debit_amount" value={forms.journal.debit_amount} onChange={setFinanceForm('journal')} required />
+              <Field label="Credit amount" type="number" step="0.01" name="credit_amount" value={forms.journal.credit_amount} onChange={setFinanceForm('journal')} placeholder="Matches debit" />
+              <button type="submit" className="primary-action span-2"><Send size={17} />Post journal</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Journal Entries" />
+            <DataTable columns={['No.', 'Date', 'Status', 'Debit', 'Credit']} rows={(finance.journal_entries || []).map((entry) => [entry.entry_number, shortDate(entry.entry_date), <Badge key="status" value={entry.status} />, money(entry.total_debit), money(entry.total_credit)])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'cost-centers' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={FolderKanban} title="Cost Center" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'costCenter', api.createFinanceCostCenter, (form) => cleanPayload({ project_id: idOrNull(form.project_id), code: form.code, name: form.name, type: form.type, description: form.description }), 'Cost center created.')}>
+              <Select label="Project" name="project_id" value={forms.costCenter.project_id} onChange={setFinanceForm('costCenter')}>
+                <option value="">No project</option>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </Select>
+              <Field label="Code" name="code" value={forms.costCenter.code} onChange={setFinanceForm('costCenter')} placeholder="Auto-generated" />
+              <Field label="Name" name="name" value={forms.costCenter.name} onChange={setFinanceForm('costCenter')} required />
+              <Select label="Type" name="type" value={forms.costCenter.type} onChange={setFinanceForm('costCenter')}>
+                <option value="project">Project</option>
+                <option value="workshop">Workshop</option>
+                <option value="head_office">Head office</option>
+                <option value="equipment_yard">Equipment yard</option>
+                <option value="department">Department</option>
+              </Select>
+              <Field label="Description" name="description" value={forms.costCenter.description} onChange={setFinanceForm('costCenter')} />
+              <button type="submit" className="primary-action span-2"><Plus size={17} />Create cost center</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={FolderKanban} title="Cost Centers" />
+            <DataTable columns={['Code', 'Name', 'Type', 'Project', 'Status']} rows={(finance.cost_centers || []).map((center) => [center.code, center.name, labelize(center.type), center.project?.name || '', <Badge key="status" value={center.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'fixed-assets' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Truck} title="Fixed Asset" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'fixedAsset', api.createFinanceFixedAsset, (form) => cleanPayload({ equipment_asset_id: idOrNull(form.equipment_asset_id), branch_id: idOrNull(form.branch_id), name: form.name, category: form.category, purchase_date: form.purchase_date, purchase_cost: num(form.purchase_cost), depreciation_method: form.depreciation_method, useful_life_months: Number(form.useful_life_months || 60) }), 'Fixed asset created.')}>
+              <Select label="Equipment Link" name="equipment_asset_id" value={forms.fixedAsset.equipment_asset_id} onChange={setFinanceForm('fixedAsset')}>
+                <option value="">None</option>
+                {(finance.fixed_assets?.equipment_candidates || []).map((asset) => <option key={asset.id} value={asset.id}>{asset.equipment_number} - {asset.name}</option>)}
+              </Select>
+              <Select label="Branch" name="branch_id" value={forms.fixedAsset.branch_id} onChange={setFinanceForm('fixedAsset')}>
+                <option value="">Company wide</option>
+                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </Select>
+              <Field label="Name" name="name" value={forms.fixedAsset.name} onChange={setFinanceForm('fixedAsset')} required />
+              <Field label="Category" name="category" value={forms.fixedAsset.category} onChange={setFinanceForm('fixedAsset')} />
+              <Field label="Purchase Date" type="date" name="purchase_date" value={forms.fixedAsset.purchase_date} onChange={setFinanceForm('fixedAsset')} />
+              <Field label="Purchase Cost" type="number" step="0.01" name="purchase_cost" value={forms.fixedAsset.purchase_cost} onChange={setFinanceForm('fixedAsset')} required />
+              <Select label="Depreciation" name="depreciation_method" value={forms.fixedAsset.depreciation_method} onChange={setFinanceForm('fixedAsset')}>
+                <option value="straight_line">Straight line</option>
+                <option value="reducing_balance">Reducing balance</option>
+                <option value="none">None</option>
+              </Select>
+              <Field label="Useful Life Months" type="number" name="useful_life_months" value={forms.fixedAsset.useful_life_months} onChange={setFinanceForm('fixedAsset')} />
+              <button type="submit" className="primary-action span-2"><Plus size={17} />Add asset</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Truck} title="Fixed Assets" />
+            <DataTable columns={['No.', 'Asset', 'Category', 'Purchase Cost', 'Depreciation', 'Current Value', 'Status']} rows={(finance.fixed_assets?.assets || []).map((asset) => [asset.asset_number, asset.name, labelize(asset.category), money(asset.purchase_cost), money(asset.accumulated_depreciation), money(asset.current_value), <Badge key="status" value={asset.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'payroll' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={Clock3} label="Draft Payroll" value={money(finance.payroll_integration?.summary?.draft)} sub="Not yet approved" />
+            <Kpi icon={CheckCircle2} label="Approved Payroll" value={money(finance.payroll_integration?.summary?.approved)} sub="Awaiting payment" />
+            <Kpi icon={WalletCards} label="Paid Payroll" value={money(finance.payroll_integration?.summary?.paid)} sub="Posted payroll" />
+            <Kpi icon={Calculator} label="Tax Withheld" value={money(finance.payroll_integration?.summary?.tax_withheld)} sub="Payslip tax totals" />
+          </div>
+          <section className="panel">
+            <PanelTitle icon={Users} title="Payroll Runs" />
+            <DataTable columns={['Run', 'Period', 'Status', 'Finance', 'Gross', 'Deductions', 'Net']} rows={(finance.payroll_integration?.runs || []).map((run) => [run.run_number, `${shortDate(run.period_start)} - ${shortDate(run.period_end)}`, <Badge key="status" value={run.status} />, <Badge key="finance" value={run.finance_status || 'forecast_in_finance'} />, money(run.gross_pay), money(run.total_deductions), money(run.net_pay)])} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'taxes' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Calculator} title="Tax Rule" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'taxRule', api.createFinanceTaxRule, (form) => cleanPayload({ tax_name: form.tax_name, tax_type: form.tax_type, rate: num(form.rate), applies_to: form.applies_to, effective_from: form.effective_from }), 'Tax rule created.')}>
+              <Field label="Tax Name" name="tax_name" value={forms.taxRule.tax_name} onChange={setFinanceForm('taxRule')} required />
+              <Field label="Tax Type" name="tax_type" value={forms.taxRule.tax_type} onChange={setFinanceForm('taxRule')} required />
+              <Field label="Rate %" type="number" step="0.001" name="rate" value={forms.taxRule.rate} onChange={setFinanceForm('taxRule')} required />
+              <Select label="Applies To" name="applies_to" value={forms.taxRule.applies_to} onChange={setFinanceForm('taxRule')}>
+                <option value="sales">Sales</option>
+                <option value="purchases">Purchases</option>
+                <option value="payroll">Payroll</option>
+                <option value="retention">Retention</option>
+                <option value="all">All</option>
+              </Select>
+              <Field label="Effective From" type="date" name="effective_from" value={forms.taxRule.effective_from} onChange={setFinanceForm('taxRule')} />
+              <button type="submit" className="primary-action span-2"><Plus size={17} />Create tax rule</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Calculator} title="Taxes" />
+            <DataTable columns={['Tax', 'Type', 'Rate', 'Applies To', 'Active']} rows={(finance.taxes?.rules || []).map((rule) => [rule.tax_name, labelize(rule.tax_type), `${rule.rate}%`, labelize(rule.applies_to), rule.is_active ? 'Yes' : 'No'])} />
+            <DataTable columns={['Metric', 'Amount']} rows={[['Sales tax collected', money(finance.taxes?.sales_tax_collected)], ['Purchase tax recorded', money(finance.taxes?.purchase_tax_recorded)], ['Payroll tax withheld', money(finance.taxes?.payroll_tax_withheld)], ['Taxes payable', money(finance.taxes?.taxes_payable)]]} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'retentions' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Retention" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'retention', api.createFinanceRetention, (form) => cleanPayload({ project_id: idOrNull(form.project_id), invoice_id: idOrNull(form.invoice_id), supplier_invoice_id: idOrNull(form.supplier_invoice_id), party_type: form.party_type, base_amount: form.base_amount === '' ? null : num(form.base_amount), retention_percent: num(form.retention_percent), retention_amount: form.retention_amount === '' ? null : num(form.retention_amount), due_date: form.due_date }), 'Retention created.')}>
+              <Select label="Party" name="party_type" value={forms.retention.party_type} onChange={setFinanceForm('retention')}>
+                <option value="client">Client</option>
+                <option value="supplier">Supplier</option>
+              </Select>
+              <Select label="Project" name="project_id" value={forms.retention.project_id} onChange={setFinanceForm('retention')}>
+                <option value="">Optional</option>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </Select>
+              <Select label="Client Invoice" name="invoice_id" value={forms.retention.invoice_id} onChange={setFinanceForm('retention')}>
+                <option value="">None</option>
+                {issuedInvoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoice_number}</option>)}
+              </Select>
+              <Select label="Supplier Invoice" name="supplier_invoice_id" value={forms.retention.supplier_invoice_id} onChange={setFinanceForm('retention')}>
+                <option value="">None</option>
+                {payableInvoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoice_number}</option>)}
+              </Select>
+              <Field label="Base Amount" type="number" step="0.01" name="base_amount" value={forms.retention.base_amount} onChange={setFinanceForm('retention')} />
+              <Field label="Retention %" type="number" step="0.01" name="retention_percent" value={forms.retention.retention_percent} onChange={setFinanceForm('retention')} />
+              <Field label="Retention Amount" type="number" step="0.01" name="retention_amount" value={forms.retention.retention_amount} onChange={setFinanceForm('retention')} />
+              <Field label="Due Date" type="date" name="due_date" value={forms.retention.due_date} onChange={setFinanceForm('retention')} />
+              <button type="submit" className="primary-action span-2"><Plus size={17} />Hold retention</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Retentions" />
+            <DataTable columns={['No.', 'Party', 'Project', 'Amount', 'Released', 'Balance', 'Due', 'Status', 'Action']} rows={(finance.retentions || []).map((retention) => [retention.retention_number, labelize(retention.party_type), retention.project?.name || '', money(retention.retention_amount), money(retention.released_amount), money(retention.balance_amount), shortDate(retention.due_date), <Badge key="status" value={retention.status} />, Number(retention.balance_amount || 0) > 0 ? <button key="release" type="button" className="table-action" onClick={() => runAction(() => api.releaseFinanceRetention(retention.id, { amount: Number(retention.balance_amount || 0) }), 'Retention released.')}>Release</button> : ''])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'progress-billing' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={CalendarDays} title="Progress Billing" />
+            <form className="form-grid two" onSubmit={(event) => submitFinanceForm(event, 'progressBilling', api.createFinanceProgressBilling, (form) => cleanPayload({ project_id: idOrNull(form.project_id), milestone_name: form.milestone_name, progress_percent: num(form.progress_percent), billable_amount: num(form.billable_amount), retention_percent: num(form.retention_percent), due_date: form.due_date, create_invoice: form.create_invoice }), 'Progress billing created.')}>
+              <Select label="Project" name="project_id" value={forms.progressBilling.project_id} onChange={setFinanceForm('progressBilling')} required>
+                <option value="">Select</option>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </Select>
+              <Field label="Milestone" name="milestone_name" value={forms.progressBilling.milestone_name} onChange={setFinanceForm('progressBilling')} required />
+              <Field label="Progress %" type="number" step="0.01" name="progress_percent" value={forms.progressBilling.progress_percent} onChange={setFinanceForm('progressBilling')} required />
+              <Field label="Billable Amount" type="number" step="0.01" name="billable_amount" value={forms.progressBilling.billable_amount} onChange={setFinanceForm('progressBilling')} required />
+              <Field label="Retention %" type="number" step="0.01" name="retention_percent" value={forms.progressBilling.retention_percent} onChange={setFinanceForm('progressBilling')} />
+              <Field label="Due Date" type="date" name="due_date" value={forms.progressBilling.due_date} onChange={setFinanceForm('progressBilling')} />
+              <Field label="Create Invoice" type="checkbox" name="create_invoice" checked={forms.progressBilling.create_invoice} onChange={setFinanceForm('progressBilling')} />
+              <button type="submit" className="primary-action"><Plus size={17} />Create billing</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={CalendarDays} title="Progress Billings" />
+            <DataTable columns={['No.', 'Project', 'Milestone', 'Progress', 'Billable', 'Invoice', 'Status']} rows={(finance.progress_billings || []).map((billing) => [billing.milestone_number, billing.project?.name || '', billing.milestone_name, `${billing.progress_percent}%`, money(billing.billable_amount), billing.invoice?.invoice_number || '', <Badge key="status" value={billing.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'reports' && (
+        <div className="grid-main">
+          {[
+            ['Income Statement', 'income-statement.csv', ['line', 'amount'], finance.financial_reports?.income_statement || []],
+            ['Balance Sheet', 'balance-sheet.csv', ['line', 'amount'], finance.financial_reports?.balance_sheet || []],
+            ['Cash Flow Statement', 'cash-flow-statement.csv', ['period', 'inflows', 'outflows', 'net'], finance.financial_reports?.cash_flow_statement || []],
+            ['Trial Balance', 'trial-balance.csv', ['account_code', 'account_name', 'debit', 'credit', 'balance'], finance.financial_reports?.trial_balance || []],
+            ['Expense Analysis', 'expense-analysis.csv', ['category', 'total'], finance.financial_reports?.expense_analysis || []],
+            ['Budget Variance', 'budget-variance.csv', ['project', 'budget', 'actual', 'committed', 'remaining'], finance.financial_reports?.budget_variance || []],
+            ['Project Profitability', 'project-profitability.csv', ['project', 'client', 'recognized_revenue', 'cost', 'profit', 'margin_percent'], finance.financial_reports?.project_profitability || []],
+            ['Retention Report', 'retention-report.csv', ['party_type', 'status', 'balance'], finance.financial_reports?.retention_report || []],
+          ].map(([title, filename, keys, rows]) => (
+            <section key={title} className="panel">
+              <PanelTitle icon={Download} title={title} />
+              <div className="panel-toolbar">
+                <DownloadButton filename={filename} columns={keys.map(labelize)} rows={reportRows(rows, keys)} />
+              </div>
+              <DataTable columns={keys.map(labelize)} rows={reportRows(rows, keys).map((row) => row.map((value) => typeof value === 'number' ? money(value) : value))} />
+            </section>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'approvals' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Expense Approvals" />
+            <DataTable columns={['No.', 'Project', 'Description', 'Amount', 'Action']} rows={(finance.approvals?.expenses || []).map((expense) => [expense.expense_number, expense.project?.name || '', expense.description, money(Number(expense.amount) + Number(expense.tax_amount)), <div key="actions" className="row-actions"><button type="button" className="table-action" onClick={() => runAction(() => api.reviewExpense(expense.id, 'approved'), 'Expense approved.')}>Approve</button><button type="button" className="table-action danger" onClick={() => runAction(() => api.reviewExpense(expense.id, 'rejected'), 'Expense rejected.')}>Reject</button></div>])} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Truck} title="Supplier Invoice Approvals" />
+            <DataTable columns={['Invoice', 'Supplier', 'PO', 'Amount', 'Action']} rows={(finance.approvals?.supplier_invoices || []).map((invoice) => [invoice.invoice_number, invoice.supplier?.name || '', invoice.purchase_order?.po_number || '', money(invoice.balance_due), <div key="actions" className="row-actions"><button type="button" className="table-action" onClick={() => runAction(() => api.approveSupplierInvoice(invoice.id, { decision: 'approved' }), 'Supplier invoice approved.')}>Approve</button><button type="button" className="table-action danger" onClick={() => runAction(() => api.approveSupplierInvoice(invoice.id, { decision: 'rejected' }), 'Supplier invoice rejected.')}>Reject</button></div>])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'audit-trail' && (
+        <section className="panel">
+          <PanelTitle icon={Clock3} title="Audit Trail" />
+          <DataTable columns={['When', 'Action', 'Record', 'User', 'IP']} rows={(finance.audit_trail || []).map((log) => [timelineTime(log.created_at), labelize(log.action), String(log.auditable_type || '').split('\\').pop(), log.user_id || '', log.ip_address || ''])} />
+        </section>
+      )}
+
+      {activeTab === 'automation' && (
+        <section className="panel">
+          <PanelTitle icon={Workflow} title="Finance Automation" />
+          <DataTable columns={['Trigger', 'Status']} rows={(finance.automation?.approval_triggers || []).map((trigger) => [labelize(trigger), 'Available'])} />
+          <DataTable columns={['Metric', 'Value']} rows={[['Connected finance workflows', finance.automation?.connected_workflows || 0], ['Ledger posting', finance.finance_settings?.ledger_posting || 'automatic'], ['Audit trail', finance.finance_settings?.audit_trail_enabled ? 'Enabled' : 'Disabled']]} />
+        </section>
+      )}
+
+      {activeTab === 'settings' && (
+        <section className="panel">
+          <PanelTitle icon={Settings} title="Finance Settings" />
+          <DataTable columns={['Setting', 'Value']} rows={[['Default currency', finance.finance_settings?.default_currency || 'GHS'], ['Multi-currency', finance.finance_settings?.multi_currency_enabled ? 'Enabled' : 'Disabled'], ['Ledger posting', labelize(finance.finance_settings?.ledger_posting || 'automatic')], ['Audit trail', finance.finance_settings?.audit_trail_enabled ? 'Enabled' : 'Disabled']]} />
+        </section>
+      )}
+    </section>
+  )
+}
+
+function PeopleView({ branches, projects, suppliers, users, roles, currentUser, people, forms, setPeopleForm, setPeopleForms, createEmployee, createLeaveRequest, createPayrollRun, runAction }) {
+  const [activeTab, setActiveTab] = useState('dashboard')
+  const [accessForms, setAccessForms] = useState({
+    user: { id: '', name: '', email: '', password: '', branch_id: '', role_id: '', permissions: [], status: 'active' },
+    role: { id: '', name: '', permissions: [] },
+  })
+  const recruitment = people.recruitment || {}
+  const attendance = people.attendance || {}
+  const analytics = people.analytics || {}
+  const reports = people.reports || {}
+  const managerPortal = people.manager_portal || {}
+  const selfService = people.self_service || {}
+  const employees = people.employees || []
+  const vacancies = recruitment.vacancies || []
+  const candidates = recruitment.candidates || []
+  const applications = recruitment.applications || []
+  const interviews = recruitment.interviews || []
+  const timesheets = people.timesheets || []
+  const allocations = people.workforce_allocations || []
+  const overtimeRequests = people.overtime_requests || []
+  const trainingCourses = people.training_courses || []
+  const trainingRecords = people.training_records || []
+  const certifications = people.certifications || []
+  const ppeIssues = people.ppe_issues || []
+  const contractors = people.contractors || []
+  const employeeAssets = people.employee_assets || []
+  const documents = people.documents || []
+  const exits = people.exit_records || []
+  const activeEmployeeCount = people.summary?.active_employees || 0
+  const reportRows = (rows = [], keys = []) => (rows || []).map((row) => keys.map((key) => row?.[key] ?? ''))
+
+  const tabs = [
+    ['dashboard', 'Dashboard', BarChart3],
+    ['recruitment', 'Recruitment', Handshake],
+    ['employees', 'Employees', Users],
+    ['org', 'Organizational Chart', Building2],
+    ['attendance', 'Attendance', Clock3],
+    ['shifts', 'Shifts', CalendarDays],
+    ['timesheets', 'Timesheets', ClipboardList],
+    ['allocation', 'Workforce Allocation', MapPinned],
+    ['leave', 'Leave Management', CalendarDays],
+    ['overtime', 'Overtime', Clock3],
+    ['payroll', 'Payroll', WalletCards],
+    ['benefits', 'Benefits', ShieldCheck],
+    ['performance', 'Performance', BarChart3],
+    ['users_roles', 'Users & Roles', ShieldCheck],
+    ['training', 'Training', ClipboardList],
+    ['certifications', 'Certifications', FileText],
+    ['safety', 'Health & Safety', ShieldCheck],
+    ['ppe', 'PPE Management', Package],
+    ['contractors', 'Contractor Management', Building2],
+    ['assets', 'Employee Assets', Truck],
+    ['documents', 'Documents', FileText],
+    ['self', 'Self-Service Portal', Users],
+    ['manager', 'Manager Portal', CheckCircle2],
+    ['exit', 'Exit Management', LogOut],
+    ['reports', 'HR Reports', Download],
+    ['analytics', 'HR Analytics', BarChart3],
+    ['automation', 'Automation', Workflow],
+    ['settings', 'Settings', Settings],
+  ]
+
+  const numberOrNull = (value) => (value === '' || value === null || value === undefined ? null : Number(value))
+  const isEditingHrUser = Boolean(accessForms.user.id)
+  const isEditingHrRole = Boolean(accessForms.role.id)
+  const hrUserPermissions = normalizePermissionList(accessForms.user.permissions)
+  const hrRolePermissions = normalizePermissionList(accessForms.role.permissions)
+  const hrUserReset = () => ({
+    id: '',
+    name: '',
+    email: '',
+    password: '',
+    branch_id: branches[0]?.id || '',
+    role_id: roles[0]?.id || '',
+    permissions: rolePermissions(roles[0]),
+    status: 'active',
+  })
+  const hrRoleReset = { id: '', name: '', permissions: [] }
+  const nullablePayload = (payload) =>
+    Object.fromEntries(
+      Object.entries(payload).map(([key, value]) => [key, value === '' || value === undefined ? null : value]),
+    )
+  const resetForm = (section, overrides = {}) => {
+    setPeopleForms((current) => ({
+      ...current,
+      [section]: { ...emptyPeopleForms[section], ...overrides },
+    }))
+  }
+  const submitPeopleForm = async (event, section, action, transform, message, resetOverrides = {}) => {
+    event.preventDefault()
+    const payload = nullablePayload(transform(forms[section]))
+    const result = await runAction(() => action(payload), message)
+
+    if (result) {
+      resetForm(section, resetOverrides)
+    }
+  }
+  const employeeName = (employee) => employee?.user?.name || employee?.name || ''
+  const employeeOptions = () =>
+    employees.map((employee) => (
+      <option key={employee.id} value={employee.id}>
+        {employeeName(employee)} ({employee.employee_number})
+      </option>
+    ))
+  const projectOptions = () =>
+    projects.map((project) => (
+      <option key={project.id} value={project.id}>
+        {project.name}
+      </option>
+    ))
+  const branchOptions = () =>
+    branches.map((branch) => (
+      <option key={branch.id} value={branch.id}>
+        {branch.name}
+      </option>
+    ))
+
+  useEffect(() => {
+    const defaultBranchId = branches[0]?.id || ''
+    const defaultRole = roles[0]
+
+    setAccessForms((current) => {
+      const nextUser = {
+        ...current.user,
+        branch_id: current.user.branch_id || defaultBranchId,
+        role_id: current.user.role_id || defaultRole?.id || '',
+        permissions: current.user.permissions.length > 0 ? current.user.permissions : rolePermissions(defaultRole),
+      }
+
+      if (
+        nextUser.branch_id === current.user.branch_id &&
+        nextUser.role_id === current.user.role_id &&
+        nextUser.permissions === current.user.permissions
+      ) {
+        return current
+      }
+
+      return { ...current, user: nextUser }
+    })
+  }, [branches, roles])
+
+  function setAccessFormValue(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setAccessForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  function setHrUserRole(event) {
+    const { value } = event.target
+    const role = roles.find((item) => String(item.id) === String(value))
+
+    setAccessForms((current) => ({
+      ...current,
+      user: {
+        ...current.user,
+        role_id: value,
+        permissions: rolePermissions(role),
+      },
+    }))
+  }
+
+  function toggleAccessCategoryFor(section, category) {
+    setAccessForms((current) => {
+      const currentPermissions = normalizePermissionList(current[section].permissions)
+      const expandedPermissions = currentPermissions.includes('*') ? allAccessPermissions : currentPermissions
+      const hasCategory = category.permissions.every((permission) => expandedPermissions.includes(permission))
+      const permissions = hasCategory
+        ? expandedPermissions.filter((permission) => !category.permissions.includes(permission))
+        : [...new Set([...expandedPermissions, ...category.permissions])]
+
+      return {
+        ...current,
+        [section]: { ...current[section], permissions },
+      }
+    })
+  }
+
+  function setAllAccessFor(section) {
+    setAccessForms((current) => ({
+      ...current,
+      [section]: { ...current[section], permissions: allAccessPermissions },
+    }))
+  }
+
+  function clearAccessFor(section) {
+    setAccessForms((current) => ({
+      ...current,
+      [section]: { ...current[section], permissions: [] },
+    }))
+  }
+
+  function editHrUser(item) {
+    setAccessForms((current) => ({
+      ...current,
+      user: {
+        id: item.id,
+        name: item.name || '',
+        email: item.email || '',
+        password: '',
+        branch_id: item.branch_id || item.branch?.id || branches[0]?.id || '',
+        role_id: item.role_id || item.role?.id || roles[0]?.id || '',
+        permissions: explicitUserPermissions(item),
+        status: item.status || 'active',
+      },
+    }))
+  }
+
+  function saveHrUser(event) {
+    event.preventDefault()
+
+    const payload = {
+      name: accessForms.user.name,
+      email: accessForms.user.email,
+      branch_id: Number(accessForms.user.branch_id),
+      role_id: Number(accessForms.user.role_id),
+      permissions: hrUserPermissions,
+      status: accessForms.user.status || 'active',
+    }
+
+    if (accessForms.user.password) {
+      payload.password = accessForms.user.password
+    }
+
+    const request = isEditingHrUser
+      ? () => api.updateUser(accessForms.user.id, payload)
+      : () => api.createUser(payload)
+
+    runAction(request, isEditingHrUser ? 'User updated.' : 'User added.').then((result) => {
+      if (result) {
+        setAccessForms((current) => ({ ...current, user: hrUserReset() }))
+      }
+    })
+  }
+
+  function deleteHrUser(item) {
+    if (!window.confirm(`Delete ${item.name}? This removes their Structra access.`)) {
+      return
+    }
+
+    runAction(() => api.deleteUser(item.id), 'User deleted.').then((result) => {
+      if (result && accessForms.user.id === item.id) {
+        setAccessForms((current) => ({ ...current, user: hrUserReset() }))
+      }
+    })
+  }
+
+  function editHrRole(item) {
+    setAccessForms((current) => ({
+      ...current,
+      role: {
+        id: item.id,
+        name: item.name || '',
+        permissions: rolePermissions(item),
+      },
+    }))
+  }
+
+  function saveHrRole(event) {
+    event.preventDefault()
+
+    const payload = {
+      name: accessForms.role.name,
+      permissions: hrRolePermissions,
+    }
+    const request = isEditingHrRole
+      ? () => api.updateRole(accessForms.role.id, payload)
+      : () => api.createRole(payload)
+
+    runAction(request, isEditingHrRole ? 'Role updated.' : 'Role created.').then((result) => {
+      if (result) {
+        setAccessForms((current) => ({ ...current, role: hrRoleReset }))
+      }
+    })
+  }
+
+  function deleteHrRole(item) {
+    if (!window.confirm(`Delete ${roleLabel(item)}? Users must be assigned to another role first.`)) {
+      return
+    }
+
+    runAction(() => api.deleteRole(item.id), 'Role deleted.').then((result) => {
+      if (result && accessForms.role.id === item.id) {
+        setAccessForms((current) => ({ ...current, role: hrRoleReset }))
+      }
+    })
+  }
+
+  const workforceRows = employees.map((employee) => [
+    employee.employee_number,
+    employeeName(employee),
+    employee.department || '',
+    employee.position || '',
+    employee.current_project?.name || '',
+    employee.employment_type ? labelize(employee.employment_type) : '',
+    money(employee.base_salary),
+    <Badge key="status" value={employee.status} />,
+  ])
+  const headcountRows = reportRows(reports.headcount_by_department || [], ['department', 'employees'])
+  const projectHeadcountRows = reportRows(reports.employees_by_project || [], ['project', 'employees'])
+  const timesheetCostRows = reportRows(reports.timesheet_costs || [], ['project', 'hours', 'overtime', 'cost'])
+  const trainingMatrixRows = reportRows(reports.training_matrix || [], ['employee', 'course', 'status', 'completed_on'])
+  const certificationRows = reportRows(reports.certification_expiry || [], ['employee', 'certification', 'expires_on', 'status'])
+  const turnoverRows = reportRows(reports.turnover || [], ['period', 'exits'])
+
+  return (
+    <section className="view-stack">
+      <nav className="module-tabs" aria-label="HR and workforce module navigation">
+        {tabs.map(([key, label, Icon]) => (
+          <button key={key} type="button" className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}>
+            <Icon size={16} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === 'dashboard' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={Users} label="Total workforce" value={people.summary?.total_workforce || activeEmployeeCount} sub="Employees plus contractor workers" />
+            <Kpi icon={Handshake} label="Open vacancies" value={people.summary?.open_vacancies || 0} sub="Hiring demand" />
+            <Kpi icon={Clock3} label="Attendance rate" value={`${people.summary?.attendance_rate || 0}%`} sub={`${people.summary?.present_today || 0} present today`} />
+            <Kpi icon={WalletCards} label="Payroll liability" value={money(people.summary?.payroll_liability)} sub="Linked to Finance" />
+            <Kpi icon={AlertTriangle} label="Expiring certs" value={people.summary?.expiring_certifications || 0} sub="Within 60 days" />
+            <Kpi icon={CalendarDays} label="Pending leave" value={people.summary?.pending_leave || 0} sub="Awaiting approval" />
+          </div>
+
+          <div className="grid-main">
+            <ChartPanel icon={Users} title="Headcount By Department">
+              <AnalyticsBarChart data={analytics.headcount_by_department || []} bars={[{ key: 'value', color: '#2364d8' }]} />
+            </ChartPanel>
+            <ChartPanel icon={MapPinned} title="Workforce By Project">
+              <AnalyticsBarChart data={analytics.employees_by_project || []} bars={[{ key: 'value', color: '#188a5a' }]} />
+            </ChartPanel>
+          </div>
+
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Workforce Priorities" />
+            <DataTable
+              columns={['Area', 'Current Position', 'Action']}
+              rows={[
+                ['Recruitment', `${vacancies.filter((item) => item.status === 'open').length} open vacancies`, 'Fill project-critical roles and convert hired applications to employee profiles.'],
+                ['Attendance', `${attendance.summary?.absent_today || 0} absent today`, 'Review site attendance exceptions and missing clock-outs.'],
+                ['Overtime', `${people.summary?.overtime_hours || 0} hours recorded`, 'Approve justified overtime before payroll is generated.'],
+                ['Training', `${people.summary?.training_compliance || 0}% compliance`, 'Schedule mandatory safety and trade training for uncovered roles.'],
+                ['Certifications', `${people.summary?.expiring_certifications || 0} expiring`, 'Renew high-risk licenses before site deployment.'],
+              ]}
+            />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'recruitment' && (
+        <>
+          <div className="grid-main">
+            <section className="panel">
+              <PanelTitle icon={Handshake} title="Job Vacancy" />
+              <form
+                className="form-grid two"
+                onSubmit={(event) =>
+                  submitPeopleForm(
+                    event,
+                    'vacancy',
+                    api.createJobVacancy,
+                    (form) => ({
+                      ...form,
+                      branch_id: numberOrNull(form.branch_id),
+                      project_id: numberOrNull(form.project_id),
+                      openings: Number(form.openings || 1),
+                    }),
+                    'Job vacancy created.',
+                    { branch_id: forms.vacancy.branch_id, project_id: forms.vacancy.project_id },
+                  )
+                }
+              >
+                <Select label="Branch" name="branch_id" value={forms.vacancy.branch_id} onChange={setPeopleForm('vacancy')}>
+                  <option value="">Company-wide</option>
+                  {branchOptions()}
+                </Select>
+                <Select label="Project" name="project_id" value={forms.vacancy.project_id} onChange={setPeopleForm('vacancy')}>
+                  <option value="">Not project specific</option>
+                  {projectOptions()}
+                </Select>
+                <Field label="Role needed" name="title" value={forms.vacancy.title} onChange={setPeopleForm('vacancy')} required />
+                <Field label="Department" name="department" value={forms.vacancy.department} onChange={setPeopleForm('vacancy')} />
+                <Select label="Employment type" name="employment_type" value={forms.vacancy.employment_type} onChange={setPeopleForm('vacancy')}>
+                  <option value="full_time">Full time</option>
+                  <option value="part_time">Part time</option>
+                  <option value="contract">Contract</option>
+                  <option value="casual">Casual</option>
+                </Select>
+                <Select label="Priority" name="priority" value={forms.vacancy.priority} onChange={setPeopleForm('vacancy')}>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </Select>
+                <Field label="Openings" type="number" name="openings" min="1" value={forms.vacancy.openings} onChange={setPeopleForm('vacancy')} />
+                <Field label="Closes on" type="date" name="closes_on" value={forms.vacancy.closes_on} onChange={setPeopleForm('vacancy')} />
+                <TextArea label="Required skills" className="span-2" name="required_skills" value={forms.vacancy.required_skills} onChange={setPeopleForm('vacancy')} />
+                <TextArea label="Description" className="span-2" name="description" value={forms.vacancy.description} onChange={setPeopleForm('vacancy')} />
+                <button type="submit" className="primary-action span-2">
+                  <Plus size={17} />
+                  Create vacancy
+                </button>
+              </form>
+            </section>
+
+            <section className="panel">
+              <PanelTitle icon={Users} title="Candidate Database" />
+              <form
+                className="form-grid two"
+                onSubmit={(event) =>
+                  submitPeopleForm(
+                    event,
+                    'candidate',
+                    api.createCandidate,
+                    (form) => ({ ...form, rating: Number(form.rating || 3) }),
+                    'Candidate added.',
+                  )
+                }
+              >
+                <Field label="Full name" name="full_name" value={forms.candidate.full_name} onChange={setPeopleForm('candidate')} required />
+                <Field label="Email" type="email" name="email" value={forms.candidate.email} onChange={setPeopleForm('candidate')} />
+                <Field label="Phone" name="phone" value={forms.candidate.phone} onChange={setPeopleForm('candidate')} />
+                <Field label="Trade" name="trade" value={forms.candidate.trade} onChange={setPeopleForm('candidate')} />
+                <Field label="Location" name="location" value={forms.candidate.location} onChange={setPeopleForm('candidate')} />
+                <Select label="Source" name="source" value={forms.candidate.source} onChange={setPeopleForm('candidate')}>
+                  <option value="direct">Direct</option>
+                  <option value="referral">Referral</option>
+                  <option value="agency">Agency</option>
+                  <option value="job_board">Job board</option>
+                </Select>
+                <Field label="Rating" type="number" min="1" max="5" name="rating" value={forms.candidate.rating} onChange={setPeopleForm('candidate')} />
+                <TextArea label="Notes" className="span-2" name="notes" value={forms.candidate.notes} onChange={setPeopleForm('candidate')} />
+                <button type="submit" className="primary-action span-2">
+                  <Plus size={17} />
+                  Add candidate
+                </button>
+              </form>
+            </section>
+          </div>
+
+          <div className="grid-main">
+            <section className="panel">
+              <PanelTitle icon={ClipboardList} title="Applications & Interviews" />
+              <form
+                className="form-grid two"
+                onSubmit={(event) =>
+                  submitPeopleForm(
+                    event,
+                    'application',
+                    api.createWorkforceApplication,
+                    (form) => ({
+                      ...form,
+                      job_vacancy_id: Number(form.job_vacancy_id),
+                      candidate_id: Number(form.candidate_id),
+                      expected_salary: Number(form.expected_salary || 0),
+                      screening_score: Number(form.screening_score || 0),
+                    }),
+                    'Application created.',
+                  )
+                }
+              >
+                <Select label="Vacancy" name="job_vacancy_id" value={forms.application.job_vacancy_id} onChange={setPeopleForm('application')} required>
+                  <option value="">Select</option>
+                  {vacancies.map((vacancy) => (
+                    <option key={vacancy.id} value={vacancy.id}>
+                      {vacancy.vacancy_number} - {vacancy.title}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Candidate" name="candidate_id" value={forms.application.candidate_id} onChange={setPeopleForm('application')} required>
+                  <option value="">Select</option>
+                  {candidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.full_name}
+                    </option>
+                  ))}
+                </Select>
+                <Field label="Expected salary" type="number" name="expected_salary" value={forms.application.expected_salary} onChange={setPeopleForm('application')} />
+                <Field label="Screening score" type="number" min="0" max="100" name="screening_score" value={forms.application.screening_score} onChange={setPeopleForm('application')} />
+                <Select label="Background check" name="background_check_status" value={forms.application.background_check_status} onChange={setPeopleForm('application')}>
+                  <option value="pending">Pending</option>
+                  <option value="clear">Clear</option>
+                  <option value="flagged">Flagged</option>
+                </Select>
+                <Select label="Offer" name="offer_status" value={forms.application.offer_status} onChange={setPeopleForm('application')}>
+                  <option value="not_sent">Not sent</option>
+                  <option value="sent">Sent</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="declined">Declined</option>
+                </Select>
+                <TextArea label="Notes" className="span-2" name="notes" value={forms.application.notes} onChange={setPeopleForm('application')} />
+                <button type="submit" className="primary-action span-2">
+                  <Plus size={17} />
+                  Create application
+                </button>
+              </form>
+
+              <form
+                className="form-grid two section-form"
+                onSubmit={(event) =>
+                  submitPeopleForm(
+                    event,
+                    'interview',
+                    api.createWorkforceInterview,
+                    (form) => ({ ...form, application_id: Number(form.application_id), score: Number(form.score || 0) }),
+                    'Interview recorded.',
+                  )
+                }
+              >
+                <Select label="Application" name="application_id" value={forms.interview.application_id} onChange={setPeopleForm('interview')} required>
+                  <option value="">Select</option>
+                  {applications.map((application) => (
+                    <option key={application.id} value={application.id}>
+                      {application.application_number} - {application.candidate?.full_name}
+                    </option>
+                  ))}
+                </Select>
+                <Field label="Scheduled" type="datetime-local" name="scheduled_at" value={forms.interview.scheduled_at} onChange={setPeopleForm('interview')} />
+                <Field label="Stage" name="stage" value={forms.interview.stage} onChange={setPeopleForm('interview')} />
+                <Select label="Result" name="result" value={forms.interview.result} onChange={setPeopleForm('interview')}>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="passed">Passed</option>
+                  <option value="failed">Failed</option>
+                  <option value="rescheduled">Rescheduled</option>
+                </Select>
+                <Field label="Score" type="number" min="0" max="100" name="score" value={forms.interview.score} onChange={setPeopleForm('interview')} />
+                <Field label="Interviewers" name="interviewers" value={forms.interview.interviewers} onChange={setPeopleForm('interview')} />
+                <TextArea label="Notes" className="span-2" name="notes" value={forms.interview.notes} onChange={setPeopleForm('interview')} />
+                <button type="submit" className="primary-action span-2">
+                  <Plus size={17} />
+                  Record interview
+                </button>
+              </form>
+            </section>
+
+            <section className="panel">
+              <PanelTitle icon={CheckCircle2} title="Hire To Employee Profile" />
+              <form className="form-grid two">
+                <Select label="Branch" name="branch_id" value={forms.hire.branch_id} onChange={setPeopleForm('hire')}>
+                  <option value="">Use vacancy branch</option>
+                  {branchOptions()}
+                </Select>
+                <Select label="Project" name="project_id" value={forms.hire.project_id} onChange={setPeopleForm('hire')}>
+                  <option value="">Use vacancy project</option>
+                  {projectOptions()}
+                </Select>
+                <Select label="Manager" name="manager_id" value={forms.hire.manager_id} onChange={setPeopleForm('hire')}>
+                  <option value="">No manager</option>
+                  {users.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+                <Field label="Base salary" type="number" name="base_salary" value={forms.hire.base_salary} onChange={setPeopleForm('hire')} />
+                <Field label="Hourly rate" type="number" name="hourly_rate" value={forms.hire.hourly_rate} onChange={setPeopleForm('hire')} />
+                <Field label="Hire date" type="date" name="hire_date" value={forms.hire.hire_date} onChange={setPeopleForm('hire')} />
+              </form>
+              <DataTable
+                columns={['Application', 'Role', 'Candidate', 'Status', 'Offer', 'Action']}
+                rows={applications.map((application) => [
+                  application.application_number,
+                  application.vacancy?.title || '',
+                  application.candidate?.full_name || '',
+                  <Badge key="status" value={application.status} />,
+                  <Badge key="offer" value={application.offer_status} />,
+                  application.status !== 'hired' ? (
+                    <button
+                      key="hire"
+                      type="button"
+                      className="table-action"
+                      onClick={() =>
+                        runAction(
+                          () =>
+                            api.hireWorkforceApplication(application.id, nullablePayload({
+                              branch_id: numberOrNull(forms.hire.branch_id),
+                              project_id: numberOrNull(forms.hire.project_id),
+                              manager_id: numberOrNull(forms.hire.manager_id),
+                              base_salary: numberOrNull(forms.hire.base_salary),
+                              hourly_rate: numberOrNull(forms.hire.hourly_rate),
+                              hire_date: forms.hire.hire_date,
+                            })),
+                          'Candidate hired and employee profile created.',
+                        )
+                      }
+                    >
+                      Hire
+                    </button>
+                  ) : (
+                    'Hired'
+                  ),
+                ])}
+              />
+            </section>
+          </div>
+
+          <section className="panel">
+            <PanelTitle icon={Handshake} title="Open Vacancies" />
+            <DataTable columns={['No.', 'Role', 'Project', 'Openings', 'Priority', 'Status', 'Applications']} rows={vacancies.map((vacancy) => [vacancy.vacancy_number, vacancy.title, vacancy.project?.name || '', vacancy.openings, <Badge key="priority" value={vacancy.priority} />, <Badge key="status" value={vacancy.status} />, vacancy.applications?.length || 0])} />
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={CalendarDays} title="Interview Schedule" />
+            <DataTable columns={['No.', 'Candidate', 'Role', 'Scheduled', 'Stage', 'Result', 'Score']} rows={interviews.map((interview) => [interview.interview_number, interview.application?.candidate?.full_name || '', interview.application?.vacancy?.title || '', timelineTime(interview.scheduled_at), interview.stage, <Badge key="result" value={interview.result} />, interview.score])} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'employees' && (
+        <>
+          <section className="panel">
+            <PanelTitle icon={Users} title="Complete Employee Profile" />
+            <form className="form-grid two" onSubmit={createEmployee}>
+              <Select label="User" name="user_id" value={forms.employee.user_id} onChange={setPeopleForm('employee')} required>
+                <option value="">Select</option>
+                {users.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Branch" name="branch_id" value={forms.employee.branch_id} onChange={setPeopleForm('employee')} required>
+                {branchOptions()}
+              </Select>
+              <Select label="Manager" name="manager_id" value={forms.employee.manager_id} onChange={setPeopleForm('employee')}>
+                <option value="">No manager</option>
+                {users.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Current project" name="current_project_id" value={forms.employee.current_project_id} onChange={setPeopleForm('employee')}>
+                <option value="">Unassigned</option>
+                {projectOptions()}
+              </Select>
+              <Field label="Department" name="department" value={forms.employee.department} onChange={setPeopleForm('employee')} />
+              <Field label="Position" name="position" value={forms.employee.position} onChange={setPeopleForm('employee')} />
+              <Select label="Employment type" name="employment_type" value={forms.employee.employment_type} onChange={setPeopleForm('employee')}>
+                <option value="full_time">Full time</option>
+                <option value="part_time">Part time</option>
+                <option value="contract">Contract</option>
+                <option value="casual">Casual</option>
+              </Select>
+              <Field label="Hire date" type="date" name="hire_date" value={forms.employee.hire_date} onChange={setPeopleForm('employee')} />
+              <Field label="Gender" name="gender" value={forms.employee.gender} onChange={setPeopleForm('employee')} />
+              <Field label="Date of birth" type="date" name="date_of_birth" value={forms.employee.date_of_birth} onChange={setPeopleForm('employee')} />
+              <Field label="Nationality" name="nationality" value={forms.employee.nationality} onChange={setPeopleForm('employee')} />
+              <Field label="Marital status" name="marital_status" value={forms.employee.marital_status} onChange={setPeopleForm('employee')} />
+              <Field label="National ID" name="national_id" value={forms.employee.national_id} onChange={setPeopleForm('employee')} />
+              <Field label="Tax number" name="tax_number" value={forms.employee.tax_number} onChange={setPeopleForm('employee')} />
+              <Field label="SSNIT number" name="ssnit_number" value={forms.employee.ssnit_number} onChange={setPeopleForm('employee')} />
+              <Field label="Base salary" type="number" name="base_salary" value={forms.employee.base_salary} onChange={setPeopleForm('employee')} />
+              <Field label="Hourly rate" type="number" name="hourly_rate" value={forms.employee.hourly_rate} onChange={setPeopleForm('employee')} />
+              <Field label="Allowances" type="number" name="allowances" value={forms.employee.allowances} onChange={setPeopleForm('employee')} />
+              <Field label="Bonuses" type="number" name="bonuses" value={forms.employee.bonuses} onChange={setPeopleForm('employee')} />
+              <Field label="Deductions" type="number" name="deductions" value={forms.employee.deductions} onChange={setPeopleForm('employee')} />
+              <Field label="Bank name" name="bank_name" value={forms.employee.bank_name} onChange={setPeopleForm('employee')} />
+              <Field label="Bank account" name="bank_account" value={forms.employee.bank_account} onChange={setPeopleForm('employee')} />
+              <Field label="Emergency contact" name="emergency_contact" value={forms.employee.emergency_contact} onChange={setPeopleForm('employee')} />
+              <TextArea label="Skills" className="span-2" name="skills" value={forms.employee.skills} onChange={setPeopleForm('employee')} />
+              <TextArea label="Licenses" className="span-2" name="licenses" value={forms.employee.licenses} onChange={setPeopleForm('employee')} />
+              <TextArea label="Medical notes" className="span-2" name="medical_notes" value={forms.employee.medical_notes} onChange={setPeopleForm('employee')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Create employee profile
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={Users} title="Employee Register" />
+            <DownloadButton filename="hr-workforce-employee-register.csv" columns={['No.', 'Name', 'Department', 'Position', 'Project', 'Employment Type', 'Salary', 'Status']} rows={workforceRows.map((row) => row.map((cell) => (typeof cell === 'string' || typeof cell === 'number' ? cell : '')))} />
+            <DataTable columns={['No.', 'Name', 'Department', 'Position', 'Project', 'Employment Type', 'Salary', 'Status']} rows={workforceRows} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'org' && (
+        <section className="panel">
+          <PanelTitle icon={Building2} title="Organizational Chart" />
+          <DataTable
+            columns={['Employee', 'Manager', 'Department', 'Role', 'Branch', 'Project']}
+            rows={employees.map((employee) => [
+              employeeName(employee),
+              employee.manager?.name || '',
+              employee.department || '',
+              employee.position || '',
+              employee.branch?.name || '',
+              employee.current_project?.name || '',
+            ])}
+          />
+        </section>
+      )}
+
+      {activeTab === 'attendance' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={CheckCircle2} label="Present today" value={attendance.summary?.present_today || 0} sub="Clocked in" />
+            <Kpi icon={AlertTriangle} label="Absent today" value={attendance.summary?.absent_today || 0} sub="Expected active staff" />
+            <Kpi icon={Clock3} label="Late today" value={attendance.summary?.late_today || 0} sub="Marked late" />
+            <Kpi icon={BarChart3} label="Attendance rate" value={`${attendance.summary?.attendance_rate || 0}%`} sub="Today" />
+          </div>
+          <section className="panel">
+            <PanelTitle icon={Clock3} title="Attendance Records" />
+            <DataTable columns={['Employee', 'Project', 'Clock in', 'Clock out', 'Hours', 'Mode', 'Status']} rows={(attendance.records || []).map((record) => [record.user?.name || '', record.project_id || '', timelineTime(record.clock_in_at), timelineTime(record.clock_out_at), record.hours_worked || '', labelize(record.capture_mode || record.method || 'manual'), <Badge key="status" value={record.status} />])} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'shifts' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={CalendarDays} title="Shift Management" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'shift',
+                  api.createWorkforceShift,
+                  (form) => ({
+                    ...form,
+                    branch_id: numberOrNull(form.branch_id),
+                    project_id: numberOrNull(form.project_id),
+                    break_minutes: Number(form.break_minutes || 0),
+                  }),
+                  'Shift created.',
+                  { branch_id: forms.shift.branch_id, project_id: forms.shift.project_id },
+                )
+              }
+            >
+              <Field label="Shift name" name="name" value={forms.shift.name} onChange={setPeopleForm('shift')} required />
+              <Select label="Type" name="shift_type" value={forms.shift.shift_type} onChange={setPeopleForm('shift')}>
+                <option value="day">Day</option>
+                <option value="night">Night</option>
+                <option value="weekend">Weekend</option>
+                <option value="rotating">Rotating</option>
+              </Select>
+              <Field label="Start" type="time" name="start_time" value={forms.shift.start_time} onChange={setPeopleForm('shift')} required />
+              <Field label="End" type="time" name="end_time" value={forms.shift.end_time} onChange={setPeopleForm('shift')} required />
+              <Field label="Break minutes" type="number" name="break_minutes" value={forms.shift.break_minutes} onChange={setPeopleForm('shift')} />
+              <Select label="Branch" name="branch_id" value={forms.shift.branch_id} onChange={setPeopleForm('shift')}>
+                <option value="">Any branch</option>
+                {branchOptions()}
+              </Select>
+              <Select label="Project" name="project_id" value={forms.shift.project_id} onChange={setPeopleForm('shift')}>
+                <option value="">Any project</option>
+                {projectOptions()}
+              </Select>
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Create shift
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={MapPinned} title="Shift Assignment" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'shiftAssignment',
+                  api.createShiftAssignment,
+                  (form) => ({
+                    ...form,
+                    shift_id: Number(form.shift_id),
+                    employee_profile_id: Number(form.employee_profile_id),
+                    project_id: numberOrNull(form.project_id),
+                  }),
+                  'Shift assigned.',
+                  { shift_id: forms.shiftAssignment.shift_id, project_id: forms.shiftAssignment.project_id },
+                )
+              }
+            >
+              <Select label="Shift" name="shift_id" value={forms.shiftAssignment.shift_id} onChange={setPeopleForm('shiftAssignment')} required>
+                <option value="">Select</option>
+                {(people.shifts || []).map((shift) => (
+                  <option key={shift.id} value={shift.id}>
+                    {shift.name}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Employee" name="employee_profile_id" value={forms.shiftAssignment.employee_profile_id} onChange={setPeopleForm('shiftAssignment')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Project" name="project_id" value={forms.shiftAssignment.project_id} onChange={setPeopleForm('shiftAssignment')}>
+                <option value="">Use shift project</option>
+                {projectOptions()}
+              </Select>
+              <Field label="Starts on" type="date" name="starts_on" value={forms.shiftAssignment.starts_on} onChange={setPeopleForm('shiftAssignment')} required />
+              <Field label="Ends on" type="date" name="ends_on" value={forms.shiftAssignment.ends_on} onChange={setPeopleForm('shiftAssignment')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Assign shift
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={CalendarDays} title="Active Shifts" />
+            <DataTable columns={['Code', 'Name', 'Type', 'Time', 'Branch', 'Project', 'Status']} rows={(people.shifts || []).map((shift) => [shift.shift_code, shift.name, labelize(shift.shift_type), `${shift.start_time} - ${shift.end_time}`, shift.branch?.name || '', shift.project?.name || '', <Badge key="status" value={shift.status} />])} />
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={Users} title="Shift Assignments" />
+            <DataTable columns={['Employee', 'Shift', 'Project', 'Dates', 'Status']} rows={(people.shift_assignments || []).map((assignment) => [assignment.employee_profile?.user?.name || '', assignment.shift?.name || '', assignment.project?.name || '', `${shortDate(assignment.starts_on)} - ${shortDate(assignment.ends_on)}`, <Badge key="status" value={assignment.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'timesheets' && (
+        <>
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Timesheet Entry" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'timesheet',
+                  api.createTimesheet,
+                  (form) => ({
+                    ...form,
+                    employee_profile_id: Number(form.employee_profile_id),
+                    project_id: numberOrNull(form.project_id),
+                    shift_id: numberOrNull(form.shift_id),
+                    hours_worked: Number(form.hours_worked || 0),
+                    overtime_hours: Number(form.overtime_hours || 0),
+                    cost_rate: numberOrNull(form.cost_rate),
+                  }),
+                  'Timesheet submitted.',
+                  { employee_profile_id: forms.timesheet.employee_profile_id, project_id: forms.timesheet.project_id, shift_id: forms.timesheet.shift_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.timesheet.employee_profile_id} onChange={setPeopleForm('timesheet')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Project" name="project_id" value={forms.timesheet.project_id} onChange={setPeopleForm('timesheet')}>
+                <option value="">Unassigned</option>
+                {projectOptions()}
+              </Select>
+              <Select label="Shift" name="shift_id" value={forms.timesheet.shift_id} onChange={setPeopleForm('timesheet')}>
+                <option value="">No shift</option>
+                {(people.shifts || []).map((shift) => (
+                  <option key={shift.id} value={shift.id}>
+                    {shift.name}
+                  </option>
+                ))}
+              </Select>
+              <Field label="Date" type="date" name="work_date" value={forms.timesheet.work_date} onChange={setPeopleForm('timesheet')} required />
+              <Field label="Hours worked" type="number" step="0.25" name="hours_worked" value={forms.timesheet.hours_worked} onChange={setPeopleForm('timesheet')} required />
+              <Field label="Overtime hours" type="number" step="0.25" name="overtime_hours" value={forms.timesheet.overtime_hours} onChange={setPeopleForm('timesheet')} />
+              <Field label="Cost rate" type="number" name="cost_rate" value={forms.timesheet.cost_rate} onChange={setPeopleForm('timesheet')} />
+              <TextArea label="Notes" className="span-2" name="notes" value={forms.timesheet.notes} onChange={setPeopleForm('timesheet')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Submit timesheet
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Timesheets" />
+            <DataTable
+              columns={['No.', 'Employee', 'Project', 'Date', 'Hours', 'Overtime', 'Cost', 'Status', 'Action']}
+              rows={timesheets.map((sheet) => [
+                sheet.timesheet_number,
+                sheet.employee_profile?.user?.name || '',
+                sheet.project?.name || '',
+                shortDate(sheet.work_date),
+                sheet.hours_worked,
+                sheet.overtime_hours,
+                money(sheet.cost_amount),
+                <Badge key="status" value={sheet.status} />,
+                sheet.status === 'submitted' ? (
+                  <div key="actions" className="row-actions">
+                    <button type="button" className="table-action" onClick={() => runAction(() => api.reviewTimesheet(sheet.id, { status: 'approved' }), 'Timesheet approved.')}>Approve</button>
+                    <button type="button" className="table-action danger" onClick={() => runAction(() => api.reviewTimesheet(sheet.id, { status: 'rejected' }), 'Timesheet rejected.')}>Reject</button>
+                  </div>
+                ) : '',
+              ])}
+            />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'allocation' && (
+        <>
+          <section className="panel">
+            <PanelTitle icon={MapPinned} title="Workforce Allocation" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'allocation',
+                  api.createWorkforceAllocation,
+                  (form) => ({
+                    ...form,
+                    employee_profile_id: Number(form.employee_profile_id),
+                    project_id: Number(form.project_id),
+                    supervisor_id: numberOrNull(form.supervisor_id),
+                    allocation_percent: Number(form.allocation_percent || 100),
+                  }),
+                  'Workforce allocation created.',
+                  { project_id: forms.allocation.project_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.allocation.employee_profile_id} onChange={setPeopleForm('allocation')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Project" name="project_id" value={forms.allocation.project_id} onChange={setPeopleForm('allocation')} required>
+                <option value="">Select</option>
+                {projectOptions()}
+              </Select>
+              <Select label="Supervisor" name="supervisor_id" value={forms.allocation.supervisor_id} onChange={setPeopleForm('allocation')}>
+                <option value="">No supervisor</option>
+                {users.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </Select>
+              <Field label="Role on site" name="role" value={forms.allocation.role} onChange={setPeopleForm('allocation')} />
+              <Field label="Allocation %" type="number" min="1" max="100" name="allocation_percent" value={forms.allocation.allocation_percent} onChange={setPeopleForm('allocation')} />
+              <Field label="Start date" type="date" name="start_date" value={forms.allocation.start_date} onChange={setPeopleForm('allocation')} required />
+              <Field label="End date" type="date" name="end_date" value={forms.allocation.end_date} onChange={setPeopleForm('allocation')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Allocate workforce
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={MapPinned} title="Project Workforce" />
+            <DataTable columns={['No.', 'Employee', 'Project', 'Role', 'Supervisor', 'Allocation', 'Dates', 'Status']} rows={allocations.map((allocation) => [allocation.allocation_number, allocation.employee_profile?.user?.name || '', allocation.project?.name || '', allocation.role, allocation.supervisor?.name || '', `${allocation.allocation_percent}%`, `${shortDate(allocation.start_date)} - ${shortDate(allocation.end_date)}`, <Badge key="status" value={allocation.status} />])} />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'leave' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={CalendarDays} title="Leave Request" />
+            <form className="form-grid two" onSubmit={createLeaveRequest}>
+              <Select label="Employee" name="employee_profile_id" value={forms.leave.employee_profile_id} onChange={setPeopleForm('leave')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Leave type" name="leave_type" value={forms.leave.leave_type} onChange={setPeopleForm('leave')}>
+                <option value="annual">Annual</option>
+                <option value="sick">Sick</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="maternity">Maternity</option>
+                <option value="paternity">Paternity</option>
+                <option value="compassionate">Compassionate</option>
+                <option value="study">Study</option>
+                <option value="half_day">Half day</option>
+                <option value="emergency">Emergency</option>
+              </Select>
+              <Field label="Start" type="date" name="starts_on" value={forms.leave.starts_on} onChange={setPeopleForm('leave')} required />
+              <Field label="End" type="date" name="ends_on" value={forms.leave.ends_on} onChange={setPeopleForm('leave')} required />
+              <TextArea label="Reason" className="span-2" name="reason" value={forms.leave.reason} onChange={setPeopleForm('leave')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Request leave
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={CalendarDays} title="Leave Approvals" />
+            <DataTable
+              columns={['Employee', 'Type', 'Dates', 'Days', 'Status', 'Action']}
+              rows={(people.leave_requests || []).map((leave) => [
+                leave.employee_profile?.user?.name || '',
+                labelize(leave.leave_type),
+                `${shortDate(leave.starts_on)} - ${shortDate(leave.ends_on)}`,
+                leave.days,
+                <Badge key="status" value={leave.status} />,
+                leave.status === 'pending' ? (
+                  <div key="actions" className="row-actions">
+                    <button type="button" className="table-action" onClick={() => runAction(() => api.reviewLeaveRequest(leave.id, { status: 'approved' }), 'Leave approved.')}>Approve</button>
+                    <button type="button" className="table-action danger" onClick={() => runAction(() => api.reviewLeaveRequest(leave.id, { status: 'rejected' }), 'Leave rejected.')}>Reject</button>
+                  </div>
+                ) : '',
+              ])}
+            />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'overtime' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Clock3} title="Overtime Request" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'overtime',
+                  api.createOvertimeRequest,
+                  (form) => ({
+                    ...form,
+                    employee_profile_id: Number(form.employee_profile_id),
+                    project_id: numberOrNull(form.project_id),
+                    hours: Number(form.hours || 0),
+                  }),
+                  'Overtime request submitted.',
+                  { employee_profile_id: forms.overtime.employee_profile_id, project_id: forms.overtime.project_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.overtime.employee_profile_id} onChange={setPeopleForm('overtime')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Project" name="project_id" value={forms.overtime.project_id} onChange={setPeopleForm('overtime')}>
+                <option value="">Unassigned</option>
+                {projectOptions()}
+              </Select>
+              <Field label="Date" type="date" name="work_date" value={forms.overtime.work_date} onChange={setPeopleForm('overtime')} required />
+              <Field label="Hours" type="number" step="0.25" name="hours" value={forms.overtime.hours} onChange={setPeopleForm('overtime')} required />
+              <TextArea label="Reason" className="span-2" name="reason" value={forms.overtime.reason} onChange={setPeopleForm('overtime')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Submit overtime
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Clock3} title="Overtime Approvals" />
+            <DataTable
+              columns={['No.', 'Employee', 'Project', 'Date', 'Hours', 'Status', 'Action']}
+              rows={overtimeRequests.map((request) => [
+                request.request_number,
+                request.employee_profile?.user?.name || '',
+                request.project?.name || '',
+                shortDate(request.work_date),
+                request.hours,
+                <Badge key="status" value={request.status} />,
+                request.status === 'pending' ? (
+                  <div key="actions" className="row-actions">
+                    <button type="button" className="table-action" onClick={() => runAction(() => api.reviewOvertimeRequest(request.id, { status: 'approved' }), 'Overtime approved.')}>Approve</button>
+                    <button type="button" className="table-action danger" onClick={() => runAction(() => api.reviewOvertimeRequest(request.id, { status: 'rejected' }), 'Overtime rejected.')}>Reject</button>
+                  </div>
+                ) : '',
+              ])}
+            />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'payroll' && (
+        <>
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Payroll Run" />
+            <form className="form-grid two" onSubmit={createPayrollRun}>
+              <Select label="Branch" name="branch_id" value={forms.payroll.branch_id} onChange={setPeopleForm('payroll')}>
+                <option value="">All branches</option>
+                {branchOptions()}
+              </Select>
+              <Field label="Period start" type="date" name="period_start" value={forms.payroll.period_start} onChange={setPeopleForm('payroll')} required />
+              <Field label="Period end" type="date" name="period_end" value={forms.payroll.period_end} onChange={setPeopleForm('payroll')} required />
+              <button type="submit" className="primary-action">
+                <WalletCards size={17} />
+                Run payroll
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Payroll Linked To Finance" />
+            <DataTable
+              columns={['Run', 'Period', 'Status', 'Finance', 'Gross', 'Deductions', 'Net', 'Action']}
+              rows={(people.payroll_runs || []).map((run) => [
+                run.run_number,
+                `${shortDate(run.period_start)} - ${shortDate(run.period_end)}`,
+                <Badge key="status" value={run.status} />,
+                <Badge key="finance" value={run.finance_status || 'forecast_in_finance'} />,
+                money(run.gross_pay),
+                money(run.total_deductions),
+                money(run.net_pay),
+                run.status === 'draft' ? (
+                  <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.approvePayrollRun(run.id), 'Payroll approved and posted to Finance.')}>
+                    Approve
+                  </button>
+                ) : run.status === 'approved' ? (
+                  <button key="pay" type="button" className="table-action" onClick={() => runAction(() => api.approvePayrollRun(run.id, { status: 'paid' }), 'Payroll marked paid and posted to Finance.')}>
+                    Mark paid
+                  </button>
+                ) : (
+                  ''
+                ),
+              ])}
+            />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'benefits' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Employee Benefit" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'benefit',
+                  api.createWorkforceBenefit,
+                  (form) => ({ ...form, employee_profile_id: Number(form.employee_profile_id), amount: Number(form.amount || 0) }),
+                  'Benefit assigned.',
+                  { employee_profile_id: forms.benefit.employee_profile_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.benefit.employee_profile_id} onChange={setPeopleForm('benefit')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Field label="Benefit type" name="benefit_type" value={forms.benefit.benefit_type} onChange={setPeopleForm('benefit')} required />
+              <Field label="Provider" name="provider" value={forms.benefit.provider} onChange={setPeopleForm('benefit')} />
+              <Field label="Amount" type="number" name="amount" value={forms.benefit.amount} onChange={setPeopleForm('benefit')} />
+              <Field label="Starts on" type="date" name="starts_on" value={forms.benefit.starts_on} onChange={setPeopleForm('benefit')} />
+              <Field label="Ends on" type="date" name="ends_on" value={forms.benefit.ends_on} onChange={setPeopleForm('benefit')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Assign benefit
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Benefits Register" />
+            <DataTable columns={['Employee', 'Benefit', 'Provider', 'Amount', 'Dates', 'Status']} rows={(people.benefits || []).map((benefit) => [benefit.employee_profile?.user?.name || '', labelize(benefit.benefit_type), benefit.provider || '', money(benefit.amount), `${shortDate(benefit.starts_on)} - ${shortDate(benefit.ends_on)}`, <Badge key="status" value={benefit.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'performance' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={BarChart3} title="Performance Review" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'performance',
+                  api.createPerformanceReview,
+                  (form) => ({
+                    ...form,
+                    employee_profile_id: Number(form.employee_profile_id),
+                    safety_score: Number(form.safety_score || 0),
+                    quality_score: Number(form.quality_score || 0),
+                    productivity_score: Number(form.productivity_score || 0),
+                    teamwork_score: Number(form.teamwork_score || 0),
+                  }),
+                  'Performance review saved.',
+                  { employee_profile_id: forms.performance.employee_profile_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.performance.employee_profile_id} onChange={setPeopleForm('performance')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Field label="Period start" type="date" name="period_start" value={forms.performance.period_start} onChange={setPeopleForm('performance')} />
+              <Field label="Period end" type="date" name="period_end" value={forms.performance.period_end} onChange={setPeopleForm('performance')} />
+              <Field label="Safety" type="number" min="0" max="5" name="safety_score" value={forms.performance.safety_score} onChange={setPeopleForm('performance')} />
+              <Field label="Quality" type="number" min="0" max="5" name="quality_score" value={forms.performance.quality_score} onChange={setPeopleForm('performance')} />
+              <Field label="Productivity" type="number" min="0" max="5" name="productivity_score" value={forms.performance.productivity_score} onChange={setPeopleForm('performance')} />
+              <Field label="Teamwork" type="number" min="0" max="5" name="teamwork_score" value={forms.performance.teamwork_score} onChange={setPeopleForm('performance')} />
+              <TextArea label="Goals" className="span-2" name="goals" value={forms.performance.goals} onChange={setPeopleForm('performance')} />
+              <TextArea label="Notes" className="span-2" name="notes" value={forms.performance.notes} onChange={setPeopleForm('performance')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Save review
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={BarChart3} title="Performance Records" />
+            <DataTable columns={['No.', 'Employee', 'Period', 'Safety', 'Quality', 'Productivity', 'Teamwork', 'Overall']} rows={(people.performance_reviews || []).map((review) => [review.review_number, review.employee_profile?.user?.name || '', `${shortDate(review.period_start)} - ${shortDate(review.period_end)}`, review.safety_score, review.quality_score, review.productivity_score, review.teamwork_score, review.overall_score])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'users_roles' && (
+        <>
+          <div className="grid-main">
+            <section className="panel">
+              <PanelTitle icon={ShieldCheck} title="Create User Role" />
+              <form className="form-grid two" onSubmit={saveHrRole}>
+                <Field label="Role name" name="name" value={accessForms.role.name} onChange={setAccessFormValue('role')} required />
+                <div className="access-selector span-2">
+                  <div className="access-selector-head">
+                    <span>Permitted Categories</span>
+                    <div className="row-actions">
+                      <button type="button" className="table-action" onClick={() => setAllAccessFor('role')}>
+                        Grant all
+                      </button>
+                      <button type="button" className="table-action" onClick={() => clearAccessFor('role')}>
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  <div className="access-grid">
+                    {accessCategories.map((category) => (
+                      <label key={category.id} className="access-option">
+                        <input
+                          type="checkbox"
+                          checked={hasCategoryPermissions(hrRolePermissions, category)}
+                          onChange={() => toggleAccessCategoryFor('role', category)}
+                        />
+                        <span>
+                          <strong>{category.label}</strong>
+                          <small>{category.description}</small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="row-actions span-2">
+                  <button type="submit" className="primary-action">
+                    {isEditingHrRole ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                    {isEditingHrRole ? 'Save role' : 'Add role'}
+                  </button>
+                  {isEditingHrRole && (
+                    <button type="button" className="table-action" onClick={() => setAccessForms((current) => ({ ...current, role: hrRoleReset }))}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+              <DataTable
+                columns={['Role', 'Access', 'Type', 'Actions']}
+                rows={roles.map((role) => [
+                  roleLabel(role),
+                  permissionCategorySummary(rolePermissions(role)),
+                  role.is_system ? 'System' : 'Custom',
+                  role.is_system ? (
+                    ''
+                  ) : (
+                    <div key="actions" className="row-actions">
+                      <button type="button" className="table-action" onClick={() => editHrRole(role)}>
+                        Edit
+                      </button>
+                      <button type="button" className="table-action danger" onClick={() => deleteHrRole(role)}>
+                        Delete
+                      </button>
+                    </div>
+                  ),
+                ])}
+              />
+            </section>
+
+            <section className="panel">
+              <PanelTitle icon={Users} title="Users & Roles" />
+              <form className="form-grid user-form" onSubmit={saveHrUser}>
+                <Field label="Name" name="name" value={accessForms.user.name} onChange={setAccessFormValue('user')} required />
+                <Field label="Email" type="email" name="email" value={accessForms.user.email} onChange={setAccessFormValue('user')} required />
+                <Field label="Password" type="password" name="password" value={accessForms.user.password} onChange={setAccessFormValue('user')} required={!isEditingHrUser} placeholder={isEditingHrUser ? 'Leave blank to keep current' : 'Enter a secure temporary password'} />
+                <Select label="Branch" name="branch_id" value={accessForms.user.branch_id} onChange={setAccessFormValue('user')}>
+                  {branchOptions()}
+                </Select>
+                <Select label="Role" name="role_id" value={accessForms.user.role_id} onChange={setHrUserRole}>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {roleLabel(role)}
+                    </option>
+                  ))}
+                </Select>
+                <Select label="Status" name="status" value={accessForms.user.status} onChange={setAccessFormValue('user')}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="suspended">Suspended</option>
+                </Select>
+                <div className="access-selector span-2">
+                  <div className="access-selector-head">
+                    <span>Permitted Categories</span>
+                    <div className="row-actions">
+                      <button type="button" className="table-action" onClick={() => setAllAccessFor('user')}>
+                        Grant all
+                      </button>
+                      <button type="button" className="table-action" onClick={() => clearAccessFor('user')}>
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  <div className="access-grid">
+                    {accessCategories.map((category) => (
+                      <label key={category.id} className="access-option">
+                        <input
+                          type="checkbox"
+                          checked={hasCategoryPermissions(hrUserPermissions, category)}
+                          onChange={() => toggleAccessCategoryFor('user', category)}
+                        />
+                        <span>
+                          <strong>{category.label}</strong>
+                          <small>{category.description}</small>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="row-actions span-2">
+                  <button type="submit" className="primary-action">
+                    {isEditingHrUser ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                    {isEditingHrUser ? 'Save user' : 'Add user'}
+                  </button>
+                  {isEditingHrUser && (
+                    <button type="button" className="table-action" onClick={() => setAccessForms((current) => ({ ...current, user: hrUserReset() }))}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+            </section>
+          </div>
+
+          <section className="panel">
+            <PanelTitle icon={Users} title="User Access Register" />
+            <DataTable
+              columns={['Name', 'Email', 'Role', 'Access', 'Branch', 'Status', 'Actions']}
+              rows={users.map((item) => [
+                item.name,
+                item.email,
+                roleLabel(item.role),
+                permissionCategorySummary(explicitUserPermissions(item)),
+                item.branch?.name,
+                <Badge key="status" value={item.status} />,
+                <div key="actions" className="row-actions">
+                  <button type="button" className="table-action" onClick={() => editHrUser(item)}>
+                    Edit
+                  </button>
+                  <button type="button" className="table-action danger" onClick={() => deleteHrUser(item)} disabled={item.id === currentUser?.id}>
+                    Delete
+                  </button>
+                </div>,
+              ])}
+            />
+          </section>
+        </>
+      )}
+
+      {activeTab === 'training' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Training Course" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'trainingCourse',
+                  api.createTrainingCourse,
+                  (form) => ({ ...form, duration_hours: Number(form.duration_hours || 0) }),
+                  'Training course created.',
+                )
+              }
+            >
+              <Field label="Title" name="title" value={forms.trainingCourse.title} onChange={setPeopleForm('trainingCourse')} required />
+              <Field label="Category" name="category" value={forms.trainingCourse.category} onChange={setPeopleForm('trainingCourse')} />
+              <Field label="Provider" name="provider" value={forms.trainingCourse.provider} onChange={setPeopleForm('trainingCourse')} />
+              <Field label="Duration hours" type="number" name="duration_hours" value={forms.trainingCourse.duration_hours} onChange={setPeopleForm('trainingCourse')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Create course
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={CheckCircle2} title="Training Record" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'trainingRecord',
+                  api.createTrainingRecord,
+                  (form) => ({
+                    ...form,
+                    employee_profile_id: Number(form.employee_profile_id),
+                    training_course_id: Number(form.training_course_id),
+                    score: Number(form.score || 0),
+                  }),
+                  'Training record saved.',
+                  { employee_profile_id: forms.trainingRecord.employee_profile_id, training_course_id: forms.trainingRecord.training_course_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.trainingRecord.employee_profile_id} onChange={setPeopleForm('trainingRecord')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Course" name="training_course_id" value={forms.trainingRecord.training_course_id} onChange={setPeopleForm('trainingRecord')} required>
+                <option value="">Select</option>
+                {trainingCourses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.title}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Status" name="status" value={forms.trainingRecord.status} onChange={setPeopleForm('trainingRecord')}>
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
+              </Select>
+              <Field label="Scheduled on" type="date" name="scheduled_on" value={forms.trainingRecord.scheduled_on} onChange={setPeopleForm('trainingRecord')} />
+              <Field label="Completed on" type="date" name="completed_on" value={forms.trainingRecord.completed_on} onChange={setPeopleForm('trainingRecord')} />
+              <Field label="Score" type="number" min="0" max="100" name="score" value={forms.trainingRecord.score} onChange={setPeopleForm('trainingRecord')} />
+              <Field label="Certificate number" name="certificate_number" value={forms.trainingRecord.certificate_number} onChange={setPeopleForm('trainingRecord')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Save training record
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Training Matrix" />
+            <DataTable columns={['Employee', 'Course', 'Status', 'Scheduled', 'Completed', 'Score']} rows={trainingRecords.map((record) => [record.employee_profile?.user?.name || '', record.course?.title || '', <Badge key="status" value={record.status} />, shortDate(record.scheduled_on), shortDate(record.completed_on), record.score])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'certifications' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Certification" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'certification',
+                  api.createCertification,
+                  (form) => ({ ...form, employee_profile_id: Number(form.employee_profile_id) }),
+                  'Certification recorded.',
+                  { employee_profile_id: forms.certification.employee_profile_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.certification.employee_profile_id} onChange={setPeopleForm('certification')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Field label="Certification" name="name" value={forms.certification.name} onChange={setPeopleForm('certification')} required />
+              <Field label="Issuing authority" name="issuing_authority" value={forms.certification.issuing_authority} onChange={setPeopleForm('certification')} />
+              <Field label="Issued on" type="date" name="issued_on" value={forms.certification.issued_on} onChange={setPeopleForm('certification')} />
+              <Field label="Expires on" type="date" name="expires_on" value={forms.certification.expires_on} onChange={setPeopleForm('certification')} />
+              <Field label="Document path" name="document_path" value={forms.certification.document_path} onChange={setPeopleForm('certification')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Record certification
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Certification Register" />
+            <DataTable columns={['No.', 'Employee', 'Certification', 'Authority', 'Issued', 'Expires', 'Status']} rows={certifications.map((cert) => [cert.certification_number, cert.employee_profile?.user?.name || '', cert.name, cert.issuing_authority || '', shortDate(cert.issued_on), shortDate(cert.expires_on), <Badge key="status" value={cert.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'safety' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Workforce Health & Safety" />
+            <DataTable columns={['Indicator', 'Value']} rows={[['PPE records', ppeIssues.length], ['PPE due for replacement', people.health_safety?.expiring_ppe?.length || 0], ['Certification risk', people.health_safety?.certification_risk?.length || 0], ['Training compliance', `${people.summary?.training_compliance || 0}%`], ['Overtime hours', people.summary?.overtime_hours || 0]]} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={AlertTriangle} title="Certification Risk" />
+            <DataTable columns={['Employee', 'Certification', 'Expires', 'Status']} rows={(people.health_safety?.certification_risk || []).map((cert) => [cert.employee_profile?.user?.name || '', cert.name, shortDate(cert.expires_on), <Badge key="status" value={cert.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'ppe' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Package} title="PPE Issue" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'ppeIssue',
+                  api.createPpeIssue,
+                  (form) => ({
+                    ...form,
+                    employee_profile_id: Number(form.employee_profile_id),
+                    project_id: numberOrNull(form.project_id),
+                    quantity: Number(form.quantity || 1),
+                  }),
+                  'PPE issued.',
+                  { employee_profile_id: forms.ppeIssue.employee_profile_id, project_id: forms.ppeIssue.project_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.ppeIssue.employee_profile_id} onChange={setPeopleForm('ppeIssue')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Project" name="project_id" value={forms.ppeIssue.project_id} onChange={setPeopleForm('ppeIssue')}>
+                <option value="">Company issue</option>
+                {projectOptions()}
+              </Select>
+              <Field label="Item" name="item_name" value={forms.ppeIssue.item_name} onChange={setPeopleForm('ppeIssue')} required />
+              <Field label="Size" name="size" value={forms.ppeIssue.size} onChange={setPeopleForm('ppeIssue')} />
+              <Field label="Quantity" type="number" step="0.01" name="quantity" value={forms.ppeIssue.quantity} onChange={setPeopleForm('ppeIssue')} />
+              <Field label="Issued on" type="date" name="issued_on" value={forms.ppeIssue.issued_on} onChange={setPeopleForm('ppeIssue')} />
+              <Field label="Replacement due" type="date" name="replacement_due_on" value={forms.ppeIssue.replacement_due_on} onChange={setPeopleForm('ppeIssue')} />
+              <Field label="Condition" name="condition" value={forms.ppeIssue.condition} onChange={setPeopleForm('ppeIssue')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Issue PPE
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Package} title="PPE Register" />
+            <DataTable columns={['No.', 'Employee', 'Item', 'Project', 'Issued', 'Due', 'Condition', 'Status']} rows={ppeIssues.map((issue) => [issue.ppe_number, issue.employee_profile?.user?.name || '', issue.item_name, issue.project?.name || '', shortDate(issue.issued_on), shortDate(issue.replacement_due_on), issue.condition, <Badge key="status" value={issue.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'contractors' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Building2} title="Contractor Workforce" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'contractor',
+                  api.createWorkforceContractor,
+                  (form) => ({ ...form, supplier_id: numberOrNull(form.supplier_id), worker_count: Number(form.worker_count || 0) }),
+                  'Contractor added.',
+                  { supplier_id: forms.contractor.supplier_id },
+                )
+              }
+            >
+              <Select label="Supplier link" name="supplier_id" value={forms.contractor.supplier_id} onChange={setPeopleForm('contractor')}>
+                <option value="">Independent contractor</option>
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </Select>
+              <Field label="Contractor name" name="name" value={forms.contractor.name} onChange={setPeopleForm('contractor')} required />
+              <Field label="Contact" name="contact_name" value={forms.contractor.contact_name} onChange={setPeopleForm('contractor')} />
+              <Field label="Email" type="email" name="email" value={forms.contractor.email} onChange={setPeopleForm('contractor')} />
+              <Field label="Phone" name="phone" value={forms.contractor.phone} onChange={setPeopleForm('contractor')} />
+              <Field label="Trade" name="trade" value={forms.contractor.trade} onChange={setPeopleForm('contractor')} />
+              <Field label="Workers" type="number" name="worker_count" value={forms.contractor.worker_count} onChange={setPeopleForm('contractor')} />
+              <Field label="Contract expiry" type="date" name="contract_expires_on" value={forms.contractor.contract_expires_on} onChange={setPeopleForm('contractor')} />
+              <Field label="Insurance expiry" type="date" name="insurance_expires_on" value={forms.contractor.insurance_expires_on} onChange={setPeopleForm('contractor')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Add contractor
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Building2} title="Contractor Register" />
+            <DataTable columns={['No.', 'Name', 'Trade', 'Workers', 'Contract', 'Insurance', 'Compliance', 'Status']} rows={contractors.map((contractor) => [contractor.contractor_number, contractor.name, contractor.trade || '', contractor.worker_count, shortDate(contractor.contract_expires_on), shortDate(contractor.insurance_expires_on), <Badge key="compliance" value={contractor.compliance_status} />, <Badge key="status" value={contractor.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'assets' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Truck} title="Employee Asset" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'asset',
+                  api.createWorkforceAsset,
+                  (form) => ({
+                    ...form,
+                    employee_profile_id: Number(form.employee_profile_id),
+                    equipment_asset_id: numberOrNull(form.equipment_asset_id),
+                  }),
+                  'Employee asset assigned.',
+                  { employee_profile_id: forms.asset.employee_profile_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.asset.employee_profile_id} onChange={setPeopleForm('asset')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Equipment link" name="equipment_asset_id" value={forms.asset.equipment_asset_id} onChange={setPeopleForm('asset')}>
+                <option value="">No equipment link</option>
+                {(people.asset_candidates || []).map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.equipment_number} - {asset.name}
+                  </option>
+                ))}
+              </Select>
+              <Field label="Item" name="item_name" value={forms.asset.item_name} onChange={setPeopleForm('asset')} required />
+              <Field label="Category" name="category" value={forms.asset.category} onChange={setPeopleForm('asset')} />
+              <Field label="Serial number" name="serial_number" value={forms.asset.serial_number} onChange={setPeopleForm('asset')} />
+              <Field label="Assigned on" type="date" name="assigned_on" value={forms.asset.assigned_on} onChange={setPeopleForm('asset')} />
+              <Field label="Return due" type="date" name="return_due_on" value={forms.asset.return_due_on} onChange={setPeopleForm('asset')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Assign asset
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Truck} title="Employee Asset Register" />
+            <DataTable columns={['No.', 'Employee', 'Item', 'Category', 'Serial', 'Assigned', 'Due', 'Status']} rows={employeeAssets.map((asset) => [asset.asset_number, asset.employee_profile?.user?.name || '', asset.item_name, asset.category, asset.serial_number || '', shortDate(asset.assigned_on), shortDate(asset.return_due_on), <Badge key="status" value={asset.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'documents' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Workforce Document" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'document',
+                  api.createWorkforceDocument,
+                  (form) => ({
+                    ...form,
+                    employee_profile_id: numberOrNull(form.employee_profile_id),
+                    candidate_id: numberOrNull(form.candidate_id),
+                  }),
+                  'Workforce document registered.',
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.document.employee_profile_id} onChange={setPeopleForm('document')}>
+                <option value="">No employee</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Candidate" name="candidate_id" value={forms.document.candidate_id} onChange={setPeopleForm('document')}>
+                <option value="">No candidate</option>
+                {candidates.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.full_name}
+                  </option>
+                ))}
+              </Select>
+              <Field label="Document type" name="document_type" value={forms.document.document_type} onChange={setPeopleForm('document')} required />
+              <Field label="Title" name="title" value={forms.document.title} onChange={setPeopleForm('document')} required />
+              <Field label="File reference" name="file_path" value={forms.document.file_path} onChange={setPeopleForm('document')} />
+              <Field label="Expiry date" type="date" name="expiry_date" value={forms.document.expiry_date} onChange={setPeopleForm('document')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Register document
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={FileText} title="Document Register" />
+            <DataTable columns={['No.', 'Owner', 'Type', 'Title', 'Reference', 'Expiry', 'Status']} rows={documents.map((document) => [document.document_number, document.employee_profile?.user?.name || document.candidate?.full_name || '', labelize(document.document_type), document.title, document.file_path || '', shortDate(document.expiry_date), <Badge key="status" value={document.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'self' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Users} title="Self-Service Profile" />
+            <DataTable columns={['Field', 'Value']} rows={[['Employee', selfService.employee?.user?.name || ''], ['Branch', selfService.employee?.branch?.name || ''], ['Project', selfService.employee?.current_project?.name || ''], ['Department', selfService.employee?.department || ''], ['Position', selfService.employee?.position || ''], ['Status', selfService.employee?.status || '']]} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="My Payslips" />
+            <DataTable columns={['Gross', 'Overtime', 'Allowances', 'Deductions', 'Net', 'Status']} rows={(selfService.payslips || []).map((payslip) => [money(payslip.gross_pay), money(payslip.overtime_pay), money(payslip.allowances), money(Number(payslip.deductions || 0) + Number(payslip.tax_amount || 0)), money(payslip.net_pay), <Badge key="status" value={payslip.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'manager' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={CheckCircle2} title="Manager Approvals" />
+            <DataTable columns={['Type', 'Employee', 'Reference', 'Action']} rows={[
+              ...(managerPortal.leave_approvals || []).map((leave) => ['Leave', leave.employee_profile?.user?.name || '', `${shortDate(leave.starts_on)} - ${shortDate(leave.ends_on)}`, <button key={`leave-${leave.id}`} type="button" className="table-action" onClick={() => runAction(() => api.reviewLeaveRequest(leave.id, { status: 'approved' }), 'Leave approved.')}>Approve</button>]),
+              ...(managerPortal.overtime_approvals || []).map((item) => ['Overtime', item.employee_profile?.user?.name || '', `${shortDate(item.work_date)} - ${item.hours}h`, <button key={`ot-${item.id}`} type="button" className="table-action" onClick={() => runAction(() => api.reviewOvertimeRequest(item.id, { status: 'approved' }), 'Overtime approved.')}>Approve</button>]),
+              ...(managerPortal.timesheet_approvals || []).map((sheet) => ['Timesheet', sheet.employee_profile?.user?.name || '', `${shortDate(sheet.work_date)} - ${sheet.hours_worked}h`, <button key={`ts-${sheet.id}`} type="button" className="table-action" onClick={() => runAction(() => api.reviewTimesheet(sheet.id, { status: 'approved' }), 'Timesheet approved.')}>Approve</button>]),
+            ]} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Users} title="Performance Due" />
+            <DataTable columns={['Employee', 'Department', 'Position']} rows={(managerPortal.performance_due || []).map((employee) => [employee.user?.name || '', employee.department || '', employee.position || ''])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'exit' && (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={LogOut} title="Exit Record" />
+            <form
+              className="form-grid two"
+              onSubmit={(event) =>
+                submitPeopleForm(
+                  event,
+                  'exit',
+                  api.createExitRecord,
+                  (form) => ({ ...form, employee_profile_id: Number(form.employee_profile_id) }),
+                  'Exit process opened.',
+                  { employee_profile_id: forms.exit.employee_profile_id },
+                )
+              }
+            >
+              <Select label="Employee" name="employee_profile_id" value={forms.exit.employee_profile_id} onChange={setPeopleForm('exit')} required>
+                <option value="">Select</option>
+                {employeeOptions()}
+              </Select>
+              <Select label="Exit type" name="exit_type" value={forms.exit.exit_type} onChange={setPeopleForm('exit')}>
+                <option value="resignation">Resignation</option>
+                <option value="termination">Termination</option>
+                <option value="retirement">Retirement</option>
+              </Select>
+              <Field label="Notice date" type="date" name="notice_date" value={forms.exit.notice_date} onChange={setPeopleForm('exit')} />
+              <Field label="Exit date" type="date" name="exit_date" value={forms.exit.exit_date} onChange={setPeopleForm('exit')} />
+              <TextArea label="Reason" className="span-2" name="reason" value={forms.exit.reason} onChange={setPeopleForm('exit')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Open exit process
+              </button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={LogOut} title="Exit Management" />
+            <DataTable columns={['No.', 'Employee', 'Type', 'Notice', 'Exit', 'Clearance', 'Status']} rows={exits.map((exit) => [exit.exit_number, exit.employee_profile?.user?.name || '', labelize(exit.exit_type), shortDate(exit.notice_date), shortDate(exit.exit_date), <Badge key="clearance" value={exit.clearance_status} />, <Badge key="status" value={exit.status} />])} />
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'reports' && (
+        <section className="view-stack">
+          {[
+            ['Headcount By Department', 'hr-headcount-by-department.csv', ['department', 'employees'], headcountRows],
+            ['Employees By Project', 'hr-employees-by-project.csv', ['project', 'employees'], projectHeadcountRows],
+            ['Timesheet Costs', 'hr-timesheet-costs.csv', ['project', 'hours', 'overtime', 'cost'], timesheetCostRows],
+            ['Training Matrix', 'hr-training-matrix.csv', ['employee', 'course', 'status', 'completed_on'], trainingMatrixRows],
+            ['Certification Expiry', 'hr-certification-expiry.csv', ['employee', 'certification', 'expires_on', 'status'], certificationRows],
+            ['Turnover', 'hr-turnover.csv', ['period', 'exits'], turnoverRows],
+          ].map(([title, filename, keys, rows]) => (
+            <section key={title} className="panel">
+              <PanelTitle icon={Download} title={title} />
+              <DownloadButton filename={filename} columns={keys.map(labelize)} rows={rows} />
+              <DataTable columns={keys.map(labelize)} rows={rows.map((row) => row.map((value, index) => (keys[index] === 'cost' ? money(value) : value)))} />
+            </section>
+          ))}
+        </section>
+      )}
+
+      {activeTab === 'analytics' && (
+        <>
+          <div className="kpi-grid">
+            <Kpi icon={WalletCards} label="Average salary" value={money(analytics.average_salary)} sub="Active workforce" />
+            <Kpi icon={WalletCards} label="Payroll cost" value={money(analytics.payroll_cost)} sub="Base monthly exposure" />
+            <Kpi icon={Clock3} label="Overtime cost" value={money(analytics.overtime_cost)} sub="Approved and submitted sheets" />
+            <Kpi icon={ShieldCheck} label="Training compliance" value={`${analytics.training_compliance || 0}%`} sub="Completed training records" />
+          </div>
+          <div className="grid-main">
+            <ChartPanel icon={Users} title="Gender Distribution">
+              <AnalyticsPieChart data={analytics.gender_distribution || []} />
+            </ChartPanel>
+            <ChartPanel icon={Users} title="Age Distribution">
+              <AnalyticsBarChart data={analytics.age_distribution || []} bars={[{ key: 'value', color: '#6d5dfc' }]} />
+            </ChartPanel>
+            <ChartPanel icon={Handshake} title="Hiring Trends">
+              <AnalyticsBarChart data={analytics.hiring_trends || []} xKey="period" bars={[{ key: 'applications', color: '#2364d8' }, { key: 'hires', color: '#188a5a' }]} />
+            </ChartPanel>
+            <ChartPanel icon={LogOut} title="Termination Trends">
+              <AnalyticsBarChart data={analytics.termination_trends || []} xKey="period" bars={[{ key: 'exits', color: '#c3382f' }]} />
+            </ChartPanel>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'automation' && (
+        <section className="panel">
+          <PanelTitle icon={Workflow} title="HR Automation" />
+          <DataTable columns={['Trigger', 'Status']} rows={(people.automation?.available_triggers || []).map((trigger) => [labelize(trigger), 'Available'])} />
+          <DataTable columns={['Metric', 'Value']} rows={[['Connected workflows', people.automation?.connected_workflows || 0], ['Payroll posting', 'Finance ledger integration'], ['Certification alerts', 'Available'], ['Attendance exceptions', 'Available']]} />
+        </section>
+      )}
+
+      {activeTab === 'settings' && (
+        <section className="panel">
+          <PanelTitle icon={Settings} title="HR & Workforce Settings" />
+          <DataTable columns={['Setting', 'Value']} rows={Object.entries(people.settings || {}).map(([key, value]) => [labelize(key), typeof value === 'object' ? JSON.stringify(value) : String(value)])} />
+        </section>
+      )}
+    </section>
+  )
+}
+
+function EquipmentView({
+  branches,
+  projects,
+  equipment,
+  forms,
+  setEquipmentForm,
+  createEquipmentAsset,
+  assignEquipment,
+  createMaintenanceLog,
+  createFuelLog,
+  runAction,
+}) {
+  return (
+    <section className="view-stack">
+      <div className="kpi-grid">
+        <Kpi icon={Truck} label="Available" value={equipment.summary?.available || 0} sub="Ready assets" />
+        <Kpi icon={MapPinned} label="Assigned" value={equipment.summary?.assigned || 0} sub="On projects" />
+        <Kpi icon={AlertTriangle} label="Maintenance" value={equipment.summary?.maintenance || 0} sub="Unavailable" />
+        <Kpi icon={WalletCards} label="Fuel cost" value={money(equipment.summary?.fuel_cost)} sub="Logged fuel" />
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Truck} title="Asset Register" />
+          <form className="form-grid two" onSubmit={createEquipmentAsset}>
+            <Select label="Branch" name="branch_id" value={forms.asset.branch_id} onChange={setEquipmentForm('asset')} required>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Name" name="name" value={forms.asset.name} onChange={setEquipmentForm('asset')} required />
+            <Field label="Category" name="category" value={forms.asset.category} onChange={setEquipmentForm('asset')} />
+            <Field label="Meter" type="number" name="meter_reading" value={forms.asset.meter_reading} onChange={setEquipmentForm('asset')} />
+            <Field label="Hourly rate" type="number" name="hourly_rate" value={forms.asset.hourly_rate} onChange={setEquipmentForm('asset')} />
+            <button type="submit" className="primary-action">
+              <Plus size={17} />
+              Add asset
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={MapPinned} title="Assign Equipment" />
+          <form className="form-grid two" onSubmit={assignEquipment}>
+            <Select label="Asset" name="asset_id" value={forms.assignment.asset_id} onChange={setEquipmentForm('assignment')} required>
+              <option value="">Select</option>
+              {(equipment.assets || []).filter((asset) => asset.status === 'available').map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.equipment_number} - {asset.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Project" name="project_id" value={forms.assignment.project_id} onChange={setEquipmentForm('assignment')} required>
+              <option value="">Select</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Meter start" type="number" name="meter_start" value={forms.assignment.meter_start} onChange={setEquipmentForm('assignment')} />
+            <button type="submit" className="primary-action">
+              <Send size={17} />
+              Assign
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="Maintenance" />
+          <form className="form-grid two" onSubmit={createMaintenanceLog}>
+            <Select label="Asset" name="asset_id" value={forms.maintenance.asset_id} onChange={setEquipmentForm('maintenance')} required>
+              <option value="">Select</option>
+              {(equipment.assets || []).map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Status" name="status" value={forms.maintenance.status} onChange={setEquipmentForm('maintenance')}>
+              <option value="scheduled">Scheduled</option>
+              <option value="in_progress">In progress</option>
+              <option value="completed">Completed</option>
+            </Select>
+            <Field label="Service date" type="date" name="service_date" value={forms.maintenance.service_date} onChange={setEquipmentForm('maintenance')} required />
+            <Field label="Cost" type="number" name="cost_amount" value={forms.maintenance.cost_amount} onChange={setEquipmentForm('maintenance')} />
+            <Field className="span-2" label="Description" name="description" value={forms.maintenance.description} onChange={setEquipmentForm('maintenance')} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Log maintenance
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={WalletCards} title="Fuel Log" />
+          <form className="form-grid two" onSubmit={createFuelLog}>
+            <Select label="Asset" name="asset_id" value={forms.fuel.asset_id} onChange={setEquipmentForm('fuel')} required>
+              <option value="">Select</option>
+              {(equipment.assets || []).map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Project" name="project_id" value={forms.fuel.project_id} onChange={setEquipmentForm('fuel')}>
+              <option value="">Current project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Qty" type="number" name="quantity" value={forms.fuel.quantity} onChange={setEquipmentForm('fuel')} required />
+            <Field label="Unit cost" type="number" name="unit_cost" value={forms.fuel.unit_cost} onChange={setEquipmentForm('fuel')} />
+            <Field label="Meter" type="number" name="meter_reading" value={forms.fuel.meter_reading} onChange={setEquipmentForm('fuel')} />
+            <button type="submit" className="primary-action">
+              <Plus size={17} />
+              Record fuel
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <section className="panel">
+        <PanelTitle icon={Truck} title="Assets" />
+        <DataTable
+          columns={['No.', 'Asset', 'Category', 'Status', 'Project', 'Meter', 'Rate']}
+          rows={(equipment.assets || []).map((asset) => [
+            asset.equipment_number,
+            asset.name,
+            labelize(asset.category),
+            <Badge key="status" value={asset.status} />,
+            asset.current_project?.name || '',
+            asset.meter_reading,
+            money(asset.hourly_rate),
+          ])}
+        />
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={MapPinned} title="Assignments" />
+        <DataTable
+          columns={['No.', 'Asset', 'Project', 'Status', 'Start', 'Action']}
+          rows={(equipment.assignments || []).map((assignment) => [
+            assignment.assignment_number,
+            assignment.asset?.name || '',
+            assignment.project?.name || '',
+            <Badge key="status" value={assignment.status} />,
+            shortDate(assignment.starts_at),
+            assignment.status === 'active' ? (
+              <button key="release" type="button" className="table-action" onClick={() => runAction(() => api.releaseEquipmentAssignment(assignment.id), 'Equipment released.')}>
+                Release
+              </button>
+            ) : (
+              ''
+            ),
+          ])}
+        />
+      </section>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="Maintenance Register" />
+          <DataTable
+            columns={['No.', 'Asset', 'Status', 'Service date', 'Cost']}
+            rows={(equipment.maintenance || []).map((item) => [
+              item.maintenance_number,
+              item.asset?.name || '',
+              <Badge key="status" value={item.status} />,
+              shortDate(item.service_date),
+              money(item.cost_amount),
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={WalletCards} title="Fuel Register" />
+          <DataTable
+            columns={['No.', 'Asset', 'Project', 'Qty', 'Total']}
+            rows={(equipment.fuel_logs || []).map((item) => [
+              item.fuel_number,
+              item.asset?.name || '',
+              item.project?.name || '',
+              `${item.quantity} ${item.unit}`,
+              money(item.total_cost),
             ])}
           />
         </section>
@@ -1005,32 +7916,1272 @@ function ProcurementView({
   )
 }
 
-function WorkflowButtons({ item, suppliers, runAction }) {
-  const supplierId = item.lines?.[0]?.supplier_id || suppliers[0]?.id
+function ComplianceView({
+  projects,
+  compliance,
+  forms,
+  setComplianceForm,
+  createInspection,
+  createNcr,
+  createSafetyIncident,
+  createToolboxTalk,
+  createSafetyObservation,
+  createWorkPermit,
+  runAction,
+}) {
+  const inspections = compliance.inspections || []
+  const ncrs = compliance.ncrs || []
+  const incidents = compliance.incidents || []
+  const observations = compliance.observations || []
+  const permits = compliance.permits || []
+  const talks = compliance.toolbox_talks || []
+  const qaTypes = ['quality', 'workmanship', 'materials', 'handover']
+  const hseTypes = ['safety', 'environmental', 'ppe', 'fire']
+  const qualityInspections = inspections.filter((inspection) => qaTypes.includes(inspection.type))
+  const safetyInspections = inspections.filter((inspection) => hseTypes.includes(inspection.type))
+  const riskAssessments = inspections.filter((inspection) => inspection.type === 'risk_assessment')
+  const snagPunchInspections = inspections.filter((inspection) => ['snagging', 'punch_list'].includes(inspection.type))
+  const nearMisses = incidents.filter((incident) => incident.incident_type === 'near_miss')
+  const overdueNcrs = ncrs.filter((ncr) => ncr.status !== 'closed' && ncr.due_date && new Date(ncr.due_date) < new Date())
+  const expiringPermits = permits.filter((permit) => permit.status !== 'closed' && permit.valid_until && new Date(permit.valid_until) <= new Date(Date.now() + 3 * 24 * 60 * 60 * 1000))
+  const openCapa = [
+    ...ncrs.filter((ncr) => ncr.status !== 'closed').map((ncr) => ({ type: 'Non-Conformance Report(NCR)', id: ncr.id, number: ncr.ncr_number, title: ncr.title, severity: ncr.severity, status: ncr.status, due: ncr.due_date })),
+    ...incidents.filter((incident) => incident.status !== 'closed').map((incident) => ({ type: 'Incident', id: incident.id, number: incident.incident_number, title: incident.description, severity: incident.severity, status: incident.status, due: null })),
+    ...observations.filter((observation) => observation.status !== 'closed').map((observation) => ({ type: 'Observation', id: observation.id, number: observation.observation_number, title: observation.description, severity: observation.severity, status: observation.status, due: null })),
+  ]
+  const checklistItems = inspections.flatMap((inspection) => (inspection.items || []).map((item) => ({ ...item, inspection })))
+  const qualityChecklistItems = checklistItems.filter((item) => qaTypes.includes(item.inspection.type))
+  const safetyChecklistItems = checklistItems.filter((item) => [...hseTypes, 'risk_assessment'].includes(item.inspection.type))
+  const snagPunchItems = snagPunchInspections.flatMap((inspection) => (inspection.items || []).map((item) => ({ ...item, inspection })))
+  const openObservationCount = observations.filter((observation) => observation.status !== 'closed').length
+  const openIncidentCount = incidents.filter((incident) => incident.status !== 'closed').length
+  const ncrReportColumns = ['Non-Conformance Report(NCR)', 'Project', 'Department', 'Category', 'Title', 'Location', 'Contractor', 'Subcontractor', 'Severity', 'Status', 'Due date', 'Description', 'Root cause', 'Corrective action', 'Preventive action', 'Verification notes']
+  const ncrReportRows = ncrs.map((ncr) => [
+    ncr.ncr_number || '',
+    ncr.project?.name || '',
+    labelize(ncr.department || ''),
+    labelize(ncr.category || ''),
+    ncr.title || '',
+    ncr.location || '',
+    ncr.contractor || '',
+    ncr.subcontractor || '',
+    labelize(ncr.severity || ''),
+    labelize(ncr.status || ''),
+    shortDate(ncr.due_date),
+    ncr.description || '',
+    ncr.root_cause || '',
+    ncr.corrective_action || '',
+    ncr.preventive_action || '',
+    ncr.verification_notes || '',
+  ])
+  const incidentReportColumns = ['No.', 'Type', 'Project', 'Location', 'Severity', 'Status', 'Occurred', 'Injured person', 'Description', 'Immediate action', 'Root cause', 'Corrective action']
+  const incidentReportRows = incidents.map((incident) => [
+    incident.incident_number || '',
+    labelize(incident.incident_type || ''),
+    incident.project?.name || '',
+    incident.location || '',
+    labelize(incident.severity || ''),
+    labelize(incident.status || ''),
+    shortDate(incident.occurred_at),
+    incident.injured_person || '',
+    incident.description || '',
+    incident.immediate_action || '',
+    incident.root_cause || '',
+    incident.corrective_action || '',
+  ])
+  const observationReportColumns = ['Observation', 'Type', 'Project', 'Location', 'Severity', 'Status', 'Observed', 'Description', 'Corrective action']
+  const observationReportRows = observations.map((observation) => [
+    observation.observation_number || '',
+    labelize(observation.observation_type || ''),
+    observation.project?.name || '',
+    observation.location || '',
+    labelize(observation.severity || ''),
+    labelize(observation.status || ''),
+    shortDate(observation.observed_at),
+    observation.description || '',
+    observation.corrective_action || '',
+  ])
+  const qaHseReportColumns = ['Report', 'Count', 'Open / Due']
+  const qaHseReportRows = [
+    ['Non-Conformance Reports(NCRs)', ncrs.length, compliance.summary?.open_ncrs || 0],
+    ['Near misses', nearMisses.length, nearMisses.filter((item) => item.status !== 'closed').length],
+    ['Incidents', incidents.length, openIncidentCount],
+    ['Observations', observations.length, openObservationCount],
+    ['Permits expiring in 3 days', expiringPermits.length, expiringPermits.map((permit) => permit.permit_number).join(', ')],
+    ['Snag / punch list items', snagPunchItems.length, snagPunchItems.filter((item) => item.result === 'fail').length],
+  ]
 
   return (
-    <div className="row-actions">
-      {['draft', 'rejected'].includes(item.status) && (
-        <button type="button" className="table-action" onClick={() => runAction(() => api.submitRequisition(item.id), 'Requisition submitted.')}>
-          Submit
+    <section className="view-stack">
+      <div className="kpi-grid">
+        <Kpi icon={ClipboardList} label="Quality Assurance inspections" value={qualityInspections.length} sub={`${compliance.summary?.failed_inspections || 0} failed`} />
+        <Kpi icon={ShieldCheck} label="Health, Safety, and Environment records" value={safetyInspections.length + incidents.length + observations.length} sub={`${openIncidentCount} open incidents`} />
+        <Kpi icon={AlertTriangle} label="Open Non-Conformance Reports(NCRs)" value={compliance.summary?.open_ncrs || 0} sub={`${overdueNcrs.length} overdue`} />
+        <Kpi icon={CheckCircle2} label="Open CAPA" value={openCapa.length} sub={`${openObservationCount} observations`} />
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ClipboardList} title="Site Inspection" />
+          <form className="form-grid two" onSubmit={createInspection}>
+            <Select label="Project" name="project_id" value={forms.inspection.project_id} onChange={setComplianceForm('inspection')} required>
+              <option value="">Select</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Inspection type" name="type" value={forms.inspection.type} onChange={setComplianceForm('inspection')}>
+              <option value="quality">Quality inspection</option>
+              <option value="materials">Material inspection</option>
+              <option value="workmanship">Workmanship inspection</option>
+              <option value="safety">Safety inspection</option>
+              <option value="ppe">PPE inspection</option>
+              <option value="fire">Fire drill / fire inspection</option>
+              <option value="environmental">Environmental inspection</option>
+              <option value="risk_assessment">Risk assessment</option>
+              <option value="snagging">Snag list</option>
+              <option value="punch_list">Punch list</option>
+              <option value="handover">Handover inspection</option>
+            </Select>
+            <Field label="Area" name="area" value={forms.inspection.area} onChange={setComplianceForm('inspection')} />
+            <Field label="Scheduled" type="date" name="scheduled_on" value={forms.inspection.scheduled_on} onChange={setComplianceForm('inspection')} />
+            <Field label="Checklist item 1" name="first_item" value={forms.inspection.first_item} onChange={setComplianceForm('inspection')} />
+            <Field label="Requirement 1" name="first_requirement" value={forms.inspection.first_requirement} onChange={setComplianceForm('inspection')} />
+            <Select label="Result" name="first_result" value={forms.inspection.first_result} onChange={setComplianceForm('inspection')}>
+              <option value="pending">Pending</option>
+              <option value="pass">Pass</option>
+              <option value="fail">Fail</option>
+              <option value="na">N/A</option>
+            </Select>
+            <Select label="Severity" name="first_severity" value={forms.inspection.first_severity} onChange={setComplianceForm('inspection')}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </Select>
+            <Field label="Checklist item 2" name="second_item" value={forms.inspection.second_item} onChange={setComplianceForm('inspection')} />
+            <Field label="Requirement 2" name="second_requirement" value={forms.inspection.second_requirement} onChange={setComplianceForm('inspection')} />
+            <Select label="Result" name="second_result" value={forms.inspection.second_result} onChange={setComplianceForm('inspection')}>
+              <option value="pending">Pending</option>
+              <option value="pass">Pass</option>
+              <option value="fail">Fail</option>
+              <option value="na">N/A</option>
+            </Select>
+            <Select label="Severity" name="second_severity" value={forms.inspection.second_severity} onChange={setComplianceForm('inspection')}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </Select>
+            <TextArea className="span-2" label="Notes" name="notes" value={forms.inspection.notes} onChange={setComplianceForm('inspection')} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Create record
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={AlertTriangle} title="Raise Non-Conformance Report(NCR)" />
+          <form className="form-grid two" onSubmit={createNcr}>
+            <Select label="Project" name="project_id" value={forms.ncr.project_id} onChange={setComplianceForm('ncr')} required>
+              <option value="">Select</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Department" name="department" value={forms.ncr.department} onChange={setComplianceForm('ncr')}>
+              <option value="qa">Quality Assurance</option>
+              <option value="hse">Health, Safety, and Environment</option>
+              <option value="technical">Technical</option>
+              <option value="operations">Operations</option>
+            </Select>
+            <Select label="Inspection" name="inspection_id" value={forms.ncr.inspection_id} onChange={setComplianceForm('ncr')}>
+              <option value="">None</option>
+              {(compliance.inspections || []).map((inspection) => (
+                <option key={inspection.id} value={inspection.id}>
+                  {inspection.inspection_number} - {inspection.area}
+                </option>
+              ))}
+            </Select>
+            <Field label="Title" name="title" value={forms.ncr.title} onChange={setComplianceForm('ncr')} required />
+            <Select label="Category" name="category" value={forms.ncr.category} onChange={setComplianceForm('ncr')}>
+              <option value="concrete">Concrete</option>
+              <option value="reinforcement">Reinforcement</option>
+              <option value="masonry">Masonry</option>
+              <option value="plumbing">Plumbing</option>
+              <option value="electrical">Electrical</option>
+              <option value="finishes">Finishes</option>
+              <option value="mechanical">Mechanical</option>
+              <option value="safety">Safety</option>
+              <option value="environmental">Environmental</option>
+              <option value="documentation">Documentation</option>
+            </Select>
+            <Select label="Severity" name="severity" value={forms.ncr.severity} onChange={setComplianceForm('ncr')}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </Select>
+            <Field label="Location" name="location" value={forms.ncr.location} onChange={setComplianceForm('ncr')} />
+            <Field label="Contractor" name="contractor" value={forms.ncr.contractor} onChange={setComplianceForm('ncr')} />
+            <Field label="Subcontractor" name="subcontractor" value={forms.ncr.subcontractor} onChange={setComplianceForm('ncr')} />
+            <Field label="Due date" type="date" name="due_date" value={forms.ncr.due_date} onChange={setComplianceForm('ncr')} />
+            <Field className="span-2" label="Reference documents" name="reference_documents" value={forms.ncr.reference_documents} onChange={setComplianceForm('ncr')} />
+            <Field className="span-2" label="Evidence register" name="evidence" value={forms.ncr.evidence} onChange={setComplianceForm('ncr')} />
+            <TextArea className="span-2" label="Description" name="description" value={forms.ncr.description} onChange={setComplianceForm('ncr')} required />
+            <TextArea className="span-2" label="Root cause" name="root_cause" value={forms.ncr.root_cause} onChange={setComplianceForm('ncr')} />
+            <TextArea className="span-2" label="Corrective action" name="corrective_action" value={forms.ncr.corrective_action} onChange={setComplianceForm('ncr')} />
+            <TextArea className="span-2" label="Preventive action" name="preventive_action" value={forms.ncr.preventive_action} onChange={setComplianceForm('ncr')} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Raise Non-Conformance Report(NCR)
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="Incident / Near Miss" />
+          <form className="form-grid two" onSubmit={createSafetyIncident}>
+            <Select label="Project" name="project_id" value={forms.incident.project_id} onChange={setComplianceForm('incident')}>
+              <option value="">No project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Type" name="incident_type" value={forms.incident.incident_type} onChange={setComplianceForm('incident')}>
+              <option value="near_miss">Near miss</option>
+              <option value="first_aid">First aid</option>
+              <option value="medical_treatment">Medical treatment</option>
+              <option value="lost_time">Lost time</option>
+              <option value="property_damage">Property damage</option>
+              <option value="environmental">Environmental</option>
+            </Select>
+            <Select label="Severity" name="severity" value={forms.incident.severity} onChange={setComplianceForm('incident')}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </Select>
+            <Field label="Location" name="location" value={forms.incident.location} onChange={setComplianceForm('incident')} />
+            <Field label="Occurred" type="datetime-local" name="occurred_at" value={forms.incident.occurred_at} onChange={setComplianceForm('incident')} />
+            <Field label="Injured person" name="injured_person" value={forms.incident.injured_person} onChange={setComplianceForm('incident')} />
+            <TextArea className="span-2" label="Description" name="description" value={forms.incident.description} onChange={setComplianceForm('incident')} required />
+            <TextArea className="span-2" label="Immediate action" name="immediate_action" value={forms.incident.immediate_action} onChange={setComplianceForm('incident')} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Log report
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Users} title="Toolbox Meeting" />
+          <form className="form-grid two section-form" onSubmit={createToolboxTalk}>
+            <Select label="Project" name="project_id" value={forms.talk.project_id} onChange={setComplianceForm('talk')}>
+              <option value="">No project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Topic" name="topic" value={forms.talk.topic} onChange={setComplianceForm('talk')} required />
+            <Field label="Date" type="date" name="talk_date" value={forms.talk.talk_date} onChange={setComplianceForm('talk')} />
+            <Field label="Attendees" type="number" name="attendee_count" value={forms.talk.attendee_count} onChange={setComplianceForm('talk')} />
+            <Field className="span-2" label="Hazards discussed" name="hazards_discussed" value={forms.talk.hazards_discussed} onChange={setComplianceForm('talk')} />
+            <TextArea className="span-2" label="Summary" name="summary" value={forms.talk.summary} onChange={setComplianceForm('talk')} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Record talk
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={FileText} title="Safety Observation" />
+          <form className="form-grid two" onSubmit={createSafetyObservation}>
+            <Select label="Project" name="project_id" value={forms.observation.project_id} onChange={setComplianceForm('observation')}>
+              <option value="">No project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Type" name="observation_type" value={forms.observation.observation_type} onChange={setComplianceForm('observation')}>
+              <option value="unsafe">Unsafe act / condition</option>
+              <option value="safe">Safe observation</option>
+              <option value="near_miss">Near miss</option>
+              <option value="hazard">Hazard report</option>
+              <option value="environmental">Environmental</option>
+              <option value="ppe">PPE</option>
+              <option value="fire">Fire</option>
+            </Select>
+            <Select label="Severity" name="severity" value={forms.observation.severity} onChange={setComplianceForm('observation')}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </Select>
+            <Field label="Location" name="location" value={forms.observation.location} onChange={setComplianceForm('observation')} />
+            <TextArea className="span-2" label="Observation" name="description" value={forms.observation.description} onChange={setComplianceForm('observation')} required />
+            <TextArea className="span-2" label="Corrective action" name="corrective_action" value={forms.observation.corrective_action} onChange={setComplianceForm('observation')} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Log observation
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Send} title="Permit to Work" />
+          <form className="form-grid two section-form" onSubmit={createWorkPermit}>
+            <Select label="Project" name="project_id" value={forms.permit.project_id} onChange={setComplianceForm('permit')}>
+              <option value="">No project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Permit type" name="permit_type" value={forms.permit.permit_type} onChange={setComplianceForm('permit')}>
+              <option value="hot_work">Hot work</option>
+              <option value="lifting">Lifting</option>
+              <option value="excavation">Excavation</option>
+              <option value="work_at_height">Work at height</option>
+              <option value="confined_space">Confined space</option>
+              <option value="electrical">Electrical</option>
+            </Select>
+            <Field label="Location" name="location" value={forms.permit.location} onChange={setComplianceForm('permit')} />
+            <Field label="Valid from" type="datetime-local" name="valid_from" value={forms.permit.valid_from} onChange={setComplianceForm('permit')} />
+            <Field label="Valid until" type="datetime-local" name="valid_until" value={forms.permit.valid_until} onChange={setComplianceForm('permit')} />
+            <TextArea className="span-2" label="Hazards" name="hazards" value={forms.permit.hazards} onChange={setComplianceForm('permit')} />
+            <TextArea className="span-2" label="Controls" name="controls" value={forms.permit.controls} onChange={setComplianceForm('permit')} />
+            <button type="submit" className="primary-action span-2">
+              <Send size={17} />
+              Submit permit
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ClipboardList} title="Site Inspections" />
+          <DataTable
+            columns={['No.', 'Type', 'Project', 'Area', 'Status', 'Score', 'Action']}
+            rows={inspections.map((inspection) => [
+              inspection.inspection_number,
+              labelize(inspection.type),
+              inspection.project?.name || '',
+              inspection.area || '',
+              <Badge key="status" value={inspection.status} />,
+              `${inspection.score}%`,
+              inspection.status === 'scheduled' ? (
+                <button key="complete" type="button" className="table-action" onClick={() => runAction(() => api.completeInspection(inspection.id), 'Inspection completed.')}>
+                  Complete
+                </button>
+              ) : (
+                ''
+              ),
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={AlertTriangle} title="Non-Conformance Report(NCR) Register" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="quality-assurance-health-safety-environment-non-conformance-report-register.csv" columns={ncrReportColumns} rows={ncrReportRows} />
+          </div>
+          <DataTable
+            columns={['Non-Conformance Report(NCR)', 'Project', 'Category', 'Location', 'Severity', 'Due', 'Status', 'Action']}
+            rows={ncrs.map((ncr, index) => [
+              ncr.ncr_number,
+              ncr.project?.name || '',
+              labelize(ncr.category || 'uncategorized'),
+              ncr.location || '',
+              <Badge key="severity" value={ncr.severity} />,
+              shortDate(ncr.due_date),
+              <Badge key="status" value={ncr.status} />,
+              <div key="actions" className="row-actions">
+                {ncr.status !== 'closed' && (
+                  <button
+                    type="button"
+                    className="table-action"
+                    onClick={() =>
+                      runAction(
+                        () =>
+                          api.closeNcr(ncr.id, {
+                            status: forms.ncr.close_status,
+                            root_cause: forms.ncr.root_cause || ncr.root_cause || 'Root cause recorded.',
+                            corrective_action: forms.ncr.corrective_action || ncr.corrective_action || 'Corrective action completed.',
+                            preventive_action: forms.ncr.preventive_action || ncr.preventive_action || null,
+                            verification_notes: forms.ncr.verification_notes || 'Quality Assurance verification completed.',
+                          }),
+                        `Non-Conformance Report(NCR) ${labelize(forms.ncr.close_status)}.`,
+                      )
+                    }
+                  >
+                    {labelize(forms.ncr.close_status)}
+                  </button>
+                )}
+                <DownloadButton filename={`${ncr.ncr_number || `ncr-${ncr.id}`}.csv`} columns={ncrReportColumns} rows={[ncrReportRows[index]]} label="CSV" />
+              </div>,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="Incident & Near Miss Reports" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="quality-assurance-health-safety-environment-incident-near-miss-reports.csv" columns={incidentReportColumns} rows={incidentReportRows} />
+          </div>
+          <DataTable
+            columns={['No.', 'Type', 'Project', 'Location', 'Severity', 'Status', 'Action']}
+            rows={incidents.map((incident, index) => [
+              incident.incident_number,
+              labelize(incident.incident_type),
+              incident.project?.name || '',
+              incident.location || '',
+              <Badge key="severity" value={incident.severity} />,
+              <Badge key="status" value={incident.status} />,
+              <div key="actions" className="row-actions">
+                {incident.status !== 'closed' && (
+                  <button
+                    type="button"
+                    className="table-action"
+                    onClick={() =>
+                      runAction(
+                        () =>
+                          api.closeSafetyIncident(incident.id, {
+                            status: forms.incident.close_status,
+                            root_cause: forms.incident.root_cause || incident.root_cause || null,
+                            corrective_action: forms.incident.corrective_action || incident.corrective_action || 'Corrective action completed.',
+                          }),
+                        'Incident updated.',
+                      )
+                    }
+                  >
+                    Close
+                  </button>
+                )}
+                <DownloadButton filename={`${incident.incident_number || `incident-${incident.id}`}.csv`} columns={incidentReportColumns} rows={[incidentReportRows[index]]} label="CSV" />
+              </div>,
+            ])}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={FileText} title="Safety Observations & Hazard Reports" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="quality-assurance-health-safety-environment-observation-hazard-reports.csv" columns={observationReportColumns} rows={observationReportRows} />
+          </div>
+          <DataTable
+            columns={['Observation', 'Type', 'Project', 'Location', 'Severity', 'Status', 'Action']}
+            rows={observations.map((observation, index) => [
+              observation.observation_number,
+              labelize(observation.observation_type),
+              observation.project?.name || '',
+              observation.location || '',
+              <Badge key="severity" value={observation.severity} />,
+              <Badge key="status" value={observation.status} />,
+              <div key="actions" className="row-actions">
+                {observation.status !== 'closed' && (
+                  <button type="button" className="table-action" onClick={() => runAction(() => api.closeSafetyObservation(observation.id, { corrective_action: forms.observation.corrective_action || observation.corrective_action || 'Corrective action completed.' }), 'Observation closed.')}>
+                    Close
+                  </button>
+                )}
+                <DownloadButton filename={`${observation.observation_number || `observation-${observation.id}`}.csv`} columns={observationReportColumns} rows={[observationReportRows[index]]} label="CSV" />
+              </div>,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Send} title="Permit to Work Register" />
+          <DataTable
+            columns={['Permit', 'Type', 'Status', 'Location', 'Next']}
+            rows={permits.map((permit) => [
+              permit.permit_number,
+              labelize(permit.permit_type),
+              <Badge key="status" value={permit.status} />,
+              permit.location || '',
+              nextPermitStatus(permit.status) ? (
+                <button key="next" type="button" className="table-action" onClick={() => runAction(() => api.transitionWorkPermit(permit.id, nextPermitStatus(permit.status)), `Permit ${labelize(nextPermitStatus(permit.status))}.`)}>
+                  {labelize(nextPermitStatus(permit.status))}
+                </button>
+              ) : (
+                ''
+              ),
+            ])}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ClipboardList} title="Quality Checklists" />
+          <DataTable
+            columns={['Inspection', 'Checklist item', 'Requirement', 'Result', 'Severity']}
+            rows={qualityChecklistItems.map((item) => [
+              item.inspection.inspection_number,
+              item.checklist_item,
+              item.requirement || '',
+              <Badge key="result" value={item.result} />,
+              <Badge key="severity" value={item.severity} />,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="Safety Checklists & Risk Assessments" />
+          <DataTable
+            columns={['Inspection', 'Type', 'Checklist item', 'Result', 'Severity']}
+            rows={safetyChecklistItems.map((item) => [
+              item.inspection.inspection_number,
+              labelize(item.inspection.type),
+              item.checklist_item,
+              <Badge key="result" value={item.result} />,
+              <Badge key="severity" value={item.severity} />,
+            ])}
+          />
+          <DataTable
+            columns={['Assessment', 'Project', 'Area', 'Status', 'Score']}
+            rows={riskAssessments.map((inspection) => [
+              inspection.inspection_number,
+              inspection.project?.name || '',
+              inspection.area || '',
+              <Badge key="status" value={inspection.status} />,
+              `${inspection.score}%`,
+            ])}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={CheckCircle2} title="Snag List & Punch List" />
+          <DataTable
+            columns={['List', 'Type', 'Item', 'Result', 'Severity', 'Status']}
+            rows={snagPunchItems.map((item) => [
+              item.inspection.inspection_number,
+              labelize(item.inspection.type),
+              item.checklist_item,
+              <Badge key="result" value={item.result} />,
+              <Badge key="severity" value={item.severity} />,
+              <Badge key="status" value={item.inspection.status} />,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={RefreshCcw} title="Corrective & Preventive Actions" />
+          <Select label="Non-Conformance Report(NCR) verification status" name="close_status" value={forms.ncr.close_status} onChange={setComplianceForm('ncr')}>
+            <option value="closed">Closed</option>
+            <option value="under_review">Under review</option>
+            <option value="corrective_action">Corrective action</option>
+            <option value="rework_required">Rework required</option>
+            <option value="reopened">Reopened</option>
+          </Select>
+          <TextArea label="Verification notes" name="verification_notes" value={forms.ncr.verification_notes} onChange={setComplianceForm('ncr')} />
+          <DataTable
+            columns={['Source', 'No.', 'Issue', 'Severity', 'Status', 'Due']}
+            rows={openCapa.map((item) => [
+              item.type,
+              item.number,
+              item.title,
+              <Badge key="severity" value={item.severity} />,
+              <Badge key="status" value={item.status} />,
+              shortDate(item.due),
+            ])}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Users} title="Toolbox Meetings" />
+          <DataTable
+            columns={['Talk', 'Topic', 'Project', 'Date', 'Attendees']}
+            rows={talks.map((talk) => [
+              talk.talk_number,
+              talk.topic,
+              talk.project?.name || '',
+              shortDate(talk.talk_date),
+              talk.attendee_count,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={BarChart3} title="Reports" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="quality-assurance-health-safety-environment-report-summary.csv" columns={qaHseReportColumns} rows={qaHseReportRows} />
+          </div>
+          <DataTable
+            columns={qaHseReportColumns}
+            rows={qaHseReportRows}
+          />
+        </section>
+      </div>
+    </section>
+  )
+}
+
+function PortalsView({
+  projects,
+  clients,
+  suppliers,
+  drawings,
+  documents,
+  portals,
+  forms,
+  setPortalForm,
+  createPortalUser,
+  grantPortalAccess,
+  createClientApproval,
+  createConsultantSubmittal,
+  createPortalWorkItem,
+  runAction,
+}) {
+  const [activePortalTab, setActivePortalTab] = useState('overview')
+  const workItems = portals.work_items || []
+  const portalUsers = portals.portal_users || []
+  const portalTypeConfig = {
+    client: {
+      label: 'Client Portal',
+      items: ['progress_photo', 'milestone_update', 'approval_request', 'invoice_query', 'variation_request', 'rfi', 'meeting_minutes', 'project_document'],
+      description: 'Progress, milestones, approvals, invoices, variations, RFIs, minutes, and documents.',
+    },
+    consultant: {
+      label: 'Consultant Portal',
+      items: ['drawing_review', 'technical_comment', 'submittal', 'rfi', 'inspection_request', 'digital_approval'],
+      description: 'Drawing reviews, comments, submittals, RFIs, inspections, and approvals.',
+    },
+    supplier: {
+      label: 'Supplier Portal',
+      items: ['purchase_order_acknowledgement', 'delivery_schedule', 'invoice_submission', 'payment_status_query', 'document_upload'],
+      description: 'Purchase orders, delivery schedules, invoice submission, payment status, and documents.',
+    },
+    subcontractor: {
+      label: 'Subcontractor Portal',
+      items: ['work_package_update', 'daily_report', 'safety_document', 'attendance_update', 'progress_update'],
+      description: 'Work packages, daily reports, safety documents, attendance, and progress updates.',
+    },
+    inspector: {
+      label: 'Inspector Portal',
+      items: ['inspection_schedule', 'inspection_finding', 'compliance_report', 'inspection_signoff'],
+      description: 'Inspection schedules, findings, compliance reports, and sign-offs.',
+    },
+    investor_owner: {
+      label: 'Investor/Owner Portal',
+      items: ['executive_report', 'project_health_update', 'milestone_update', 'budget_report'],
+      description: 'Executive health, milestones, permitted budgets, and project reports.',
+    },
+  }
+  const portalTabs = [
+    ['overview', 'Overview', BarChart3],
+    ...Object.entries(portalTypeConfig).map(([key, config]) => [key, config.label.replace(' Portal', ''), Building2]),
+    ['directory', 'Directory', Users],
+    ['work_items', 'Work Items', ClipboardList],
+  ]
+  const portalTypes = portals.portal_types?.length
+    ? portals.portal_types
+    : Object.entries(portalTypeConfig).map(([key, config]) => ({ key, label: config.label, features: config.items, users: 0, open_items: 0, completed_items: 0 }))
+  const activeType = portalTypeConfig[forms.workItem.portal_type] ? forms.workItem.portal_type : 'client'
+  const itemOptions = [...new Set([...(portalTypeConfig[activeType]?.items || portalTypeConfig.client.items), forms.workItem.item_type].filter(Boolean))]
+  const usersFor = (type) => portalUsers.filter((portalUser) => portalUser.user_type === type)
+  const selectedPortalUsers = usersFor(activeType)
+  const workItemsFor = (type) => workItems.filter((item) => item.portal_type === type)
+  const portalWorkItemRows = (items) =>
+    items.map((item) => [
+      <div key="item" className="table-primary">
+        <strong>{item.item_number}</strong>
+        <small>{item.title}</small>
+      </div>,
+      labelize(item.item_type),
+      item.project?.name || '',
+      item.portalUser?.name || item.supplier?.name || '',
+      <Badge key="priority" value={item.priority} />,
+      <Badge key="status" value={item.status} />,
+      shortDate(item.due_date),
+      <div key="actions" className="row-actions">
+        {['submitted', 'changes_required'].includes(item.status) && (
+          <button type="button" className="table-action" onClick={() => runAction(() => api.reviewPortalWorkItem(item.id, { status: 'in_review', response: 'Review started.' }), 'Portal item moved to review.')}>
+            Review
+          </button>
+        )}
+        {!['approved', 'completed', 'closed', 'paid', 'signed_off', 'rejected'].includes(item.status) && (
+          <button type="button" className="table-action" onClick={() => runAction(() => api.reviewPortalWorkItem(item.id, { status: completionStatus(item.item_type), response: 'Completed in Structra.' }), 'Portal item completed.')}>
+            Complete
+          </button>
+        )}
+        <button type="button" className="table-action danger" onClick={() => runAction(() => api.deletePortalWorkItem(item.id), 'Portal work item archived.')}>
+          Archive
         </button>
-      )}
-      {item.status === 'submitted' && (
+      </div>,
+    ])
+
+  function completionStatus(itemType) {
+    if (itemType === 'invoice_submission' || itemType === 'payment_status_query') return 'paid'
+    if (itemType === 'inspection_signoff') return 'signed_off'
+    if (itemType.includes('approval') || itemType === 'drawing_review' || itemType === 'submittal') return 'approved'
+
+    return 'completed'
+  }
+
+  function renderWorkItemForm() {
+    return (
+      <section className="panel">
+        <PanelTitle icon={Plus} title="Portal Work Item" />
+        <form className="form-grid two" onSubmit={createPortalWorkItem}>
+          <Select label="Portal" name="portal_type" value={forms.workItem.portal_type} onChange={setPortalForm('workItem')}>
+            {Object.entries(portalTypeConfig).map(([key, config]) => (
+              <option key={key} value={key}>
+                {config.label}
+              </option>
+            ))}
+          </Select>
+          <Select label="Project" name="project_id" value={forms.workItem.project_id} onChange={setPortalForm('workItem')} required>
+            <option value="">Select</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </Select>
+          <Select label="Assignee" name="portal_user_id" value={forms.workItem.portal_user_id} onChange={setPortalForm('workItem')}>
+            <option value="">Unassigned</option>
+            {(selectedPortalUsers.length ? selectedPortalUsers : portalUsers).map((portalUser) => (
+              <option key={portalUser.id} value={portalUser.id}>
+                {portalUser.name}
+              </option>
+            ))}
+          </Select>
+          <Select label="Supplier" name="supplier_id" value={forms.workItem.supplier_id} onChange={setPortalForm('workItem')}>
+            <option value="">None</option>
+            {suppliers.map((supplier) => (
+              <option key={supplier.id} value={supplier.id}>
+                {supplier.name}
+              </option>
+            ))}
+          </Select>
+          <Select label="Item type" name="item_type" value={forms.workItem.item_type} onChange={setPortalForm('workItem')}>
+            {itemOptions.map((itemType) => (
+              <option key={itemType} value={itemType}>
+                {labelize(itemType)}
+              </option>
+            ))}
+          </Select>
+          <Select label="Priority" name="priority" value={forms.workItem.priority} onChange={setPortalForm('workItem')}>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </Select>
+          <Field label="Due date" type="date" name="due_date" value={forms.workItem.due_date} onChange={setPortalForm('workItem')} />
+          <Field label="Title" name="title" value={forms.workItem.title} onChange={setPortalForm('workItem')} required />
+          <TextArea className="span-2" label="Description" name="description" value={forms.workItem.description} onChange={setPortalForm('workItem')} rows={3} />
+          <button type="submit" className="primary-action span-2">
+            <Plus size={17} />
+            Create work item
+          </button>
+        </form>
+      </section>
+    )
+  }
+
+  function renderOverview() {
+    return (
+      <>
+        <div className="portal-role-grid">
+          {portalTypes.map((type) => (
+            <button key={type.key} type="button" className="portal-role-card" onClick={() => setActivePortalTab(type.key)}>
+              <span>{type.label}</span>
+              <strong>{type.open_items || 0}</strong>
+              <small>{type.users || 0} users | {type.completed_items || 0} completed</small>
+            </button>
+          ))}
+        </div>
+
+        <div className="grid-main">
+          {renderWorkItemForm()}
+          <section className="panel">
+            <PanelTitle icon={Clock3} title="Portal Activity" />
+            <DataTable
+              columns={['Time', 'Portal', 'Activity', 'Status', 'Project']}
+              rows={(portals.activity || []).map((activity) => [
+                shortDate(activity.time),
+                labelize(activity.portal),
+                activity.title,
+                <Badge key="status" value={activity.status} />,
+                activity.project || '',
+              ])}
+            />
+          </section>
+        </div>
+      </>
+    )
+  }
+
+  function renderClientPortal() {
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={CheckCircle2} title="Client Approvals" />
+          <DataTable
+            columns={['No.', 'Title', 'Project', 'Drawing', 'Document', 'Status', 'Action']}
+            rows={(portals.client_approvals || []).map((approval) => [
+              approval.approval_number,
+              approval.title,
+              approval.project?.name || '',
+              approval.drawing?.drawing_number || '',
+              approval.document?.document_number || '',
+              <Badge key="status" value={approval.status} />,
+              approval.status === 'submitted' ? (
+                <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.reviewClientApproval(approval.id, { status: 'approved', decision_notes: 'Approved in Structra.' }), 'Client approval completed.')}>
+                  Approve
+                </button>
+              ) : (
+                ''
+              ),
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={WalletCards} title="Client Invoices" />
+          <DataTable
+            columns={['Invoice', 'Project', 'Client', 'Total', 'Balance', 'Payment']}
+            rows={(portals.client_invoices || []).map((invoice) => [
+              invoice.invoice_number,
+              invoice.project?.name || '',
+              invoice.client?.name || '',
+              money(invoice.total_amount),
+              money(invoice.balance_due),
+              <Badge key="payment" value={invoice.payment_status} />,
+            ])}
+          />
+        </section>
+
+        <section className="panel span-2">
+          <PanelTitle icon={ClipboardList} title="Client RFIs, Variations & Minutes" />
+          <DataTable columns={['Item', 'Type', 'Project', 'Owner', 'Priority', 'Status', 'Due', 'Action']} rows={portalWorkItemRows(workItemsFor('client'))} />
+        </section>
+      </div>
+    )
+  }
+
+  function renderConsultantPortal() {
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ClipboardList} title="Consultant Submittals" />
+          <DataTable
+            columns={['No.', 'Title', 'Discipline', 'Drawing', 'Status', 'Action']}
+            rows={(portals.consultant_submittals || []).map((submittal) => [
+              submittal.submittal_number,
+              submittal.title,
+              labelize(submittal.discipline),
+              submittal.drawing?.drawing_number || '',
+              <Badge key="status" value={submittal.status} />,
+              ['submitted', 'in_review'].includes(submittal.status) ? (
+                <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.reviewConsultantSubmittal(submittal.id, { status: 'approved', comments: 'Approved in Structra.' }), 'Submittal approved.')}>
+                  Approve
+                </button>
+              ) : (
+                ''
+              ),
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={FileText} title="Drawing Reviews" />
+          <DataTable
+            columns={['Drawing', 'Title', 'Discipline', 'Status']}
+            rows={drawings.map((drawing) => [
+              drawing.drawing_number,
+              drawing.title,
+              labelize(drawing.discipline),
+              <Badge key="status" value={drawing.status} />,
+            ])}
+          />
+        </section>
+
+        <section className="panel span-2">
+          <PanelTitle icon={ClipboardList} title="Technical Comments & RFIs" />
+          <DataTable columns={['Item', 'Type', 'Project', 'Owner', 'Priority', 'Status', 'Due', 'Action']} rows={portalWorkItemRows(workItemsFor('consultant'))} />
+        </section>
+      </div>
+    )
+  }
+
+  function renderSupplierPortal() {
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Truck} title="Purchase Orders" />
+          <DataTable
+            columns={['PO', 'Supplier', 'Project', 'Status', 'Delivery', 'Total']}
+            rows={(portals.supplier_purchase_orders || []).map((po) => [
+              po.po_number,
+              po.supplier?.name || '',
+              po.project?.name || '',
+              <Badge key="status" value={po.status} />,
+              <Badge key="delivery" value={po.delivery_status} />,
+              money(po.total_amount),
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={WalletCards} title="Supplier Invoices & Payments" />
+          <DataTable
+            columns={['Invoice', 'Supplier', 'Project', 'Total', 'Balance', 'Status']}
+            rows={(portals.supplier_invoices || []).map((invoice) => [
+              invoice.invoice_number,
+              invoice.supplier?.name || '',
+              invoice.project?.name || '',
+              money(invoice.total_amount),
+              money(invoice.balance_due),
+              <Badge key="status" value={invoice.status} />,
+            ])}
+          />
+        </section>
+
+        <section className="panel span-2">
+          <PanelTitle icon={Package} title="Supplier Schedules, Documents & Queries" />
+          <DataTable columns={['Item', 'Type', 'Project', 'Owner', 'Priority', 'Status', 'Due', 'Action']} rows={portalWorkItemRows(workItemsFor('supplier'))} />
+        </section>
+      </div>
+    )
+  }
+
+  function renderSubcontractorPortal() {
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={MapPinned} title="Daily Reports" />
+          <DataTable
+            columns={['Report', 'Project', 'Date', 'Labour', 'Status']}
+            rows={(portals.daily_reports || []).map((report) => [
+              report.report_number,
+              report.project?.name || '',
+              shortDate(report.report_date),
+              report.labour_count || 0,
+              <Badge key="status" value={report.status} />,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="Safety Documents & Attendance" />
+          <DataTable columns={['Item', 'Type', 'Project', 'Owner', 'Priority', 'Status', 'Due', 'Action']} rows={portalWorkItemRows(workItemsFor('subcontractor'))} />
+        </section>
+      </div>
+    )
+  }
+
+  function renderInspectorPortal() {
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="Inspections" />
+          <DataTable
+            columns={['Inspection', 'Project', 'Type', 'Area', 'Score', 'Status']}
+            rows={(portals.inspections || []).map((inspection) => [
+              inspection.inspection_number,
+              inspection.project?.name || '',
+              labelize(inspection.type),
+              inspection.area || '',
+              `${inspection.score || 0}%`,
+              <Badge key="status" value={inspection.status} />,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={CheckCircle2} title="Findings, Compliance & Sign-Offs" />
+          <DataTable columns={['Item', 'Type', 'Project', 'Owner', 'Priority', 'Status', 'Due', 'Action']} rows={portalWorkItemRows(workItemsFor('inspector'))} />
+        </section>
+      </div>
+    )
+  }
+
+  function renderInvestorPortal() {
+    return (
+      <div className="grid-main">
+        <section className="panel span-2">
+          <PanelTitle icon={BarChart3} title="Executive Project Health" />
+          <DataTable
+            columns={['Project', 'Status', 'Health', 'Progress', 'Contract', 'Budget', 'Actual', 'Target']}
+            rows={(portals.project_snapshots || []).map((project) => [
+              project.name,
+              <Badge key="status" value={project.status} />,
+              <Badge key="health" value={project.health_status} />,
+              `${project.progress_percent || 0}%`,
+              money(project.contract_value),
+              money(project.budget_total),
+              money(project.actual_cost),
+              shortDate(project.target_end_date),
+            ])}
+          />
+        </section>
+
+        <section className="panel span-2">
+          <PanelTitle icon={FileText} title="Investor Reports & Milestones" />
+          <DataTable columns={['Item', 'Type', 'Project', 'Owner', 'Priority', 'Status', 'Due', 'Action']} rows={portalWorkItemRows(workItemsFor('investor_owner'))} />
+        </section>
+      </div>
+    )
+  }
+
+  function renderDirectory() {
+    return (
+      <>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Users} title="Portal User" />
+            <form className="form-grid two" onSubmit={createPortalUser}>
+              <Select label="Type" name="user_type" value={forms.user.user_type} onChange={setPortalForm('user')}>
+                {Object.entries(portalTypeConfig).map(([key, config]) => (
+                  <option key={key} value={key}>
+                    {config.label}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Client" name="client_id" value={forms.user.client_id} onChange={setPortalForm('user')}>
+                <option value="">None</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </Select>
+              <Field label="Name" name="name" value={forms.user.name} onChange={setPortalForm('user')} required />
+              <Field label="Email" type="email" name="email" value={forms.user.email} onChange={setPortalForm('user')} required />
+              <Field className="span-2" label="Organization" name="organization" value={forms.user.organization} onChange={setPortalForm('user')} />
+              <button type="submit" className="primary-action span-2">
+                <Plus size={17} />
+                Create portal user
+              </button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={FolderKanban} title="Project Access" />
+            <form className="form-grid two" onSubmit={grantPortalAccess}>
+              <Select label="Portal user" name="portal_user_id" value={forms.access.portal_user_id} onChange={setPortalForm('access')} required>
+                <option value="">Select</option>
+                {portalUsers.map((portalUser) => (
+                  <option key={portalUser.id} value={portalUser.id}>
+                    {portalUser.name}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Project" name="project_id" value={forms.access.project_id} onChange={setPortalForm('access')} required>
+                <option value="">Select</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </Select>
+              <Select label="Access" name="access_level" value={forms.access.access_level} onChange={setPortalForm('access')}>
+                <option value="view">View</option>
+                <option value="comment">Comment</option>
+                <option value="approve">Approve</option>
+                <option value="submit">Submit</option>
+                <option value="manage">Manage</option>
+              </Select>
+              <Select label="Scope" name="access_scope" value={forms.access.access_scope} onChange={setPortalForm('access')}>
+                <option value="project">Project</option>
+                <option value="contract">Contract</option>
+                <option value="work_package">Work package</option>
+                <option value="cost_code">Cost code</option>
+              </Select>
+              <button type="submit" className="primary-action span-2">
+                <Send size={17} />
+                Grant access
+              </button>
+            </form>
+          </section>
+        </div>
+
+        <section className="panel">
+          <PanelTitle icon={Users} title="Portal Directory" />
+          <DataTable
+            columns={['Name', 'Type', 'Organization', 'Status', 'Accesses', 'Open items']}
+            rows={portalUsers.map((portalUser) => [
+              portalUser.name,
+              labelize(portalUser.user_type),
+              portalUser.organization || '',
+              <Badge key="status" value={portalUser.status} />,
+              portalUser.accesses?.length || 0,
+              portalUser.work_items?.filter((item) => !['approved', 'completed', 'closed', 'paid', 'signed_off'].includes(item.status)).length || 0,
+            ])}
+          />
+        </section>
+      </>
+    )
+  }
+
+  function renderLegacyForms(scope = 'both') {
+    return (
+      <div className="grid-main">
+        {['both', 'client'].includes(scope) && (
+        <section className="panel">
+          <PanelTitle icon={CheckCircle2} title="Client Approval" />
+          <form className="form-grid two" onSubmit={createClientApproval}>
+            <Select label="Project" name="project_id" value={forms.clientApproval.project_id} onChange={setPortalForm('clientApproval')} required>
+              <option value="">Select</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Reviewer" name="portal_user_id" value={forms.clientApproval.portal_user_id} onChange={setPortalForm('clientApproval')}>
+              <option value="">Unassigned</option>
+              {usersFor('client').map((portalUser) => (
+                <option key={portalUser.id} value={portalUser.id}>
+                  {portalUser.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Drawing" name="drawing_id" value={forms.clientApproval.drawing_id} onChange={setPortalForm('clientApproval')}>
+              <option value="">None</option>
+              {drawings.map((drawing) => (
+                <option key={drawing.id} value={drawing.id}>
+                  {drawing.drawing_number}
+                </option>
+              ))}
+            </Select>
+            <Select label="Document" name="document_id" value={forms.clientApproval.document_id} onChange={setPortalForm('clientApproval')}>
+              <option value="">None</option>
+              {documents.map((document) => (
+                <option key={document.id} value={document.id}>
+                  {document.document_number}
+                </option>
+              ))}
+            </Select>
+            <Field className="span-2" label="Title" name="title" value={forms.clientApproval.title} onChange={setPortalForm('clientApproval')} required />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Request approval
+            </button>
+          </form>
+        </section>
+        )}
+
+        {['both', 'consultant'].includes(scope) && (
+        <section className="panel">
+          <PanelTitle icon={ClipboardList} title="Consultant Submittal" />
+          <form className="form-grid two" onSubmit={createConsultantSubmittal}>
+            <Select label="Project" name="project_id" value={forms.submittal.project_id} onChange={setPortalForm('submittal')} required>
+              <option value="">Select</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Consultant" name="portal_user_id" value={forms.submittal.portal_user_id} onChange={setPortalForm('submittal')}>
+              <option value="">Unassigned</option>
+              {usersFor('consultant').map((portalUser) => (
+                <option key={portalUser.id} value={portalUser.id}>
+                  {portalUser.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Discipline" name="discipline" value={forms.submittal.discipline} onChange={setPortalForm('submittal')}>
+              <option value="architectural">Architectural</option>
+              <option value="structural">Structural</option>
+              <option value="mep">MEP</option>
+              <option value="civil">Civil</option>
+              <option value="interiors">Interiors</option>
+            </Select>
+            <Select label="Drawing" name="drawing_id" value={forms.submittal.drawing_id} onChange={setPortalForm('submittal')}>
+              <option value="">None</option>
+              {drawings.map((drawing) => (
+                <option key={drawing.id} value={drawing.id}>
+                  {drawing.drawing_number}
+                </option>
+              ))}
+            </Select>
+            <Field className="span-2" label="Title" name="title" value={forms.submittal.title} onChange={setPortalForm('submittal')} required />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Create submittal
+            </button>
+          </form>
+        </section>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <section className="view-stack portal-workspace">
+      <div className="kpi-grid">
+        <Kpi icon={Users} label="Portal users" value={portals.summary?.active_users || 0} sub="Active external users" />
+        <Kpi icon={ClipboardList} label="Open items" value={portals.summary?.open_work_items || 0} sub="Across all portals" />
+        <Kpi icon={AlertTriangle} label="Overdue" value={portals.summary?.overdue_items || 0} sub="Needs follow-up" />
+        <Kpi icon={WalletCards} label="Supplier invoices" value={portals.summary?.supplier_invoices || 0} sub="Open supplier invoices" />
+        <Kpi icon={CheckCircle2} label="Client approvals" value={portals.summary?.pending_client_approvals || 0} sub="Awaiting decision" />
+        <Kpi icon={ShieldCheck} label="Inspection sign-offs" value={portals.summary?.inspection_signoffs || 0} sub="Awaiting sign-off" />
+        <Kpi icon={FolderKanban} label="Project access" value={portals.summary?.project_accesses || 0} sub="Granted scopes" />
+      </div>
+
+      <nav className="module-tabs" aria-label="Portal navigation">
+        {portalTabs.map(([key, label, Icon]) => (
+          <button key={key} type="button" className={activePortalTab === key ? 'active' : ''} onClick={() => setActivePortalTab(key)}>
+            <Icon size={15} />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {activePortalTab === 'overview' && renderOverview()}
+      {activePortalTab === 'client' && (
         <>
-          <button type="button" className="table-action" onClick={() => runAction(() => api.reviewRequisition(item.id, 'approved'), 'Requisition approved.')}>
-            Approve
-          </button>
-          <button type="button" className="table-action danger" onClick={() => runAction(() => api.reviewRequisition(item.id, 'rejected'), 'Requisition rejected.')}>
-            Reject
-          </button>
+          {renderLegacyForms('client')}
+          {renderClientPortal()}
         </>
       )}
-      {item.status === 'approved' && supplierId && (
-        <button type="button" className="table-action" onClick={() => runAction(() => api.convertRequisition(item.id, { supplier_id: supplierId }), 'Purchase order created.')}>
-          Convert
-        </button>
+      {activePortalTab === 'consultant' && (
+        <>
+          {renderLegacyForms('consultant')}
+          {renderConsultantPortal()}
+        </>
       )}
-    </div>
+      {activePortalTab === 'supplier' && renderSupplierPortal()}
+      {activePortalTab === 'subcontractor' && renderSubcontractorPortal()}
+      {activePortalTab === 'inspector' && renderInspectorPortal()}
+      {activePortalTab === 'investor_owner' && renderInvestorPortal()}
+      {activePortalTab === 'directory' && renderDirectory()}
+      {activePortalTab === 'work_items' && (
+        <>
+          {renderWorkItemForm()}
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="All Portal Work Items" />
+            <DataTable columns={['Item', 'Type', 'Project', 'Owner', 'Priority', 'Status', 'Due', 'Action']} rows={portalWorkItemRows(workItems)} />
+          </section>
+        </>
+      )}
+    </section>
   )
 }
 
@@ -1045,17 +9196,74 @@ function DocumentsView({
   setDrawingForm,
   revisionForm,
   setRevisionForm,
+  markupForm,
+  setMarkupForm,
+  reviewForm,
+  setReviewForm,
   uploadDocument,
   uploadDrawing,
   reviseDrawing,
   runAction,
 }) {
+  const [editingDocumentId, setEditingDocumentId] = useState(null)
+
+  function saveDocument(event) {
+    if (!editingDocumentId) {
+      uploadDocument(event)
+      return
+    }
+
+    event.preventDefault()
+
+    const formData = new FormData()
+    Object.entries(documentForm).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') formData.append(key, value)
+    })
+
+    runAction(() => api.updateDocument(editingDocumentId, formData), 'Document updated.').then(() => {
+      setEditingDocumentId(null)
+      setDocumentForm({})
+      event.currentTarget.reset()
+    })
+  }
+
+  function editDocument(document) {
+    setEditingDocumentId(document.id)
+    setDocumentForm({
+      title: document.title || '',
+      document_type: document.document_type || 'general',
+      branch_id: document.branch_id || document.branch?.id || '',
+      project_id: document.project_id || document.project?.id || '',
+      repository_scope: document.repository_scope || 'company',
+      folder: document.folder || '',
+      status: document.status || 'active',
+      description: document.description || '',
+    })
+  }
+
+  function cancelDocumentEdit() {
+    setEditingDocumentId(null)
+    setDocumentForm({})
+  }
+
+  function archiveDocument(document) {
+    if (!window.confirm(`Archive document ${document.document_number || document.title}?`)) {
+      return
+    }
+
+    runAction(() => api.deleteDocument(document.id), 'Document archived.').then(() => {
+      if (editingDocumentId === document.id) {
+        cancelDocumentEdit()
+      }
+    })
+  }
+
   return (
     <section className="view-stack">
       <div className="grid-main">
         <section className="panel">
-          <PanelTitle icon={Upload} title="Upload Document" />
-          <form className="form-grid two" onSubmit={uploadDocument}>
+          <PanelTitle icon={Upload} title={editingDocumentId ? 'Edit Document' : 'Upload Document'} />
+          <form className="form-grid two" onSubmit={saveDocument}>
             <Field label="Title" name="title" value={documentForm.title || ''} onChange={setForm(setDocumentForm)} required />
             <Select label="Type" name="document_type" value={documentForm.document_type || 'general'} onChange={setForm(setDocumentForm)}>
               <option value="general">General</option>
@@ -1082,21 +9290,34 @@ function DocumentsView({
               ))}
             </Select>
             <Field label="Folder" name="folder" value={documentForm.folder || ''} onChange={setForm(setDocumentForm)} />
+            <Select label="Status" name="status" value={documentForm.status || 'active'} onChange={setForm(setDocumentForm)}>
+              <option value="active">Active</option>
+              <option value="under_review">Under review</option>
+              <option value="approved">Approved</option>
+              <option value="archived">Archived</option>
+            </Select>
             <label className="field">
               <span>File</span>
               <input type="file" name="file" onChange={(event) => setDocumentForm((current) => ({ ...current, file: event.target.files[0] }))} />
             </label>
-            <button type="submit" className="primary-action span-2">
-              <Upload size={17} />
-              Upload document
-            </button>
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">
+                {editingDocumentId ? <CheckCircle2 size={17} /> : <Upload size={17} />}
+                {editingDocumentId ? 'Save document' : 'Upload document'}
+              </button>
+              {editingDocumentId && (
+                <button type="button" className="table-action" onClick={cancelDocumentEdit}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </form>
         </section>
 
         <section className="panel">
           <PanelTitle icon={Layers3} title="Upload Drawing" />
           <form className="form-grid two" onSubmit={uploadDrawing}>
-            <Field label="Drawing no." name="drawing_number" value={drawingForm.drawing_number || ''} onChange={setForm(setDrawingForm)} required />
+            <Field label="Drawing No." name="drawing_number" value={drawingForm.drawing_number || ''} onChange={setForm(setDrawingForm)} placeholder="Auto-generated" />
             <Field label="Title" name="title" value={drawingForm.title || ''} onChange={setForm(setDrawingForm)} required />
             <Select label="Discipline" name="discipline" value={drawingForm.discipline || 'architectural'} onChange={setForm(setDrawingForm)}>
               <option value="architectural">Architectural</option>
@@ -1105,7 +9326,7 @@ function DocumentsView({
               <option value="civil">Civil</option>
               <option value="interiors">Interiors</option>
             </Select>
-            <Field label="Revision" name="revision_code" value={drawingForm.revision_code || ''} onChange={setForm(setDrawingForm)} placeholder="P01" />
+            <Field label="Revision" name="revision_code" value={drawingForm.revision_code || ''} onChange={setForm(setDrawingForm)} placeholder="Auto-generated as P01" />
             <Select label="Project" name="project_id" value={drawingForm.project_id || ''} onChange={setForm(setDrawingForm)}>
               <option value="">Branch drawing library</option>
               {projects.map((project) => (
@@ -1129,7 +9350,7 @@ function DocumentsView({
       <section className="panel">
         <PanelTitle icon={FileText} title="Document Repository" />
         <DataTable
-          columns={['No.', 'Title', 'Scope', 'Type', 'Version', 'Status']}
+          columns={['No.', 'Title', 'Scope', 'Type', 'Version', 'Status', 'Actions']}
           rows={documents.map((doc) => [
             doc.document_number,
             doc.title,
@@ -1137,6 +9358,14 @@ function DocumentsView({
             labelize(doc.document_type),
             `v${doc.version}`,
             <Badge key="status" value={doc.status} />,
+            <div key="actions" className="row-actions">
+              <button type="button" className="table-action" onClick={() => editDocument(doc)}>
+                Edit
+              </button>
+              <button type="button" className="table-action danger" onClick={() => archiveDocument(doc)}>
+                Archive
+              </button>
+            </div>,
           ])}
         />
       </section>
@@ -1152,7 +9381,7 @@ function DocumentsView({
               </option>
             ))}
           </Select>
-          <Field label="Revision" name="revision_code" value={revisionForm.revision_code} onChange={setForm(setRevisionForm)} required />
+          <Field label="Revision" name="revision_code" value={revisionForm.revision_code} onChange={setForm(setRevisionForm)} placeholder="Auto-generated" />
           <Field label="Notes" name="notes" value={revisionForm.notes} onChange={setForm(setRevisionForm)} />
           <label className="field compact-file">
             <span>File</span>
@@ -1185,6 +9414,80 @@ function DocumentsView({
           ])}
         />
       </section>
+
+      <section className="panel">
+        <PanelTitle icon={ClipboardList} title="Drawing Markups & Reviews" />
+        <div className="grid-main tight">
+          <form
+            className="form-grid two"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (!markupForm.drawing_id) return
+              runAction(
+                () =>
+                  api.createDrawingMarkup(markupForm.drawing_id, {
+                    comment: markupForm.comment,
+                    markup_type: 'pin',
+                    x: Number(markupForm.x || 0),
+                    y: Number(markupForm.y || 0),
+                  }),
+                'Markup added.',
+              ).then(() => setMarkupForm({ drawing_id: markupForm.drawing_id, comment: '', x: 0.5, y: 0.5 }))
+            }}
+          >
+            <Select label="Drawing" name="drawing_id" value={markupForm.drawing_id} onChange={setForm(setMarkupForm)} required>
+              <option value="">Select drawing</option>
+              {drawings.map((drawing) => (
+                <option key={drawing.id} value={drawing.id}>
+                  {drawing.drawing_number} - {drawing.title}
+                </option>
+              ))}
+            </Select>
+            <Field label="Comment" name="comment" value={markupForm.comment} onChange={setForm(setMarkupForm)} required />
+            <Field label="X" type="number" step="0.01" min="0" max="1" name="x" value={markupForm.x} onChange={setForm(setMarkupForm)} />
+            <Field label="Y" type="number" step="0.01" min="0" max="1" name="y" value={markupForm.y} onChange={setForm(setMarkupForm)} />
+            <button type="submit" className="primary-action span-2">
+              <Plus size={17} />
+              Add markup
+            </button>
+          </form>
+
+          <form
+            className="form-grid two"
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (!reviewForm.drawing_id) return
+              runAction(
+                () =>
+                  api.createDrawingReview(reviewForm.drawing_id, {
+                    decision: reviewForm.decision,
+                    comments: reviewForm.comments,
+                  }),
+                'Drawing review recorded.',
+              ).then(() => setReviewForm({ drawing_id: reviewForm.drawing_id, decision: 'approved', comments: '' }))
+            }}
+          >
+            <Select label="Drawing" name="drawing_id" value={reviewForm.drawing_id} onChange={setForm(setReviewForm)} required>
+              <option value="">Select drawing</option>
+              {drawings.map((drawing) => (
+                <option key={drawing.id} value={drawing.id}>
+                  {drawing.drawing_number} - {drawing.title}
+                </option>
+              ))}
+            </Select>
+            <Select label="Decision" name="decision" value={reviewForm.decision} onChange={setForm(setReviewForm)}>
+              <option value="approved">Approved</option>
+              <option value="changes_required">Changes required</option>
+              <option value="rejected">Rejected</option>
+            </Select>
+            <Field className="span-2" label="Comments" name="comments" value={reviewForm.comments} onChange={setForm(setReviewForm)} />
+            <button type="submit" className="primary-action span-2">
+              <CheckCircle2 size={17} />
+              Record review
+            </button>
+          </form>
+        </div>
+      </section>
     </section>
   )
 }
@@ -1192,7 +9495,94 @@ function DocumentsView({
 function ReportsView({ reports, dashboard }) {
   const portfolio = reports?.portfolio || []
   const costControl = reports?.cost_control || []
+  const documents = reports?.documents || {}
   const procurement = reports?.procurement || {}
+  const sales = reports?.sales || {}
+  const field = reports?.field || {}
+  const inventory = reports?.inventory || {}
+  const finance = reports?.finance || {}
+  const payroll = reports?.payroll || {}
+  const quality = reports?.quality || {}
+  const safety = reports?.safety || {}
+  const portals = reports?.portals || {}
+  const costColumns = ['Project', 'Code', 'Category', 'Budget', 'Committed', 'Actual', 'Variance']
+  const costRows = costControl.map((line) => [
+    line.project?.code || '',
+    line.cost_code || '',
+    labelize(line.category || ''),
+    money(line.budget_amount),
+    money(line.committed_amount),
+    money(line.actual_amount),
+    money(line.variance),
+  ])
+  const portfolioColumns = ['Code', 'Project', 'Client', 'Status', 'Progress', 'Contract', 'Budget', 'Actual']
+  const portfolioRows = portfolio.map((project) => [
+    project.code || '',
+    project.name || '',
+    project.client?.name || '',
+    labelize(project.status || ''),
+    `${project.progress_percent || 0}%`,
+    money(project.contract_value),
+    money(project.budget_total),
+    money(project.actual_cost),
+  ])
+  const statusColumns = ['Report', 'Status / Metric', 'Count', 'Value']
+  const groupedRows = (reportName, items = [], labelKey = 'status', valueKey = 'value') =>
+    (items || []).map((item) => [
+      reportName,
+      labelize(item[labelKey] || ''),
+      item.total || 0,
+      item[valueKey] !== undefined ? money(item[valueKey]) : '',
+    ])
+  const statusRows = [
+    ['Documents', 'Total documents', documents.total || 0, ''],
+    ...groupedRows('Documents by type', documents.by_type, 'document_type'),
+    ...groupedRows('Drawings by status', documents.drawings_by_status),
+    ...groupedRows('Purchase requisitions', procurement.requisitions),
+    ...groupedRows('Purchase orders', procurement.purchase_orders),
+    ...groupedRows('Sales leads', sales.leads, 'stage'),
+    ...groupedRows('Opportunities', sales.opportunities, 'stage'),
+    ...groupedRows('Tenders', sales.tenders),
+    ...groupedRows('Estimates', sales.estimates),
+    ...groupedRows('Daily reports', field.daily_reports),
+    ...groupedRows('Field issues', field.issues),
+    ['Field attendance', 'Open clock-ins', field.attendance_open || 0, ''],
+    ['Inventory', 'Items', inventory.items || 0, ''],
+    ['Inventory', 'Reorder alerts', (inventory.reorder_alerts || []).length, ''],
+    ...groupedRows('Invoices', finance.invoices),
+    ...groupedRows('Expenses', finance.expenses),
+    ...groupedRows('Employees', payroll.employees),
+    ...groupedRows('Payroll runs', payroll.runs),
+    ...groupedRows('Equipment', reports?.equipment, 'status', 'hourly_rate'),
+    ...groupedRows('Quality inspections', quality.inspections),
+    ...groupedRows('Non-Conformance Reports(NCRs)', quality.ncrs),
+    ...groupedRows('Safety incidents', safety.incidents),
+    ...groupedRows('Work permits', safety.permits),
+    ...groupedRows('Client approvals', portals.client_approvals),
+    ...groupedRows('Consultant submittals', portals.consultant_submittals),
+  ]
+  const receivableColumns = ['Invoice', 'Client', 'Project', 'Due date', 'Status', 'Payment status', 'Total', 'Balance']
+  const receivableRows = (finance.receivables || []).map((invoice) => [
+    invoice.invoice_number || '',
+    invoice.client?.name || '',
+    invoice.project?.name || '',
+    shortDate(invoice.due_date),
+    labelize(invoice.status || ''),
+    labelize(invoice.payment_status || ''),
+    money(invoice.total_amount),
+    money(invoice.balance_due),
+  ])
+  const reorderColumns = ['Stock Keeping Unit (SKU)', 'Item', 'Category', 'Status', 'On hand', 'Reorder level', 'Unit', 'Average cost']
+  const reorderRows = (inventory.reorder_alerts || []).map((item) => [
+    item.sku || '',
+    item.name || '',
+    labelize(item.category || ''),
+    labelize(item.status || ''),
+    item.quantity_on_hand || 0,
+    item.reorder_level || 0,
+    item.unit || '',
+    money(item.average_cost),
+  ])
 
   return (
     <section className="view-stack">
@@ -1205,42 +9595,1702 @@ function ReportsView({ reports, dashboard }) {
 
       <section className="panel">
         <PanelTitle icon={WalletCards} title="Cost Control Report" />
+        <div className="panel-toolbar">
+          <DownloadButton filename="cost-control-report.csv" columns={costColumns} rows={costRows} />
+        </div>
         <DataTable
-          columns={['Project', 'Code', 'Category', 'Budget', 'Committed', 'Actual', 'Variance']}
-          rows={costControl.map((line) => [
-            line.project?.code,
-            line.cost_code,
-            labelize(line.category),
-            money(line.budget_amount),
-            money(line.committed_amount),
-            money(line.actual_amount),
-            money(line.variance),
-          ])}
+          columns={costColumns}
+          rows={costRows}
         />
       </section>
 
       <section className="panel">
         <PanelTitle icon={FolderKanban} title="Portfolio Report" />
+        <div className="panel-toolbar">
+          <DownloadButton filename="portfolio-report.csv" columns={portfolioColumns} rows={portfolioRows} />
+        </div>
         <DataTable
-          columns={['Code', 'Project', 'Client', 'Status', 'Progress', 'Contract', 'Budget', 'Actual']}
-          rows={portfolio.map((project) => [
-            project.code,
-            project.name,
-            project.client?.name || '',
-            <Badge key="status" value={project.status} />,
-            `${project.progress_percent}%`,
-            money(project.contract_value),
-            money(project.budget_total),
-            money(project.actual_cost),
+          columns={portfolioColumns}
+          rows={portfolioRows.map((row, index) => [
+            row[0],
+            row[1],
+            row[2],
+            <Badge key="status" value={portfolio[index]?.status} />,
+            row[4],
+            row[5],
+            row[6],
+            row[7],
           ])}
         />
       </section>
+
+      <section className="panel">
+        <PanelTitle icon={BarChart3} title="Operational Status Report" />
+        <div className="panel-toolbar">
+          <DownloadButton filename="operational-status-report.csv" columns={statusColumns} rows={statusRows} />
+        </div>
+        <DataTable
+          columns={statusColumns}
+          rows={statusRows}
+        />
+      </section>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={WalletCards} title="Receivables Report" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="receivables-report.csv" columns={receivableColumns} rows={receivableRows} />
+          </div>
+          <DataTable
+            columns={receivableColumns}
+            rows={receivableRows}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Package} title="Inventory Reorder Report" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="inventory-reorder-report.csv" columns={reorderColumns} rows={reorderRows} />
+          </div>
+          <DataTable
+            columns={reorderColumns}
+            rows={reorderRows}
+          />
+        </section>
+      </div>
     </section>
   )
 }
 
-function AdminView({ organization, branches, clients, suppliers, roles, users, forms, setForms, setAdminFormValue, runAction }) {
+function BusinessIntelligenceView({ bi, forms, setPhaseFourForm, createBiDashboard, createMetricSnapshot, runAction }) {
+  const metrics = bi?.metrics || {}
+  const snapshots = bi?.snapshots || []
+  const meta = bi?.meta || {}
+  const filters = bi?.filters || {}
+  const alerts = bi?.alerts?.items || []
+  const [subject, setSubject] = useState('executive')
+  const [editingDashboardId, setEditingDashboardId] = useState(null)
+  const [reportFilters, setReportFilters] = useState({
+    company_id: '',
+    branch_id: '',
+    country: '',
+    project_id: '',
+    client_id: '',
+    project_status: '',
+    currency: '',
+    cost_code: '',
+    supplier_id: '',
+    reporting_period: '',
+  })
+  const subjects = [
+    ['executive', 'Executive Command Centre'],
+    ['portfolio', 'Portfolio Analytics'],
+    ['controls', 'Project Controls'],
+    ['financial', 'Financial Analytics'],
+    ['commercial', 'Commercial & Contracts'],
+    ['procurement', 'Procurement Analytics'],
+    ['inventory', 'Inventory Analytics'],
+    ['schedule', 'Schedule Analytics'],
+    ['workforce', 'Workforce Analytics'],
+    ['equipment', 'Equipment Analytics'],
+    ['quality', 'Quality Assurance / Quality Control Analytics'],
+    ['hse', 'Health, Safety, and Environment Analytics'],
+    ['risk', 'Risk Analytics'],
+    ['sustainability', 'Sustainability Analytics'],
+    ['client', 'Client Reporting'],
+    ['custom', 'Custom Reports'],
+    ['admin', 'Data & Report Administration'],
+  ]
+  const filteredProjects = filterIntelligenceProjects(bi?.portfolio?.comparison || [], reportFilters)
+  const healthData = (bi?.datasets?.calculated_project_health || []).map((item) => ({ name: labelize(item.health), value: Number(item.total), key: item.health }))
+  const revenueTrend = bi?.executive?.trends?.revenue_margin || []
+  const procurementFunnel = bi?.procurement?.funnel || bi?.datasets?.procurement_funnel || []
+  const projectPerformanceData = filteredProjects.map((project) => ({
+    project: project.project,
+    cpi: toChartNumber(project.cpi),
+    spi: toChartNumber(project.spi),
+    margin: toChartNumber(project.margin_percent),
+    cash_position: toChartNumber(project.cash_position),
+  }))
+  const scheduleProgressData = filteredProjects.map((project) => ({
+    project: project.project,
+    planned_progress: toChartNumber(project.planned_progress),
+    progress: toChartNumber(project.progress),
+  }))
+  const contractValueVsEarned = (bi?.executive?.trends?.contract_value_vs_earned || []).filter((row) => filterByProjectName(row, reportFilters, filteredProjects)).map((row) => ({
+    project: row.project,
+    contract_value: toChartNumber(row.contract_value),
+    earned_value: toChartNumber(row.earned_value),
+  }))
+  const earnedValueData = (bi?.project_controls?.earned_value || []).filter((row) => filterByProject(row, reportFilters)).map((row) => ({
+    project: row.project,
+    planned_value: toChartNumber(row.planned_value),
+    earned_value: toChartNumber(row.earned_value),
+    actual_cost: toChartNumber(row.actual_cost),
+    cost_variance: toChartNumber(row.cost_variance),
+    schedule_variance_value: toChartNumber(row.schedule_variance_value),
+    cpi: toChartNumber(row.cpi),
+    spi: toChartNumber(row.spi),
+  }))
+  const costCodeData = (bi?.project_controls?.cost_code_performance || []).slice(0, 12).map((line) => ({
+    cost_code: line.cost_code || line.description || 'Uncoded',
+    budget: toChartNumber(line.budget),
+    committed: toChartNumber(line.committed),
+    actual: toChartNumber(line.actual),
+    forecast: toChartNumber(line.forecast),
+    variance: toChartNumber(line.variance),
+  }))
+  const receivablesAgeingData = (bi?.financial?.accounts_receivable?.ageing || []).map((row) => ({
+    bucket: row.bucket,
+    balance: toChartNumber(row.balance),
+  }))
+  const cashFlowData = (bi?.financial?.cash_flow?.planned_vs_actual || []).map((row) => ({
+    period: row.period,
+    inflows: toChartNumber(row.inflows),
+    outflows: toChartNumber(row.outflows),
+    net_cash_flow: toChartNumber(row.net_cash_flow),
+  }))
+  const profitByProjectData = (bi?.financial?.revenue_profitability?.profit_by_project || []).filter((row) => filterByProjectName(row, reportFilters, filteredProjects)).map((row) => ({
+    project: row.project,
+    gross_profit: toChartNumber(row.gross_profit),
+    gross_margin: toChartNumber(row.gross_margin),
+  }))
+  const commercialCertificationData = (bi?.commercial?.certification_status || []).filter((row) => filterByProjectName(row, reportFilters, filteredProjects)).map((row) => ({
+    invoice: row.invoice,
+    certified_value: toChartNumber(row.certified_value),
+  }))
+  const contractKpiData = Object.entries(bi?.commercial?.contract_kpis || {}).map(([key, value]) => ({
+    metric: labelize(key),
+    value: toChartNumber(value),
+  }))
+  const supplierSpendData = (bi?.procurement?.spend_by_supplier || bi?.datasets?.supplier_spend || []).map((row) => ({
+    supplier: row.supplier,
+    spend: toChartNumber(row.spend),
+    orders: toChartNumber(row.orders),
+  }))
+  const procurementProjectSpendData = (bi?.procurement?.spend_by_project || []).filter((row) => filterByProjectName(row, reportFilters, filteredProjects)).map((row) => ({
+    project: row.project,
+    spend: toChartNumber(row.spend),
+    orders: toChartNumber(row.orders),
+  }))
+  const inventoryCategoryData = (bi?.inventory?.stock_by_category || []).map((row) => ({
+    category: labelize(row.category),
+    quantity: toChartNumber(row.quantity),
+    value: toChartNumber(row.value),
+  }))
+  const scheduleVarianceData = (bi?.schedule?.schedule_variance_heatmap || []).filter((row) => filterByProjectName(row, reportFilters, filteredProjects)).map((row) => ({
+    project: row.project,
+    variance: toChartNumber(row.variance),
+    health: row.health,
+  }))
+  const workforceDepartmentData = (bi?.workforce?.workforce_by_department || []).map((row) => ({
+    department: labelize(row.department),
+    employees: toChartNumber(row.employees),
+    active: toChartNumber(row.active),
+  }))
+  const workforceBranchData = (bi?.workforce?.workforce_by_branch || []).map((row) => ({
+    branch: row.branch,
+    employees: toChartNumber(row.employees),
+  }))
+  const equipmentStatusData = (bi?.equipment?.status_breakdown || []).map((row) => ({
+    name: labelize(row.status),
+    value: toChartNumber(row.total),
+    key: row.status,
+  }))
+  const equipmentMaintenanceData = (bi?.equipment?.maintenance_due || []).map((row) => ({
+    asset: row.asset || row.number,
+    cost: toChartNumber(row.cost),
+  }))
+  const ncrCategoryData = (bi?.quality?.ncr_by_category || []).map((row) => ({
+    name: labelize(row.category),
+    value: toChartNumber(row.total),
+    key: row.category,
+  }))
+  const ncrAgeingData = (bi?.quality?.ncr_ageing || []).map((row) => ({
+    bucket: row.bucket,
+    total: toChartNumber(row.total),
+  }))
+  const incidentSeverityData = (bi?.hse?.incident_by_severity || []).map((row) => ({
+    name: labelize(row.severity),
+    value: toChartNumber(row.total),
+    key: row.severity,
+  }))
+  const leadingLaggingData = (bi?.hse?.leading_vs_lagging || []).map((row) => ({
+    indicator: row.indicator,
+    total: toChartNumber(row.total),
+  }))
+  const riskExposureData = (bi?.risk?.risk_heatmap || []).filter((row) => filterByProjectName(row, reportFilters, filteredProjects)).map((row) => ({
+    project: row.project,
+    exposure: toChartNumber(row.exposure),
+    probability: toChartNumber(row.probability),
+    impact: toChartNumber(row.impact),
+  }))
+  const riskCategoryData = (bi?.risk?.risks_by_category || []).map((row) => ({
+    category: row.category,
+    total: toChartNumber(row.total),
+  }))
+  const sustainabilityData = [
+    ...Object.entries(bi?.sustainability?.environmental || {}).map(([key, value]) => ({ metric: labelize(key), value: toChartNumber(value) })),
+    ...Object.entries(bi?.sustainability?.social || {}).map(([key, value]) => ({ metric: labelize(key), value: toChartNumber(value) })),
+    ...Object.entries(bi?.sustainability?.governance || {}).map(([key, value]) => ({ metric: labelize(key), value: toChartNumber(value) })),
+  ]
+  const clientReportData = (bi?.client_reporting?.controlled_reports || []).filter((row) => filterByProjectName(row, reportFilters, filteredProjects)).map((row) => ({
+    project: row.project,
+    progress: toChartNumber(row.overall_progress),
+    certified_value: toChartNumber(row.certified_value),
+  }))
+  const dashboardWidgetData = (bi?.dashboards || []).map((dashboard) => ({
+    dashboard: dashboard.name,
+    widgets: Array.isArray(dashboard.widgets) ? dashboard.widgets.length : 0,
+  }))
+  const snapshotTrendData = snapshots.slice(0, 12).map((snapshot) => ({
+    snapshot: snapshot.period_label || snapshot.snapshot_number,
+    revenue: toChartNumber(snapshot.metrics?.revenue_year_to_date),
+    contract_value: toChartNumber(snapshot.metrics?.contract_value),
+    critical_alerts: toChartNumber(snapshot.metrics?.critical_alerts),
+  })).reverse()
+  const metricColumns = ['Metric', 'Value']
+  const snapshotMetricKeys = Array.from(new Set([...Object.keys(metrics), ...snapshots.flatMap((snapshot) => Object.keys(snapshot.metrics || {}))]))
+  const snapshotColumns = ['Snapshot', 'Period', 'Date', ...snapshotMetricKeys.map(labelize)]
+  const snapshotRows = snapshots.map((snapshot) => [
+    snapshot.snapshot_number || '',
+    snapshot.period_label || '',
+    shortDate(snapshot.snapshot_date),
+    ...snapshotMetricKeys.map((key) => formatMetricValue(key, snapshot.metrics?.[key])),
+  ])
+  const headlineRows = (bi?.executive?.headline_scorecards || []).map((item) => [item.label, intelligenceValue(item)])
+  const projectColumns = ['Project', 'Progress', 'CPI', 'SPI', 'Margin', 'Cash', 'Health, Safety, and Environment', 'Quality', 'Risk', 'Health']
+  const projectRows = filteredProjects.map((project) => [
+    project.project,
+    `${project.progress || 0}%`,
+    project.cpi ?? '',
+    project.spi ?? '',
+    `${project.margin_percent || 0}%`,
+    money(project.cash_position),
+    project.open_safety_incidents > 0 ? 'Attention' : 'Green',
+    project.open_ncrs > 0 ? 'Attention' : 'Green',
+    labelize(project.risk_level),
+    <Badge key="health" value={project.health} />,
+  ])
+  const controlRows = (bi?.project_controls?.earned_value || []).filter((row) => filterByProject(row, reportFilters)).map((row) => [
+    row.project,
+    money(row.planned_value),
+    money(row.earned_value),
+    money(row.actual_cost),
+    money(row.cost_variance),
+    money(row.schedule_variance_value),
+    row.cpi ?? '',
+    row.spi ?? '',
+    money(row.estimate_at_completion),
+    row.to_complete_performance_index ?? '',
+  ])
+  const financialRows = (bi?.financial?.accounts_receivable?.drilldown || []).filter((row) => filterByProjectName(row, reportFilters, filteredProjects)).map((invoice) => [
+    invoice.number,
+    invoice.client,
+    invoice.project,
+    shortDate(invoice.due_date),
+    labelize(invoice.payment_status),
+    money(invoice.total),
+    money(invoice.balance),
+  ])
+  const payableRows = (bi?.financial?.accounts_payable?.drilldown || []).map((invoice) => [
+    invoice.number,
+    invoice.supplier,
+    invoice.po,
+    labelize(invoice.status),
+    shortDate(invoice.due_date),
+    money(invoice.total),
+    money(invoice.balance),
+  ])
+  const alertRows = alerts.map((alert) => [
+    <Badge key="severity" value={alert.severity} />,
+    alert.category,
+    alert.project || '',
+    alert.title,
+    alert.responsible_person,
+    alert.escalation_level,
+    alert.recommended_action,
+  ])
+
+  function setFilterValue(event) {
+    const { name, value } = event.target
+    setReportFilters((current) => ({ ...current, [name]: value }))
+  }
+
+  function applySavedView(view) {
+    const criteria = view.criteria || {}
+    setReportFilters((current) => ({
+      ...current,
+      project_status: criteria.project_status || current.project_status,
+    }))
+  }
+
+  function setDashboardFormValues(values) {
+    Object.entries(values).forEach(([name, value]) => {
+      setPhaseFourForm('dashboard')({ target: { name, value } })
+    })
+  }
+
+  function saveBiDashboard(event) {
+    if (!editingDashboardId) {
+      createBiDashboard(event)
+      return
+    }
+
+    event.preventDefault()
+    const form = forms.dashboard
+
+    runAction(
+      () =>
+        api.updateBiDashboard(editingDashboardId, {
+          name: form.name,
+          audience: form.audience,
+          refresh_interval: form.refresh_interval,
+          is_default: form.is_default === 'true',
+        }),
+      'Dashboard updated.',
+    ).then(() => {
+      setEditingDashboardId(null)
+      setDashboardFormValues(emptyPhaseFourForms.dashboard)
+    })
+  }
+
+  function editBiDashboard(dashboard) {
+    setEditingDashboardId(dashboard.id)
+    setDashboardFormValues({
+      name: dashboard.name || '',
+      audience: dashboard.audience || 'operations',
+      refresh_interval: dashboard.refresh_interval || 'daily',
+      is_default: dashboard.is_default ? 'true' : 'false',
+    })
+  }
+
+  function cancelBiDashboardEdit() {
+    setEditingDashboardId(null)
+    setDashboardFormValues(emptyPhaseFourForms.dashboard)
+  }
+
+  function archiveBiDashboard(dashboard) {
+    if (!window.confirm(`Archive dashboard ${dashboard.name}?`)) {
+      return
+    }
+
+    runAction(() => api.deleteBiDashboard(dashboard.id), 'Dashboard archived.').then(() => {
+      if (editingDashboardId === dashboard.id) {
+        cancelBiDashboardEdit()
+      }
+    })
+  }
+
+  function renderExecutive() {
+    return (
+      <>
+        <div className="kpi-grid">
+          <Kpi icon={FolderKanban} label="Total contract value" value={money(metrics.contract_value)} sub={`${metrics.active_projects || 0} active projects`} />
+          <Kpi icon={WalletCards} label="Cash position" value={money(metrics.cash_position)} sub="Receipts less supplier payments and paid expenses" />
+          <Kpi icon={BarChart3} label="Gross margin" value={`${metrics.gross_margin || 0}%`} sub={money(metrics.gross_profit)} />
+          <Kpi icon={AlertTriangle} label="Executive alerts" value={metrics.critical_alerts || 0} sub={`${metrics.projects_at_risk || 0} projects at risk`} />
+        </div>
+
+        <div className="grid-main">
+          <ChartPanel icon={BarChart3} title="Revenue Trend">
+            <AnalyticsBarChart
+              data={revenueTrend}
+              xKey="period"
+              bars={[{ key: 'revenue', color: '#2364d8' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={ShieldCheck} title="Portfolio Health">
+            <AnalyticsPieChart data={healthData} />
+          </ChartPanel>
+
+          <ChartPanel icon={WalletCards} title="Contract Value vs Earned Revenue">
+            <AnalyticsBarChart
+              data={contractValueVsEarned}
+              xKey="project"
+              bars={[
+                { key: 'contract_value', color: '#2364d8' },
+                { key: 'earned_value', color: '#188a5a' },
+              ]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+        </div>
+
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ClipboardList} title="Headline Scorecards" />
+            <div className="panel-toolbar">
+              <DownloadButton filename="intelligence-headline-scorecards.csv" columns={metricColumns} rows={headlineRows} />
+            </div>
+            <DataTable columns={metricColumns} rows={headlineRows} />
+          </section>
+
+          <section className="panel">
+            <PanelTitle icon={AlertTriangle} title="Action Required" />
+            <div className="panel-toolbar">
+              <DownloadButton filename="intelligence-executive-actions.csv" columns={['Severity', 'Area', 'Project', 'Issue', 'Owner', 'Escalation', 'Action']} rows={alerts.map((alert) => [alert.severity, alert.category, alert.project || '', alert.title, alert.responsible_person, alert.escalation_level, alert.recommended_action])} />
+            </div>
+            <DataTable columns={['Severity', 'Area', 'Project', 'Issue', 'Owner', 'Escalation', 'Action']} rows={alertRows.slice(0, 10)} />
+          </section>
+        </div>
+      </>
+    )
+  }
+
+  function renderPortfolio() {
+    return (
+      <>
+        <div className="grid-main">
+          <ChartPanel icon={Workflow} title="CPI and SPI by Project">
+            <AnalyticsBarChart
+              data={projectPerformanceData}
+              xKey="project"
+              bars={[
+                { key: 'cpi', color: '#2364d8' },
+                { key: 'spi', color: '#188a5a' },
+              ]}
+              valueFormatter={(value) => toChartNumber(value).toFixed(2)}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={WalletCards} title="Gross Margin by Project">
+            <AnalyticsBarChart
+              data={projectPerformanceData}
+              xKey="project"
+              bars={[{ key: 'margin', color: '#b66a05' }]}
+              valueFormatter={(value) => `${toChartNumber(value).toFixed(0)}%`}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={WalletCards} title="Cash Position by Project">
+            <AnalyticsBarChart
+              data={projectPerformanceData}
+              xKey="project"
+              bars={[{ key: 'cash_position', color: '#0f766e' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+        </div>
+
+        <section className="panel">
+          <PanelTitle icon={FolderKanban} title="Portfolio Comparison" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="portfolio-comparison.csv" columns={projectColumns} rows={projectRows.map((row) => row.map((cell) => (typeof cell === 'object' ? '' : cell)))} />
+          </div>
+          <DataTable columns={projectColumns} rows={projectRows} />
+        </section>
+        <div className="grid-main">
+          <RankPanel title="Highest Profitability" rows={bi?.portfolio?.rankings?.profitability || []} valueKey="margin_percent" valueSuffix="%" />
+          <RankPanel title="Schedule Pressure" rows={bi?.portfolio?.rankings?.schedule_delay || []} valueKey="schedule_variance" valueSuffix="%" />
+        </div>
+      </>
+    )
+  }
+
+  function renderControls() {
+    return (
+      <>
+        <div className="grid-main">
+          <ChartPanel icon={Workflow} title="Earned Value S-Curve Inputs">
+            <AnalyticsBarChart
+              data={earnedValueData}
+              xKey="project"
+              bars={[
+                { key: 'planned_value', color: '#2364d8' },
+                { key: 'earned_value', color: '#188a5a' },
+                { key: 'actual_cost', color: '#c3382f' },
+              ]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={AlertTriangle} title="Cost and Schedule Variance">
+            <AnalyticsBarChart
+              data={earnedValueData}
+              xKey="project"
+              bars={[
+                { key: 'cost_variance', color: '#b66a05' },
+                { key: 'schedule_variance_value', color: '#6d5dfc' },
+              ]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={Calculator} title="Cost Code Actual vs Forecast">
+            <AnalyticsBarChart
+              data={costCodeData}
+              xKey="cost_code"
+              bars={[
+                { key: 'actual', color: '#2364d8' },
+                { key: 'forecast', color: '#188a5a' },
+              ]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+        </div>
+
+        <section className="panel">
+          <PanelTitle icon={Workflow} title="Earned Value Controls" />
+          <div className="panel-toolbar">
+            <DownloadButton filename="project-controls-earned-value.csv" columns={['Project', 'PV', 'EV', 'AC', 'CV', 'SV', 'CPI', 'SPI', 'EAC', 'TCPI']} rows={controlRows} />
+          </div>
+          <DataTable columns={['Project', 'PV', 'EV', 'AC', 'CV', 'SV', 'CPI', 'SPI', 'EAC', 'TCPI']} rows={controlRows} />
+        </section>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Clock3} title="Delayed Activities" />
+            <DataTable
+              columns={['Project', 'Activity', 'Priority', 'Status', 'Progress', 'Due', 'Days late']}
+              rows={(bi?.project_controls?.delayed_activities || []).map((task) => [task.project, task.activity, labelize(task.priority), labelize(task.status), `${task.progress}%`, shortDate(task.due_date), task.days_late])}
+            />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Calculator} title="Cost Code Performance" />
+            <DataTable
+              columns={['Project', 'Cost code', 'Category', 'Budget', 'Committed', 'Actual', 'Forecast', 'Variance']}
+              rows={(bi?.project_controls?.cost_code_performance || []).map((line) => [line.project, line.cost_code, labelize(line.category), money(line.budget), money(line.committed), money(line.actual), money(line.forecast), money(line.variance)])}
+            />
+          </section>
+        </div>
+      </>
+    )
+  }
+
+  function renderFinancial() {
+    const ageRows = bi?.financial?.accounts_receivable?.ageing || []
+    return (
+      <>
+        <div className="kpi-grid">
+          <Kpi icon={WalletCards} label="Recognized revenue" value={money(bi?.financial?.revenue_profitability?.recognized_revenue)} sub="Issued non-draft invoices" />
+          <Kpi icon={WalletCards} label="Collected revenue" value={money(bi?.financial?.revenue_profitability?.collected_revenue)} sub="Receipts recorded" />
+          <Kpi icon={AlertTriangle} label="Overdue client payments" value={money(bi?.financial?.cash_flow?.overdue_client_payments)} sub="Drill down below" />
+          <Kpi icon={Truck} label="Accounts payable" value={money(bi?.financial?.accounts_payable?.outstanding)} sub="Supplier obligations" />
+        </div>
+        <div className="grid-main">
+          <ChartPanel icon={WalletCards} title="Cash Flow Trend">
+            <AnalyticsBarChart
+              data={cashFlowData}
+              xKey="period"
+              bars={[
+                { key: 'inflows', color: '#188a5a' },
+                { key: 'outflows', color: '#c3382f' },
+                { key: 'net_cash_flow', color: '#2364d8' },
+              ]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={Clock3} title="Receivables Ageing">
+            <AnalyticsBarChart
+              data={receivablesAgeingData}
+              xKey="bucket"
+              bars={[{ key: 'balance', color: '#b66a05' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={BarChart3} title="Profit by Project">
+            <AnalyticsBarChart
+              data={profitByProjectData}
+              xKey="project"
+              bars={[{ key: 'gross_profit', color: '#2364d8' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Accounts Receivable Drill-Down" />
+            <div className="panel-toolbar">
+              <DownloadButton filename="accounts-receivable-drilldown.csv" columns={['Invoice', 'Client', 'Project', 'Due', 'Payment', 'Total', 'Balance']} rows={financialRows} />
+            </div>
+            <DataTable columns={['Invoice', 'Client', 'Project', 'Due', 'Payment', 'Total', 'Balance']} rows={financialRows} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Clock3} title="Receivables Ageing" />
+            <DataTable columns={['Bucket', 'Balance']} rows={ageRows.map((row) => [row.bucket, money(row.balance)])} />
+          </section>
+        </div>
+        <section className="panel">
+          <PanelTitle icon={Truck} title="Accounts Payable Drill-Down" />
+          <DataTable columns={['Invoice', 'Supplier', 'PO', 'Status', 'Due', 'Total', 'Balance']} rows={payableRows} />
+        </section>
+      </>
+    )
+  }
+
+  function renderProcurement() {
+    const kpis = bi?.procurement?.kpis || {}
+    return (
+      <>
+        <div className="kpi-grid">
+          <Kpi icon={Truck} label="Procurement spend" value={money(kpis.procurement_spend)} sub={`${kpis.open_purchase_orders || 0} open POs`} />
+          <Kpi icon={ClipboardList} label="Pending approvals" value={kpis.pending_approvals || 0} sub={`${kpis.open_requisitions || 0} open requisitions`} />
+          <Kpi icon={Clock3} label="Late deliveries" value={kpis.late_deliveries || 0} sub={`${kpis.orders_awaiting_delivery || 0} awaiting delivery`} />
+          <Kpi icon={AlertTriangle} label="Invoice exceptions" value={kpis.invoice_match_exceptions || 0} sub="Three-way match focus" />
+        </div>
+        <div className="grid-main">
+          <ChartPanel icon={Workflow} title="Procure-To-Pay Funnel">
+            <AnalyticsBarChart
+              data={procurementFunnel}
+              xKey="stage"
+              bars={[{ key: 'count', color: '#188a5a' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={Truck} title="Spend by Supplier">
+            <AnalyticsBarChart
+              data={supplierSpendData}
+              xKey="supplier"
+              bars={[{ key: 'spend', color: '#2364d8' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+
+          <ChartPanel icon={FolderKanban} title="Spend by Project">
+            <AnalyticsBarChart
+              data={procurementProjectSpendData}
+              xKey="project"
+              bars={[{ key: 'spend', color: '#b66a05' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          </ChartPanel>
+
+          <section className="panel">
+            <PanelTitle icon={Truck} title="Supplier Scorecard" />
+            <DataTable columns={['Supplier', 'Spend', 'Orders', 'On-time', 'Late', 'Rejection', 'Outstanding']} rows={(bi?.procurement?.supplier_scorecards || []).map((supplier) => [supplier.supplier, money(supplier.total_spend), supplier.orders, `${supplier.on_time_delivery}%`, supplier.late_deliveries, `${supplier.rejection_rate}%`, money(supplier.outstanding_balance)])} />
+          </section>
+        </div>
+        <section className="panel">
+          <PanelTitle icon={AlertTriangle} title="Late Delivery Drill-Down" />
+          <DataTable columns={['PO', 'Supplier', 'Project', 'Expected', 'Status', 'Value']} rows={(bi?.procurement?.late_delivery_drilldown || []).map((po) => [po.po, po.supplier, po.project, shortDate(po.expected_delivery_date), labelize(po.status), money(po.value)])} />
+        </section>
+      </>
+    )
+  }
+
+  function renderOperational(areaKey, title, kpis = {}, tables = [], charts = []) {
+    return (
+      <>
+        <div className="kpi-grid">
+          {Object.entries(kpis).slice(0, 8).map(([key, value]) => (
+            <Kpi key={key} icon={BarChart3} label={labelize(key)} value={formatMetricValue(key, value)} sub={title} />
+          ))}
+        </div>
+        {charts.length > 0 && (
+          <div className="grid-main">
+            {charts.map((chart) => (
+              <ChartPanel key={chart.title} icon={chart.icon || BarChart3} title={chart.title}>
+                {chart.content}
+              </ChartPanel>
+            ))}
+          </div>
+        )}
+        <div className="grid-main">
+          {tables.map((table) => (
+            <section key={table.title} className="panel">
+              <PanelTitle icon={table.icon || ClipboardList} title={table.title} />
+              {table.download && <div className="panel-toolbar"><DownloadButton filename={table.download} columns={table.columns} rows={table.rows} /></div>}
+              <DataTable columns={table.columns} rows={table.rows} />
+            </section>
+          ))}
+        </div>
+      </>
+    )
+  }
+
+  function renderCurrentSubject() {
+    if (subject === 'executive') return renderExecutive()
+    if (subject === 'portfolio') return renderPortfolio()
+    if (subject === 'controls') return renderControls()
+    if (subject === 'financial') return renderFinancial()
+    if (subject === 'procurement') return renderProcurement()
+    if (subject === 'commercial') {
+      return renderOperational('commercial', 'Commercial & Contracts', bi?.commercial?.contract_kpis || {}, [
+        { title: 'Certification Status', columns: ['Invoice', 'Client', 'Project', 'Certified', 'Payment', 'Due'], rows: (bi?.commercial?.certification_status || []).map((row) => [row.invoice, row.client, row.project, money(row.certified_value), labelize(row.payment_status), shortDate(row.due_date)]), download: 'commercial-certification-status.csv' },
+        { title: 'Critical Contract Alerts', columns: ['Approval', 'Title', 'Status', 'Due', 'Action'], rows: (bi?.commercial?.critical_alerts || []).map((row) => [row.approval, row.title, labelize(row.status), shortDate(row.due_date), row.recommended_action]) },
+      ], [
+        {
+          title: 'Certified Value by Invoice',
+          icon: WalletCards,
+          content: (
+            <AnalyticsBarChart
+              data={commercialCertificationData}
+              xKey="invoice"
+              bars={[{ key: 'certified_value', color: '#2364d8' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          ),
+        },
+        {
+          title: 'Contract KPI Mix',
+          icon: Handshake,
+          content: (
+            <AnalyticsBarChart
+              data={contractKpiData}
+              xKey="metric"
+              bars={[{ key: 'value', color: '#188a5a' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'inventory') {
+      return renderOperational('inventory', 'Inventory Analytics', bi?.inventory?.kpis || {}, [
+        { title: 'Stock By Category', columns: ['Category', 'Quantity', 'Value'], rows: (bi?.inventory?.stock_by_category || []).map((row) => [labelize(row.category), row.quantity, money(row.value)]), download: 'inventory-stock-by-category.csv' },
+        { title: 'Reorder Requirements', columns: ['Stock Keeping Unit (SKU)', 'Item', 'Category', 'On hand', 'Reorder', 'Average cost', 'Value'], rows: (bi?.inventory?.reorder_drilldown || []).map((row) => [row.sku, row.item, labelize(row.category), row.on_hand, row.reorder_level, money(row.average_cost), money(row.value)]), download: 'inventory-reorder-requirements.csv' },
+      ], [
+        {
+          title: 'Stock Value by Category',
+          icon: Package,
+          content: (
+            <AnalyticsBarChart
+              data={inventoryCategoryData}
+              xKey="category"
+              bars={[{ key: 'value', color: '#2364d8' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          ),
+        },
+        {
+          title: 'Stock Quantity by Category',
+          icon: BarChart3,
+          content: (
+            <AnalyticsBarChart
+              data={inventoryCategoryData}
+              xKey="category"
+              bars={[{ key: 'quantity', color: '#188a5a' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'schedule') {
+      return renderOperational('schedule', 'Schedule Analytics', bi?.schedule?.kpis || {}, [
+        { title: 'Critical Path Activities', columns: ['Project', 'Activity', 'Priority', 'Status', 'Progress', 'Due'], rows: (bi?.schedule?.critical_path || []).map((row) => [row.project, row.activity, labelize(row.priority), labelize(row.status), `${row.progress}%`, shortDate(row.due_date)]), download: 'schedule-critical-path.csv' },
+        { title: 'Six-Week Forecast', columns: ['Project', 'Activity', 'Status', 'Due'], rows: (bi?.schedule?.six_week_forecast || []).map((row) => [row.project, row.activity, labelize(row.status), shortDate(row.due_date)]) },
+      ], [
+        {
+          title: 'Planned vs Actual Progress',
+          icon: CalendarDays,
+          content: (
+            <AnalyticsBarChart
+              data={scheduleProgressData}
+              xKey="project"
+              bars={[
+                { key: 'planned_progress', color: '#2364d8' },
+                { key: 'progress', color: '#188a5a' },
+              ]}
+              valueFormatter={(value) => `${toChartNumber(value).toFixed(0)}%`}
+            />
+          ),
+        },
+        {
+          title: 'Schedule Variance by Project',
+          icon: AlertTriangle,
+          content: (
+            <AnalyticsBarChart
+              data={scheduleVarianceData}
+              xKey="project"
+              bars={[{ key: 'variance', color: '#b66a05' }]}
+              valueFormatter={(value) => `${toChartNumber(value).toFixed(1)}%`}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'workforce') {
+      return renderOperational('workforce', 'Workforce Analytics', bi?.workforce?.kpis || {}, [
+        { title: 'Workforce By Department', columns: ['Department', 'Employees', 'Active'], rows: (bi?.workforce?.workforce_by_department || []).map((row) => [labelize(row.department), row.employees, row.active]), download: 'workforce-by-department.csv' },
+        { title: 'Workforce By Branch', columns: ['Branch', 'Employees'], rows: (bi?.workforce?.workforce_by_branch || []).map((row) => [row.branch, row.employees]) },
+      ], [
+        {
+          title: 'Workforce by Department',
+          icon: Users,
+          content: (
+            <AnalyticsBarChart
+              data={workforceDepartmentData}
+              xKey="department"
+              bars={[
+                { key: 'employees', color: '#2364d8' },
+                { key: 'active', color: '#188a5a' },
+              ]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          ),
+        },
+        {
+          title: 'Workforce by Branch',
+          icon: Building2,
+          content: (
+            <AnalyticsBarChart
+              data={workforceBranchData}
+              xKey="branch"
+              bars={[{ key: 'employees', color: '#6d5dfc' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'equipment') {
+      return renderOperational('equipment', 'Equipment Analytics', bi?.equipment?.kpis || {}, [
+        { title: 'Maintenance Due', columns: ['No.', 'Asset', 'Type', 'Status', 'Date', 'Cost'], rows: (bi?.equipment?.maintenance_due || []).map((row) => [row.number, row.asset, labelize(row.type), labelize(row.status), shortDate(row.service_date), money(row.cost)]), download: 'equipment-maintenance-due.csv' },
+        { title: 'Underutilized Equipment', columns: ['No.', 'Asset', 'Category', 'Hourly rate'], rows: (bi?.equipment?.underutilized_equipment || []).map((row) => [row.number, row.asset, labelize(row.category), money(row.hourly_rate)]) },
+      ], [
+        {
+          title: 'Fleet Status Breakdown',
+          icon: Truck,
+          content: <AnalyticsPieChart data={equipmentStatusData} />,
+        },
+        {
+          title: 'Maintenance Cost Due',
+          icon: Calculator,
+          content: (
+            <AnalyticsBarChart
+              data={equipmentMaintenanceData}
+              xKey="asset"
+              bars={[{ key: 'cost', color: '#c3382f' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'quality') {
+      return renderOperational('quality', 'Quality Assurance / Quality Control Analytics', bi?.quality?.kpis || {}, [
+        { title: 'Non-Conformance Report(NCR) Drill-Down', columns: ['No.', 'Project', 'Title', 'Category', 'Root cause', 'Severity', 'Status', 'Due'], rows: (bi?.quality?.ncr_drilldown || []).map((row) => [row.number, row.project, row.title, labelize(row.category), row.root_cause || '', labelize(row.severity), labelize(row.status), shortDate(row.due_date)]), download: 'quality-non-conformance-report-drilldown.csv' },
+        { title: 'Inspection Register', columns: ['No.', 'Project', 'Type', 'Area', 'Status', 'Score', 'Scheduled'], rows: (bi?.quality?.inspection_register || []).map((row) => [row.number, row.project, labelize(row.type), row.area, labelize(row.status), row.score, shortDate(row.scheduled_on)]) },
+      ], [
+        {
+          title: 'Non-Conformance Reports(NCRs) by Category',
+          icon: ShieldCheck,
+          content: <AnalyticsPieChart data={ncrCategoryData} />,
+        },
+        {
+          title: 'Open Non-Conformance Report(NCR) Ageing',
+          icon: Clock3,
+          content: (
+            <AnalyticsBarChart
+              data={ncrAgeingData}
+              xKey="bucket"
+              bars={[{ key: 'total', color: '#c3382f' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'hse') {
+      return renderOperational('hse', `Health, Safety, and Environment Analytics (${bi?.hse?.exposure_basis || 'rate basis not set'})`, bi?.hse?.kpis || {}, [
+        { title: 'Incident Drill-Down', columns: ['No.', 'Project', 'Type', 'Severity', 'Status', 'Location', 'Occurred'], rows: (bi?.hse?.incident_drilldown || []).map((row) => [row.number, row.project, labelize(row.type), labelize(row.severity), labelize(row.status), row.location, shortDate(row.occurred_at)]), download: 'hse-incident-drilldown.csv' },
+        { title: 'Leading vs Lagging', columns: ['Indicator', 'Total'], rows: (bi?.hse?.leading_vs_lagging || []).map((row) => [row.indicator, row.total]) },
+      ], [
+        {
+          title: 'Incidents by Severity',
+          icon: AlertTriangle,
+          content: <AnalyticsPieChart data={incidentSeverityData} />,
+        },
+        {
+          title: 'Leading vs Lagging Indicators',
+          icon: ShieldCheck,
+          content: (
+            <AnalyticsBarChart
+              data={leadingLaggingData}
+              xKey="indicator"
+              bars={[{ key: 'total', color: '#188a5a' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'risk') {
+      return renderOperational('risk', 'Risk Analytics', bi?.risk?.kpis || {}, [
+        { title: 'Top Risks', columns: ['Severity', 'Area', 'Project', 'Issue', 'Action'], rows: (bi?.risk?.top_risks || []).map((row) => [labelize(row.severity), row.category, row.project || '', row.title, row.recommended_action]), download: 'risk-top-risks.csv' },
+        { title: 'Risk Heatmap', columns: ['Project', 'Probability', 'Impact', 'Exposure', 'Health'], rows: (bi?.risk?.risk_heatmap || []).map((row) => [row.project, row.probability, row.impact, money(row.exposure), labelize(row.health)]) },
+      ], [
+        {
+          title: 'Risk Exposure by Project',
+          icon: AlertTriangle,
+          content: (
+            <AnalyticsBarChart
+              data={riskExposureData}
+              xKey="project"
+              bars={[{ key: 'exposure', color: '#c3382f' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          ),
+        },
+        {
+          title: 'Probability and Impact',
+          icon: BarChart3,
+          content: (
+            <AnalyticsBarChart
+              data={riskExposureData}
+              xKey="project"
+              bars={[
+                { key: 'probability', color: '#b66a05' },
+                { key: 'impact', color: '#6d5dfc' },
+              ]}
+              valueFormatter={(value) => toChartNumber(value).toFixed(0)}
+            />
+          ),
+        },
+        {
+          title: 'Risks by Category',
+          icon: ClipboardList,
+          content: (
+            <AnalyticsBarChart
+              data={riskCategoryData}
+              xKey="category"
+              bars={[{ key: 'total', color: '#2364d8' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'sustainability') {
+      return renderOperational('sustainability', 'Sustainability Analytics', { ...(bi?.sustainability?.environmental || {}), ...(bi?.sustainability?.social || {}), ...(bi?.sustainability?.governance || {}) }, [
+        { title: 'ESG Note', columns: ['Area', 'Definition'], rows: [['Emissions factor', bi?.sustainability?.emissions_factor_note || '']] },
+      ], [
+        {
+          title: 'ESG Indicator Values',
+          icon: Globe2,
+          content: (
+            <AnalyticsBarChart
+              data={sustainabilityData}
+              xKey="metric"
+              bars={[{ key: 'value', color: '#188a5a' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'client') {
+      return renderOperational('client', 'Client Reporting', { pending_decisions: bi?.client_reporting?.pending_decisions || 0 }, [
+        { title: 'Controlled Client Reports', columns: ['Project', 'Client', 'Progress', 'Milestones', 'Certified', 'Payment', 'Risks', 'Quality', 'Safety'], rows: (bi?.client_reporting?.controlled_reports || []).map((row) => [row.project, row.client, `${row.overall_progress}%`, labelize(row.milestone_status), money(row.certified_value), labelize(row.payment_status), row.major_risks, row.quality_summary, row.safety_summary]), download: 'client-controlled-reports.csv' },
+        { title: 'Hidden Internal Fields', columns: ['Confidential Field'], rows: (bi?.client_reporting?.hidden_internal_fields || []).map((field) => [labelize(field)]) },
+      ], [
+        {
+          title: 'Client Report Progress',
+          icon: ClipboardList,
+          content: (
+            <AnalyticsBarChart
+              data={clientReportData}
+              xKey="project"
+              bars={[{ key: 'progress', color: '#2364d8' }]}
+              valueFormatter={(value) => `${toChartNumber(value).toFixed(0)}%`}
+            />
+          ),
+        },
+        {
+          title: 'Certified Value by Client Report',
+          icon: WalletCards,
+          content: (
+            <AnalyticsBarChart
+              data={clientReportData}
+              xKey="project"
+              bars={[{ key: 'certified_value', color: '#188a5a' }]}
+              valueFormatter={(value) => money(value)}
+            />
+          ),
+        },
+      ])
+    }
+    if (subject === 'custom') {
+      return (
+        <div className="grid-main">
+          <ChartPanel icon={BarChart3} title="Dashboard Widget Coverage">
+            <AnalyticsBarChart
+              data={dashboardWidgetData}
+              xKey="dashboard"
+              bars={[{ key: 'widgets', color: '#2364d8' }]}
+              valueFormatter={(value) => compactFormatter.format(toChartNumber(value))}
+            />
+          </ChartPanel>
+          <section className="panel">
+            <PanelTitle icon={Plus} title={editingDashboardId ? 'Edit Dashboard' : 'Custom Dashboard Builder'} />
+            <form className="form-grid two" onSubmit={saveBiDashboard}>
+              <Field label="Name" name="name" value={forms.dashboard.name} onChange={setPhaseFourForm('dashboard')} required />
+              <Select label="Audience" name="audience" value={forms.dashboard.audience} onChange={setPhaseFourForm('dashboard')}>
+                <option value="executive">Executive</option>
+                <option value="operations">Operations</option>
+                <option value="finance">Finance</option>
+                <option value="commercial">Commercial</option>
+                <option value="qhse">Quality Assurance and Health, Safety, and Environment</option>
+              </Select>
+              <Select label="Refresh" name="refresh_interval" value={forms.dashboard.refresh_interval} onChange={setPhaseFourForm('dashboard')}>
+                <option value="hourly">Hourly</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </Select>
+              <Select label="Default" name="is_default" value={forms.dashboard.is_default} onChange={setPhaseFourForm('dashboard')}>
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </Select>
+              <div className="row-actions span-2">
+                <button type="submit" className="primary-action">
+                  {editingDashboardId ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                  {editingDashboardId ? 'Save dashboard' : 'Create dashboard'}
+                </button>
+                {editingDashboardId && (
+                  <button type="button" className="table-action" onClick={cancelBiDashboardEdit}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={BarChart3} title="Dashboards" />
+            <DataTable
+              columns={['Name', 'Audience', 'Refresh', 'Default', 'Widgets', 'Actions']}
+              rows={(bi.dashboards || []).map((dashboard) => [
+                dashboard.name,
+                labelize(dashboard.audience),
+                labelize(dashboard.refresh_interval),
+                dashboard.is_default ? 'Yes' : 'No',
+                (dashboard.widgets || []).map((widget) => widget.title).join(', '),
+                <div key="actions" className="row-actions">
+                  <button type="button" className="table-action" onClick={() => editBiDashboard(dashboard)}>
+                    Edit
+                  </button>
+                  <button type="button" className="table-action danger" onClick={() => archiveBiDashboard(dashboard)}>
+                    Archive
+                  </button>
+                </div>,
+              ])}
+            />
+          </section>
+        </div>
+      )
+    }
+
+    return (
+      <div className="grid-main">
+        <ChartPanel icon={BarChart3} title="Snapshot Revenue Trend">
+          <AnalyticsBarChart
+            data={snapshotTrendData}
+            xKey="snapshot"
+            bars={[
+              { key: 'revenue', color: '#2364d8' },
+              { key: 'contract_value', color: '#188a5a' },
+            ]}
+            valueFormatter={(value) => money(value)}
+          />
+        </ChartPanel>
+        <section className="panel">
+          <PanelTitle icon={ClipboardList} title="Snapshots" />
+          <div className="row-actions">
+            <button type="button" className="primary-action compact-action" onClick={createMetricSnapshot}><CheckCircle2 size={17} />Create snapshot</button>
+            <DownloadButton filename="intelligence-metric-snapshots.csv" columns={snapshotColumns} rows={snapshotRows} />
+          </div>
+          <DataTable columns={snapshotColumns} rows={snapshotRows} />
+        </section>
+        <section className="panel">
+          <PanelTitle icon={FileText} title="KPI Definitions" />
+          <DataTable columns={['KPI', 'Definition']} rows={Object.entries(meta.kpi_definitions || {})} />
+        </section>
+      </div>
+    )
+  }
+
+  return (
+    <section className="view-stack">
+      <section className="panel">
+        <PanelTitle icon={Settings} title="Global Filters" />
+        <div className="intelligence-filter-grid">
+          <Select label="Company" name="company_id" value={reportFilters.company_id} onChange={setFilterValue}>
+            <option value="">All companies</option>
+            {(filters.companies || []).map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+          </Select>
+          <Select label="Branch" name="branch_id" value={reportFilters.branch_id} onChange={setFilterValue}>
+            <option value="">All branches</option>
+            {(filters.branches || []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+          </Select>
+          <Select label="Country" name="country" value={reportFilters.country} onChange={setFilterValue}>
+            <option value="">All countries</option>
+            {(filters.countries || []).map((country) => <option key={country} value={country}>{country}</option>)}
+          </Select>
+          <Select label="Project" name="project_id" value={reportFilters.project_id} onChange={setFilterValue}>
+            <option value="">All projects</option>
+            {(filters.projects || []).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+          </Select>
+          <Select label="Client" name="client_id" value={reportFilters.client_id} onChange={setFilterValue}>
+            <option value="">All clients</option>
+            {(filters.clients || []).map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
+          </Select>
+          <Select label="Project status" name="project_status" value={reportFilters.project_status} onChange={setFilterValue}>
+            <option value="">All statuses</option>
+            {(filters.project_statuses || []).map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
+          </Select>
+          <Select label="Currency" name="currency" value={reportFilters.currency} onChange={setFilterValue}>
+            <option value="">All currencies</option>
+            {(filters.currencies || []).map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+          </Select>
+          <Select label="Cost code" name="cost_code" value={reportFilters.cost_code} onChange={setFilterValue}>
+            <option value="">All cost codes</option>
+            {(filters.cost_codes || []).map((costCode) => <option key={costCode} value={costCode}>{costCode}</option>)}
+          </Select>
+          <Select label="Supplier" name="supplier_id" value={reportFilters.supplier_id} onChange={setFilterValue}>
+            <option value="">All suppliers</option>
+            {(filters.suppliers || []).map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+          </Select>
+          <Field label="Reporting period" type="month" name="reporting_period" value={reportFilters.reporting_period} onChange={setFilterValue} />
+        </div>
+        <div className="saved-view-row">
+          {(filters.saved_views || []).map((view) => (
+            <button key={view.name} type="button" className="table-action" onClick={() => applySavedView(view)}>
+              {view.name}
+            </button>
+          ))}
+          <button type="button" className="table-action" onClick={() => setReportFilters({ company_id: '', branch_id: '', country: '', project_id: '', client_id: '', project_status: '', currency: '', cost_code: '', supplier_id: '', reporting_period: '' })}>
+            Clear filters
+          </button>
+        </div>
+      </section>
+
+      <div className="module-tabs intelligence-tabs">
+        {subjects.map(([id, label]) => (
+          <button key={id} type="button" className={subject === id ? 'active' : ''} onClick={() => setSubject(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {renderCurrentSubject()}
+    </section>
+  )
+}
+
+function AutomationView({ automation = emptyAutomationData, forms, setPhaseFourForm, createAutomationRule, runAction }) {
+  const summary = automation?.summary || {}
+  const catalog = automation?.catalog || {}
+  const analytics = automation?.analytics || {}
+  const rules = automation?.rules || []
+  const runs = automation?.runs || []
+  const templates = automation?.templates || []
+  const [activeTab, setActiveTab] = useState('dashboard')
+  const [editingRuleId, setEditingRuleId] = useState(null)
+  const [search, setSearch] = useState('')
+  const form = forms.automation
+  const moduleOptions = catalog.modules?.length ? catalog.modules : ['projects', 'procurement', 'finance', 'hr', 'inventory', 'field', 'equipment', 'qa_hse', 'crm', 'documents', 'general']
+  const triggerOptions = catalog.triggers?.length ? catalog.triggers : [{ key: 'material_request_submitted', label: 'Material Request Submitted', module: 'procurement' }]
+  const operatorOptions = catalog.operators?.length ? catalog.operators : ['equals', 'greater_than', 'less_than', 'not_empty']
+  const fieldOptions = catalog.condition_fields?.length ? catalog.condition_fields : ['amount', 'status', 'priority', 'severity', 'budget_percent', 'stock_level', 'due_date']
+  const actionOptions = catalog.actions?.length ? catalog.actions : [{ key: 'create_insight', label: 'Create In-App Insight' }]
+  const scheduleOptions = catalog.schedules?.length ? catalog.schedules : ['event_driven', 'manual', 'daily', 'weekly', 'monthly']
+  const approvalOptions = catalog.approval_modes?.length ? catalog.approval_modes : ['none', 'single', 'sequential', 'parallel', 'finance', 'executive']
+  const tabs = [
+    ['dashboard', 'Dashboard', BarChart3],
+    ['workflows', 'Workflows', Workflow],
+    ['templates', 'Templates', FileText],
+    ['triggers', 'Triggers', RefreshCcw],
+    ['conditions', 'Conditions', ShieldCheck],
+    ['actions', 'Actions', Send],
+    ['schedules', 'Schedules', CalendarDays],
+    ['approvals', 'Approvals', CheckCircle2],
+    ['logs', 'Logs', Clock3],
+    ['analytics', 'Analytics', BarChart3],
+    ['settings', 'Settings', Settings],
+  ]
+  const searchable = (item) => !search.trim() || JSON.stringify(item).toLowerCase().includes(search.trim().toLowerCase())
+  const filteredRules = rules.filter(searchable)
+  const filteredRuns = runs.filter(searchable)
+  const filteredTemplates = templates.filter(searchable)
+  const selectedAction = actionOptions.find((action) => action.key === form.action_type)
+  const flowNodes = [
+    { type: 'trigger', eyebrow: 'Trigger', title: triggerOptions.find((trigger) => trigger.key === form.trigger_event)?.label || labelize(form.trigger_event), detail: moduleLabel(form.module) },
+    ...(form.condition_field
+      ? [{ type: 'condition', eyebrow: 'Condition', title: `${labelize(form.condition_field)} ${labelize(form.condition_operator)} ${form.condition_value || ''}`.trim(), detail: labelize(form.condition_mode) }]
+      : []),
+    ...(form.approval_mode !== 'none' ? [{ type: 'approval', eyebrow: 'Approval', title: labelize(form.approval_mode), detail: 'Originator -> Manager -> Finance' }] : []),
+    { type: 'action', eyebrow: 'Action', title: selectedAction?.label || labelize(form.action_type), detail: form.action_message || 'Configured action' },
+    { type: 'log', eyebrow: 'Audit', title: 'Execution Log', detail: 'Versioned and traceable' },
+  ]
+
+  function normalizedRuleConditions(rule) {
+    if (Array.isArray(rule.conditions)) return rule.conditions
+    if (rule.conditions?.field) return [rule.conditions]
+
+    return []
+  }
+
+  function normalizedRuleActions(rule) {
+    if (Array.isArray(rule.actions)) return rule.actions
+    if (rule.actions?.type) return [rule.actions]
+
+    return []
+  }
+
+  function saveAutomationRule(event) {
+    if (!editingRuleId) {
+      createAutomationRule(event)
+      return
+    }
+
+    event.preventDefault()
+    runAction(() => api.updateAutomationRule(editingRuleId, automationPayloadFromForm(form)), 'Automation workflow updated.').then(cancelAutomationRuleEdit)
+  }
+
+  function editAutomationRule(rule) {
+    const condition = normalizedRuleConditions(rule)[0] || {}
+    const action = normalizedRuleActions(rule)[0] || {}
+    setEditingRuleId(rule.id)
+    setActiveTab('workflows')
+    Object.entries({
+      name: rule.name || '',
+      description: rule.description || '',
+      module: rule.module || emptyPhaseFourForms.automation.module,
+      rule_type: rule.rule_type || emptyPhaseFourForms.automation.rule_type,
+      trigger_event: rule.trigger_event || emptyPhaseFourForms.automation.trigger_event,
+      condition_field: condition.field || '',
+      condition_operator: condition.operator || emptyPhaseFourForms.automation.condition_operator,
+      condition_value: condition.operator === 'between' ? `${condition.min || ''},${condition.max || ''}` : condition.value ?? '',
+      condition_mode: rule.settings?.condition_mode || emptyPhaseFourForms.automation.condition_mode,
+      action_type: action.type || emptyPhaseFourForms.automation.action_type,
+      action_message: action.message || action.recommendation || emptyPhaseFourForms.automation.action_message,
+      schedule_frequency: rule.schedule_config?.frequency || emptyPhaseFourForms.automation.schedule_frequency,
+      approval_mode: rule.approval_config?.mode || emptyPhaseFourForms.automation.approval_mode,
+      severity: rule.severity || emptyPhaseFourForms.automation.severity,
+      is_active: rule.is_active ? 'true' : 'false',
+    }).forEach(([name, value]) => {
+      setPhaseFourForm('automation')({ target: { name, value } })
+    })
+  }
+
+  function cancelAutomationRuleEdit() {
+    setEditingRuleId(null)
+    Object.entries(emptyPhaseFourForms.automation).forEach(([name, value]) => {
+      setPhaseFourForm('automation')({ target: { name, value } })
+    })
+  }
+
+  function archiveAutomationRule(rule) {
+    if (!window.confirm(`Archive automation workflow ${rule.name}?`)) return
+
+    runAction(() => api.deleteAutomationRule(rule.id), 'Automation workflow archived.').then(() => {
+      if (editingRuleId === rule.id) cancelAutomationRuleEdit()
+    })
+  }
+
+  function previousVersion(rule) {
+    return (rule.versions || [])
+      .filter((version) => Number(version.version) < Number(rule.version || 1))
+      .sort((a, b) => Number(b.version) - Number(a.version))[0]
+  }
+
+  function toggleRule(rule) {
+    runAction(
+      () => api.updateAutomationRule(rule.id, { is_active: !rule.is_active, status: rule.is_active ? 'paused' : 'active' }),
+      rule.is_active ? 'Automation workflow paused.' : 'Automation workflow activated.',
+    )
+  }
+
+  function renderDashboard() {
+    return (
+      <>
+        <div className="kpi-grid">
+          <Kpi icon={Workflow} label="Active workflows" value={summary.active_rules || 0} sub="Enabled automations" />
+          <Kpi icon={AlertTriangle} label="Failed workflows" value={summary.failed_workflows || 0} sub="Needs attention" />
+          <Kpi icon={RefreshCcw} label="Running workflows" value={summary.running_workflows || 0} sub="Queued or in progress" />
+          <Kpi icon={CheckCircle2} label="Completed today" value={summary.completed_today || 0} sub="Successful executions" />
+          <Kpi icon={CalendarDays} label="Scheduled jobs" value={summary.scheduled_jobs || 0} sub="Time-based workflows" />
+          <Kpi icon={ShieldCheck} label="Approvals" value={summary.approval_workflows || 0} sub="Approval workflows" />
+          <Kpi icon={Clock3} label="Avg. execution" value={`${summary.average_execution_time_ms || 0} ms`} sub="Recent runs" />
+        </div>
+
+        <div className="grid-main">
+          <ChartPanel icon={BarChart3} title="Workflow Executions">
+            <AnalyticsBarChart data={analytics.workflow_executions || []} xKey="date" bars={[{ key: 'executions', color: '#2364d8' }]} />
+          </ChartPanel>
+          <ChartPanel icon={Workflow} title="Top Used Workflows">
+            <AnalyticsBarChart data={analytics.top_used_workflows || []} xKey="name" bars={[{ key: 'runs', color: '#188a5a' }]} />
+          </ChartPanel>
+        </div>
+      </>
+    )
+  }
+
+  function renderWorkflowBuilder() {
+    return (
+      <section className="panel">
+        <PanelTitle icon={editingRuleId ? CheckCircle2 : Plus} title={editingRuleId ? 'Edit Workflow' : 'Workflow Builder'} />
+        <div className="workflow-builder-grid">
+          <form className="form-grid automation-form" onSubmit={saveAutomationRule}>
+            <Field label="Workflow name" name="name" value={form.name} onChange={setPhaseFourForm('automation')} required />
+            <Select label="Module" name="module" value={form.module} onChange={setPhaseFourForm('automation')}>
+              {moduleOptions.map((module) => (
+                <option key={module} value={module}>
+                  {moduleLabel(module)}
+                </option>
+              ))}
+            </Select>
+            <Select label="Rule type" name="rule_type" value={form.rule_type} onChange={setPhaseFourForm('automation')}>
+              {['event_workflow', 'manual', 'project_overrun', 'overdue_invoice', 'low_stock', 'hse_open', 'permit_expiry'].map((type) => (
+                <option key={type} value={type}>
+                  {labelize(type)}
+                </option>
+              ))}
+            </Select>
+            <Select label="Trigger" name="trigger_event" value={form.trigger_event} onChange={setPhaseFourForm('automation')}>
+              {triggerOptions.map((trigger) => (
+                <option key={trigger.key} value={trigger.key}>
+                  {trigger.label}
+                </option>
+              ))}
+            </Select>
+            <TextArea label="Description" name="description" value={form.description} onChange={setPhaseFourForm('automation')} className="span-2" rows={3} />
+            <Select label="Condition field" name="condition_field" value={form.condition_field} onChange={setPhaseFourForm('automation')}>
+              <option value="">No condition</option>
+              {fieldOptions.map((field) => (
+                <option key={field} value={field}>
+                  {labelize(field)}
+                </option>
+              ))}
+            </Select>
+            <Select label="Operator" name="condition_operator" value={form.condition_operator} onChange={setPhaseFourForm('automation')}>
+              {operatorOptions.map((operator) => (
+                <option key={operator} value={operator}>
+                  {labelize(operator)}
+                </option>
+              ))}
+            </Select>
+            <Field label="Value" name="condition_value" value={form.condition_value} onChange={setPhaseFourForm('automation')} placeholder="20000 or low,high" />
+            <Select label="Mode" name="condition_mode" value={form.condition_mode} onChange={setPhaseFourForm('automation')}>
+              {(catalog.condition_modes || ['all', 'any']).map((mode) => (
+                <option key={mode} value={mode}>
+                  {labelize(mode)}
+                </option>
+              ))}
+            </Select>
+            <Select label="Action" name="action_type" value={form.action_type} onChange={setPhaseFourForm('automation')}>
+              {actionOptions.map((action) => (
+                <option key={action.key} value={action.key}>
+                  {action.label}
+                </option>
+              ))}
+            </Select>
+            <Field label="Action message" name="action_message" value={form.action_message} onChange={setPhaseFourForm('automation')} className="span-2" />
+            <Select label="Schedule" name="schedule_frequency" value={form.schedule_frequency} onChange={setPhaseFourForm('automation')}>
+              {scheduleOptions.map((schedule) => (
+                <option key={schedule} value={schedule}>
+                  {labelize(schedule)}
+                </option>
+              ))}
+            </Select>
+            <Select label="Approval" name="approval_mode" value={form.approval_mode} onChange={setPhaseFourForm('automation')}>
+              {approvalOptions.map((mode) => (
+                <option key={mode} value={mode}>
+                  {labelize(mode)}
+                </option>
+              ))}
+            </Select>
+            <Select label="Severity" name="severity" value={form.severity} onChange={setPhaseFourForm('automation')}>
+              {['low', 'medium', 'high', 'critical'].map((severity) => (
+                <option key={severity} value={severity}>
+                  {labelize(severity)}
+                </option>
+              ))}
+            </Select>
+            <Select label="Active" name="is_active" value={form.is_active} onChange={setPhaseFourForm('automation')}>
+              <option value="true">Active</option>
+              <option value="false">Paused</option>
+            </Select>
+            <div className="row-actions automation-submit">
+              <button type="submit" className="primary-action">
+                {editingRuleId ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                {editingRuleId ? 'Save workflow' : 'Create workflow'}
+              </button>
+              {editingRuleId && (
+                <button type="button" className="table-action" onClick={cancelAutomationRuleEdit}>
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+
+          <div className="workflow-canvas">
+            {flowNodes.map((node, index) => (
+              <div key={`${node.type}-${index}`} className="workflow-canvas-item">
+                <div className={`workflow-node ${node.type}`}>
+                  <span>{node.eyebrow}</span>
+                  <strong>{node.title}</strong>
+                  <small>{node.detail}</small>
+                </div>
+                {index < flowNodes.length - 1 && <div className="workflow-arrow">↓</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  function renderWorkflows() {
+    return (
+      <>
+        {renderWorkflowBuilder()}
+        <section className="panel">
+          <div className="section-heading">
+            <PanelTitle icon={Workflow} title="Workflows" />
+            <DownloadButton
+              filename="automation-workflows.csv"
+              columns={['Name', 'Module', 'Trigger', 'Version', 'Status', 'Active', 'Runs']}
+              rows={filteredRules.map((rule) => [rule.name, moduleLabel(rule.module), rule.trigger_event, rule.version, rule.status, rule.is_active ? 'Yes' : 'No', rule.runs_count || 0])}
+            />
+          </div>
+          <DataTable
+            columns={['Name', 'Module', 'Trigger', 'Version', 'Status', 'Active', 'Runs', 'Last run', 'Actions']}
+            rows={filteredRules.map((rule) => {
+              const rollback = previousVersion(rule)
+
+              return [
+                rule.name,
+                moduleLabel(rule.module),
+                labelize(rule.trigger_event),
+                `v${rule.version || 1}`,
+                <Badge key="status" value={rule.status || 'active'} />,
+                rule.is_active ? 'Yes' : 'No',
+                rule.runs_count || 0,
+                shortDate(rule.last_run_at),
+                <div key="actions" className="row-actions">
+                  <button type="button" className="table-action" onClick={() => editAutomationRule(rule)}>
+                    Edit
+                  </button>
+                  {rule.is_active && (
+                    <button type="button" className="table-action" onClick={() => runAction(() => api.runAutomationRule(rule.id), 'Automation workflow ran.')}>
+                      Run
+                    </button>
+                  )}
+                  <button type="button" className="table-action" onClick={() => toggleRule(rule)}>
+                    {rule.is_active ? 'Pause' : 'Activate'}
+                  </button>
+                  {rollback && (
+                    <button type="button" className="table-action" onClick={() => runAction(() => api.rollbackAutomationVersion(rule.id, rollback.version), `Workflow rolled back to v${rollback.version}.`)}>
+                      Rollback
+                    </button>
+                  )}
+                  <button type="button" className="table-action danger" onClick={() => archiveAutomationRule(rule)}>
+                    Archive
+                  </button>
+                </div>,
+              ]
+            })}
+          />
+        </section>
+      </>
+    )
+  }
+
+  function renderTemplates() {
+    return (
+      <section className="panel">
+        <PanelTitle icon={FileText} title="Workflow Templates" />
+        <DataTable
+          columns={['Template', 'Module', 'Category', 'Trigger', 'Approval', 'Actions']}
+          rows={filteredTemplates.map((template) => [
+            <div key="template" className="table-primary">
+              <strong>{template.name}</strong>
+              <small>{template.description}</small>
+            </div>,
+            moduleLabel(template.module),
+            labelize(template.category),
+            labelize(template.trigger_event),
+            labelize(template.approval_config?.mode || 'none'),
+            <button key="use" type="button" className="table-action" onClick={() => runAction(() => api.instantiateAutomationTemplate(template.key || template.id, { name: template.name }), 'Template added as draft workflow.')}>
+              Use template
+            </button>,
+          ])}
+        />
+      </section>
+    )
+  }
+
+  function renderCatalog(items, title, icon, columns, rows) {
+    return (
+      <section className="panel">
+        <PanelTitle icon={icon} title={title} />
+        <DataTable columns={columns} rows={rows(items)} />
+      </section>
+    )
+  }
+
+  function renderApprovals() {
+    return (
+      <section className="panel">
+        <PanelTitle icon={CheckCircle2} title="Approval Workflows" />
+        <DataTable
+          columns={['Workflow', 'Mode', 'Steps', 'Status', 'Version']}
+          rows={filteredRules
+            .filter((rule) => rule.approval_config?.mode && rule.approval_config.mode !== 'none')
+            .map((rule) => [rule.name, labelize(rule.approval_config.mode), (rule.approval_config.steps || []).join(' -> ') || 'Configured by role', <Badge key="status" value={rule.status || 'active'} />, `v${rule.version || 1}`])}
+        />
+      </section>
+    )
+  }
+
+  function renderLogs() {
+    return (
+      <section className="panel">
+        <div className="section-heading">
+          <PanelTitle icon={Clock3} title="Automation Logs" />
+          <DownloadButton
+            filename="automation-logs.csv"
+            columns={['Run', 'Workflow', 'Status', 'Trigger', 'Matched', 'Actions', 'Duration', 'Retry', 'Started', 'Error']}
+            rows={filteredRuns.map((run) => [run.run_number, run.rule?.name || '', run.status, run.trigger_event, run.matched_count, run.actions_executed, run.duration_ms, run.retry_count, run.started_at, run.error_message || ''])}
+          />
+        </div>
+        <DataTable
+          columns={['No.', 'Workflow', 'Status', 'Trigger', 'Matched', 'Actions', 'Duration', 'Retry', 'Started', 'Error']}
+          rows={filteredRuns.map((run) => [
+            run.run_number,
+            run.rule?.name || '',
+            <Badge key="status" value={run.status} />,
+            labelize(run.trigger_event),
+            run.matched_count,
+            run.actions_executed,
+            `${run.duration_ms || 0} ms`,
+            run.retry_count || 0,
+            shortDate(run.started_at),
+            run.error_message || '',
+          ])}
+        />
+      </section>
+    )
+  }
+
+  function renderAnalytics() {
+    return (
+      <div className="grid-main">
+        <ChartPanel icon={AlertTriangle} title="Failures">
+          <AnalyticsBarChart data={analytics.failures || []} xKey="name" bars={[{ key: 'failures', color: '#c3382f' }]} />
+        </ChartPanel>
+        <ChartPanel icon={RefreshCcw} title="Most Triggered Events">
+          <AnalyticsBarChart data={analytics.most_triggered_events || []} xKey="event" bars={[{ key: 'workflows', color: '#6d5dfc' }]} />
+        </ChartPanel>
+        <ChartPanel icon={Send} title="Notifications Sent">
+          <AnalyticsBarChart data={analytics.notification_statistics || []} xKey="type" bars={[{ key: 'sent', color: '#188a5a' }]} />
+        </ChartPanel>
+        <section className="panel">
+          <PanelTitle icon={BarChart3} title="Automation Savings" />
+          <div className="automation-savings-grid">
+            <Metric label="Executions tracked" value={runs.length} />
+            <Metric label="Actions completed" value={runs.reduce((sum, run) => sum + Number(run.actions_executed || 0), 0)} />
+            <Metric label="Failure rate" value={`${runs.length ? Math.round((runs.filter((run) => run.status === 'failed').length / runs.length) * 100) : 0}%`} />
+            <Metric label="Versions stored" value={rules.reduce((sum, rule) => sum + Number((rule.versions || []).length), 0)} />
+          </div>
+        </section>
+      </div>
+    )
+  }
+
+  function renderSettings() {
+    return (
+      <section className="panel">
+        <PanelTitle icon={Settings} title="Automation Settings" />
+        <div className="automation-settings-grid">
+          <Metric label="Security model" value="RBAC" />
+          <Metric label="Tenant isolation" value="Company scoped" />
+          <Metric label="Execution mode" value="Sync / Queue-ready" />
+          <Metric label="Audit policy" value="Versioned logs" />
+          <Metric label="Retry policy" value="2 attempts" />
+          <Metric label="Webhook policy" value="Signed-ready" />
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="view-stack automation-engine">
+      <div className="automation-toolbar">
+        <Field label="Search automation" name="automation_search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Workflow, trigger, action, template, module" />
+        <button type="button" className="primary-action compact-action" onClick={() => runAction(() => api.runActiveAutomation(), 'Active automation workflows ran.')}>
+          <RefreshCcw size={17} />
+          Run active workflows
+        </button>
+      </div>
+
+      <nav className="module-tabs" aria-label="Automation module navigation">
+        {tabs.map(([key, label, Icon]) => (
+          <button key={key} type="button" className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}>
+            <Icon size={15} />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === 'dashboard' && renderDashboard()}
+      {activeTab === 'workflows' && renderWorkflows()}
+      {activeTab === 'templates' && renderTemplates()}
+      {activeTab === 'triggers' && renderCatalog(triggerOptions.filter(searchable), 'Triggers', RefreshCcw, ['Trigger', 'Module'], (items) => items.map((trigger) => [trigger.label || labelize(trigger.key), moduleLabel(trigger.module)]))}
+      {activeTab === 'conditions' && renderCatalog(fieldOptions.filter(searchable), 'Conditions', ShieldCheck, ['Field', 'Supported operators'], (items) => items.map((field) => [labelize(field), operatorOptions.map(labelize).join(', ')]))}
+      {activeTab === 'actions' && renderCatalog(actionOptions.filter(searchable), 'Actions', Send, ['Action', 'Category'], (items) => items.map((action) => [action.label || labelize(action.key), labelize(action.category)]))}
+      {activeTab === 'schedules' && renderCatalog(scheduleOptions.filter(searchable), 'Schedules', CalendarDays, ['Schedule', 'Mode'], (items) => items.map((schedule) => [labelize(schedule), schedule === 'event_driven' ? 'System event' : 'Time based']))}
+      {activeTab === 'approvals' && renderApprovals()}
+      {activeTab === 'logs' && renderLogs()}
+      {activeTab === 'analytics' && renderAnalytics()}
+      {activeTab === 'settings' && renderSettings()}
+    </section>
+  )
+}
+
+function AdminView({ organization, branches, clients, suppliers, roles, users, currentUser, approvals = emptyAdminApprovalData, forms, setForms, setAdminFormValue, archiveCompany, runAction }) {
   const company = organization?.company
+  const canAdminister = canAdministerRecords(currentUser)
+  const isEditingClient = Boolean(forms.client.id)
+  const isEditingSupplier = Boolean(forms.supplier.id)
+  const isEditingUser = Boolean(forms.user.id)
+  const clientReset = { id: '', name: '', contact_name: '', email: '', phone: '', status: 'active' }
+  const supplierReset = { id: '', name: '', contact_name: '', email: '', phone: '', rating: 4, lead_time_days: 7, status: 'active' }
+  const userReset = { id: '', name: '', email: '', password: '', branch_id: branches[0]?.id || '', role_id: roles[0]?.id || '', permissions: rolePermissions(roles[0]), status: 'active' }
+  const userPermissions = normalizePermissionList(forms.user.permissions)
+  const companySettings = forms.company.settings || company?.settings || {}
+  const approvalItems = approvals?.items || []
+  const approvalSummary = approvals?.summary || {}
+
+  function reviewApproval(item, decision) {
+    if (decision === 'rejected' && !window.confirm(`Deny ${item.reference}? This will update the source record.`)) {
+      return
+    }
+
+    runAction(
+      () =>
+        api.reviewAdminApproval(item.type, item.record_id, {
+          decision,
+          notes: decision === 'approved' ? 'Approved from Admin approval inbox.' : 'Denied from Admin approval inbox.',
+        }),
+      decision === 'approved' ? 'Approval recorded.' : 'Request denied.',
+    )
+  }
+
+  function saveCompany(event) {
+    event.preventDefault()
+
+    const { appearance_theme, settings = companySettings, ...companyFields } = forms.company
+    const payload = {
+      ...companyFields,
+      settings: {
+        ...settings,
+        appearance: {
+          ...(settings.appearance || {}),
+          theme: normalizeTheme(appearance_theme || settings.appearance?.theme),
+        },
+      },
+    }
+
+    runAction(() => api.updateCompany(payload), 'Company updated.')
+  }
 
   function afterSubmit(section, reset) {
     setForms((current) => ({
@@ -1249,28 +11299,269 @@ function AdminView({ organization, branches, clients, suppliers, roles, users, f
     }))
   }
 
+  function editUser(item) {
+    setForms((current) => ({
+      ...current,
+      user: {
+        id: item.id,
+        name: item.name || '',
+        email: item.email || '',
+        password: '',
+        branch_id: item.branch_id || item.branch?.id || branches[0]?.id || '',
+        role_id: item.role_id || item.role?.id || roles[0]?.id || '',
+        permissions: explicitUserPermissions(item),
+        status: item.status || 'active',
+      },
+    }))
+  }
+
+  function setUserRole(event) {
+    const { value } = event.target
+    const role = roles.find((item) => String(item.id) === String(value))
+
+    setForms((current) => ({
+      ...current,
+      user: {
+        ...current.user,
+        role_id: value,
+        permissions: rolePermissions(role),
+      },
+    }))
+  }
+
+  function toggleAccessCategory(category) {
+    setForms((current) => {
+      const currentPermissions = normalizePermissionList(current.user.permissions)
+      const expandedPermissions = currentPermissions.includes('*') ? allAccessPermissions : currentPermissions
+      const hasCategory = category.permissions.every((permission) => expandedPermissions.includes(permission))
+      const permissions = hasCategory
+        ? expandedPermissions.filter((permission) => !category.permissions.includes(permission))
+        : [...new Set([...expandedPermissions, ...category.permissions])]
+
+      return {
+        ...current,
+        user: {
+          ...current.user,
+          permissions,
+        },
+      }
+    })
+  }
+
+  function setAllUserAccess() {
+    setForms((current) => ({
+      ...current,
+      user: {
+        ...current.user,
+        permissions: allAccessPermissions,
+      },
+    }))
+  }
+
+  function clearUserAccess() {
+    setForms((current) => ({
+      ...current,
+      user: {
+        ...current.user,
+        permissions: [],
+      },
+    }))
+  }
+
+  function editClient(item) {
+    setForms((current) => ({
+      ...current,
+      client: {
+        id: item.id,
+        name: item.name || '',
+        contact_name: item.contact_name || '',
+        email: item.email || '',
+        phone: item.phone || '',
+        status: item.status || 'active',
+      },
+    }))
+  }
+
+  function saveClient(event) {
+    event.preventDefault()
+
+    const payload = {
+      name: forms.client.name,
+      contact_name: forms.client.contact_name,
+      email: forms.client.email,
+      phone: forms.client.phone,
+      status: forms.client.status || 'active',
+    }
+
+    const request = isEditingClient
+      ? () => api.updateClient(forms.client.id, payload)
+      : () => api.createClient(payload)
+
+    runAction(request, isEditingClient ? 'Client updated.' : 'Client created.').then(() => afterSubmit('client', clientReset))
+  }
+
+  function deleteClient(item) {
+    if (!window.confirm(`Archive ${item.name}? This removes the client from active registers.`)) {
+      return
+    }
+
+    runAction(() => api.deleteClient(item.id), 'Client archived.').then(() => {
+      if (forms.client.id === item.id) {
+        afterSubmit('client', clientReset)
+      }
+    })
+  }
+
+  function editSupplier(item) {
+    setForms((current) => ({
+      ...current,
+      supplier: {
+        id: item.id,
+        name: item.name || '',
+        contact_name: item.contact_name || '',
+        email: item.email || '',
+        phone: item.phone || '',
+        rating: item.rating || 4,
+        lead_time_days: item.lead_time_days || 7,
+        status: item.status || 'active',
+      },
+    }))
+  }
+
+  function saveSupplier(event) {
+    event.preventDefault()
+
+    const payload = {
+      name: forms.supplier.name,
+      contact_name: forms.supplier.contact_name,
+      email: forms.supplier.email,
+      phone: forms.supplier.phone,
+      rating: Number(forms.supplier.rating || 3),
+      lead_time_days: Number(forms.supplier.lead_time_days || 7),
+      status: forms.supplier.status || 'active',
+    }
+
+    const request = isEditingSupplier
+      ? () => api.updateSupplier(forms.supplier.id, payload)
+      : () => api.createSupplier(payload)
+
+    runAction(request, isEditingSupplier ? 'Supplier updated.' : 'Supplier created.').then(() => afterSubmit('supplier', supplierReset))
+  }
+
+  function deleteSupplier(item) {
+    if (!window.confirm(`Archive ${item.name}? This removes the supplier from active registers.`)) {
+      return
+    }
+
+    runAction(() => api.deleteSupplier(item.id), 'Supplier archived.').then(() => {
+      if (forms.supplier.id === item.id) {
+        afterSubmit('supplier', supplierReset)
+      }
+    })
+  }
+
+  function saveUser(event) {
+    event.preventDefault()
+
+    const payload = {
+      name: forms.user.name,
+      email: forms.user.email,
+      branch_id: Number(forms.user.branch_id),
+      role_id: Number(forms.user.role_id),
+      permissions: userPermissions,
+      status: forms.user.status || 'active',
+    }
+
+    if (forms.user.password) {
+      payload.password = forms.user.password
+    }
+
+    const request = isEditingUser
+      ? () => api.updateUser(forms.user.id, payload)
+      : () => api.createUser(payload)
+
+    runAction(request, isEditingUser ? 'User updated.' : 'User invited.').then(() => afterSubmit('user', userReset))
+  }
+
+  function deleteUser(item) {
+    if (!window.confirm(`Delete ${item.name}? This removes their Structra access.`)) {
+      return
+    }
+
+    runAction(() => api.deleteUser(item.id), 'User deleted.').then(() => {
+      if (forms.user.id === item.id) {
+        afterSubmit('user', userReset)
+      }
+    })
+  }
+
+  function deleteCompany() {
+    if (!window.confirm(`Archive ${company?.name}? This will sign you out and remove the company from active workspaces.`)) {
+      return
+    }
+
+    archiveCompany()
+  }
+
   return (
     <section className="view-stack">
+      {canAdminister && (
+        <section className="panel admin-approval-panel">
+          <PanelTitle icon={CheckCircle2} title="Approval Inbox" />
+          <div className="approval-inbox-meta">
+            <span><strong>{approvalSummary.total_pending || 0}</strong> Pending decisions</span>
+            <span><strong>{money(approvalSummary.total_value || 0)}</strong> Pending value</span>
+            <span><strong>{approvalSummary.oldest_days || 0}</strong> Oldest days</span>
+          </div>
+          <DataTable
+            columns={['Reference', 'Module', 'Request', 'Submitted By', 'Project / Context', 'Value', 'Status', 'Submitted', 'Actions']}
+            rows={approvalItems.map((item) => [
+              item.reference,
+              item.module,
+              item.title,
+              item.requester || '',
+              [item.project, item.context].filter(Boolean).join(' / '),
+              item.amount ? money(item.amount) : '',
+              <Badge key="status" value={item.status || 'pending'} />,
+              shortDate(item.submitted_at),
+              <div key="actions" className="row-actions">
+                <button type="button" className="table-action" onClick={() => reviewApproval(item, 'approved')}>
+                  <CheckCircle2 size={14} />
+                  {item.approve_label || 'Approve'}
+                </button>
+                <button type="button" className="table-action danger" onClick={() => reviewApproval(item, 'rejected')}>
+                  {item.deny_label || 'Deny'}
+                </button>
+              </div>,
+            ])}
+          />
+        </section>
+      )}
+
       <div className="grid-main">
         <section className="panel">
           <PanelTitle icon={Building2} title="Company" />
           <form
             className="form-grid two"
-            onSubmit={(event) => {
-              event.preventDefault()
-              runAction(() => api.updateCompany(forms.company), 'Company updated.')
-            }}
+            onSubmit={saveCompany}
           >
-            <Field label="Name" name="name" value={forms.company.name || company?.name || ''} onChange={setAdminFormValue('company')} required />
-            <Field label="Registration" name="registration_number" value={forms.company.registration_number || ''} onChange={setAdminFormValue('company')} />
-            <Field label="Tax ID" name="tax_id" value={forms.company.tax_id || ''} onChange={setAdminFormValue('company')} />
-            <Field label="Currency" name="default_currency" value={forms.company.default_currency || 'GHS'} onChange={setAdminFormValue('company')} />
-            <Field label="Country" name="country" value={forms.company.country || 'GH'} onChange={setAdminFormValue('company')} />
-            <Field label="Timezone" name="base_timezone" value={forms.company.base_timezone || 'Africa/Accra'} onChange={setAdminFormValue('company')} />
-            <button type="submit" className="primary-action span-2">
-              <CheckCircle2 size={17} />
-              Save company
-            </button>
+            <Field label="Name" name="name" value={forms.company.name || company?.name || ''} onChange={setAdminFormValue('company')} required disabled={!canAdminister} />
+            <Field label="Registration" name="registration_number" value={forms.company.registration_number || ''} onChange={setAdminFormValue('company')} disabled={!canAdminister} />
+            <Field label="Tax ID" name="tax_id" value={forms.company.tax_id || ''} onChange={setAdminFormValue('company')} disabled={!canAdminister} />
+            <Field label="Currency" name="default_currency" value={forms.company.default_currency || 'GHS'} onChange={setAdminFormValue('company')} disabled={!canAdminister} />
+            <Field label="Country" name="country" value={forms.company.country || 'GH'} onChange={setAdminFormValue('company')} disabled={!canAdminister} />
+            <Field label="Timezone" name="base_timezone" value={forms.company.base_timezone || 'Africa/Accra'} onChange={setAdminFormValue('company')} disabled={!canAdminister} />
+            {canAdminister && (
+              <div className="row-actions span-2">
+                <button type="submit" className="primary-action">
+                  <CheckCircle2 size={17} />
+                  Save company
+                </button>
+                <button type="button" className="table-action danger" onClick={deleteCompany}>
+                  Archive company
+                </button>
+              </div>
+            )}
           </form>
         </section>
 
@@ -1285,7 +11576,7 @@ function AdminView({ organization, branches, clients, suppliers, roles, users, f
               )
             }}
           >
-            <Field label="Code" name="code" value={forms.branch.code} onChange={setAdminFormValue('branch')} required />
+            <Field label="Branch Code" name="code" value={forms.branch.code} onChange={setAdminFormValue('branch')} placeholder="Auto-generated" />
             <Field label="Name" name="name" value={forms.branch.name} onChange={setAdminFormValue('branch')} required />
             <Field label="City" name="city" value={forms.branch.city} onChange={setAdminFormValue('branch')} />
             <Field label="Country" name="country" value={forms.branch.country} onChange={setAdminFormValue('branch')} />
@@ -1303,54 +11594,104 @@ function AdminView({ organization, branches, clients, suppliers, roles, users, f
           <PanelTitle icon={Users} title="Clients" />
           <form
             className="form-grid two"
-            onSubmit={(event) => {
-              event.preventDefault()
-              runAction(() => api.createClient(forms.client), 'Client created.').then(() =>
-                afterSubmit('client', { name: '', contact_name: '', email: '', phone: '' }),
-              )
-            }}
+            onSubmit={saveClient}
           >
             <Field label="Name" name="name" value={forms.client.name} onChange={setAdminFormValue('client')} required />
             <Field label="Contact" name="contact_name" value={forms.client.contact_name} onChange={setAdminFormValue('client')} />
             <Field label="Email" type="email" name="email" value={forms.client.email} onChange={setAdminFormValue('client')} />
             <Field label="Phone" name="phone" value={forms.client.phone} onChange={setAdminFormValue('client')} />
-            <button type="submit" className="primary-action span-2">
-              <Plus size={17} />
-              Add client
-            </button>
+            {isEditingClient && (
+              <Select label="Status" name="status" value={forms.client.status} onChange={setAdminFormValue('client')}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </Select>
+            )}
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">
+                {isEditingClient ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                {isEditingClient ? 'Save client' : 'Add client'}
+              </button>
+              {isEditingClient && (
+                <button type="button" className="table-action" onClick={() => afterSubmit('client', clientReset)}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </form>
-          <MiniList items={clients.map((client) => client.name)} />
+          <DataTable
+            columns={['Client', 'Contact', 'Email', 'Phone', 'Status', 'Actions']}
+            rows={clients.map((client) => [
+              client.name,
+              client.contact_name || '',
+              client.email || '',
+              client.phone || '',
+              <Badge key="status" value={client.status} />,
+              canAdminister ? (
+                <div key="actions" className="row-actions">
+                  <button type="button" className="table-action" onClick={() => editClient(client)}>
+                    Edit
+                  </button>
+                  <button type="button" className="table-action danger" onClick={() => deleteClient(client)}>
+                    Archive
+                  </button>
+                </div>
+              ) : (
+                ''
+              ),
+            ])}
+          />
         </section>
 
         <section className="panel">
           <PanelTitle icon={Truck} title="Suppliers" />
           <form
             className="form-grid two"
-            onSubmit={(event) => {
-              event.preventDefault()
-              runAction(
-                () =>
-                  api.createSupplier({
-                    ...forms.supplier,
-                    rating: Number(forms.supplier.rating || 3),
-                    lead_time_days: Number(forms.supplier.lead_time_days || 7),
-                  }),
-                'Supplier created.',
-              ).then(() =>
-                afterSubmit('supplier', { name: '', contact_name: '', email: '', phone: '', rating: 4, lead_time_days: 7 }),
-              )
-            }}
+            onSubmit={saveSupplier}
           >
             <Field label="Name" name="name" value={forms.supplier.name} onChange={setAdminFormValue('supplier')} required />
             <Field label="Contact" name="contact_name" value={forms.supplier.contact_name} onChange={setAdminFormValue('supplier')} />
             <Field label="Email" type="email" name="email" value={forms.supplier.email} onChange={setAdminFormValue('supplier')} />
             <Field label="Lead days" type="number" name="lead_time_days" value={forms.supplier.lead_time_days} onChange={setAdminFormValue('supplier')} />
-            <button type="submit" className="primary-action span-2">
-              <Plus size={17} />
-              Add supplier
-            </button>
+            {isEditingSupplier && (
+              <Select label="Status" name="status" value={forms.supplier.status} onChange={setAdminFormValue('supplier')}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </Select>
+            )}
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">
+                {isEditingSupplier ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                {isEditingSupplier ? 'Save supplier' : 'Add supplier'}
+              </button>
+              {isEditingSupplier && (
+                <button type="button" className="table-action" onClick={() => afterSubmit('supplier', supplierReset)}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </form>
-          <MiniList items={suppliers.map((supplier) => supplier.name)} />
+          <DataTable
+            columns={['Supplier', 'Contact', 'Email', 'Lead days', 'Status', 'Actions']}
+            rows={suppliers.map((supplier) => [
+              supplier.name,
+              supplier.contact_name || '',
+              supplier.email || '',
+              supplier.lead_time_days,
+              <Badge key="status" value={supplier.status} />,
+              canAdminister ? (
+                <div key="actions" className="row-actions">
+                  <button type="button" className="table-action" onClick={() => editSupplier(supplier)}>
+                    Edit
+                  </button>
+                  <button type="button" className="table-action danger" onClick={() => deleteSupplier(supplier)}>
+                    Archive
+                  </button>
+                </div>
+              ) : (
+                ''
+              ),
+            ])}
+          />
         </section>
       </div>
 
@@ -1358,25 +11699,11 @@ function AdminView({ organization, branches, clients, suppliers, roles, users, f
         <PanelTitle icon={ShieldCheck} title="Users & Roles" />
         <form
           className="form-grid user-form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            runAction(
-              () =>
-                api.createUser({
-                  ...forms.user,
-                  branch_id: Number(forms.user.branch_id),
-                  role_id: Number(forms.user.role_id),
-                }),
-              'User invited.',
-            ).then(() =>
-              afterSubmit('user', { name: '', email: '', password: 'Structra2026', branch_id: branches[0]?.id || '', role_id: roles[0]?.id || '', job_title: '' }),
-            )
-          }}
+          onSubmit={saveUser}
         >
           <Field label="Name" name="name" value={forms.user.name} onChange={setAdminFormValue('user')} required />
           <Field label="Email" type="email" name="email" value={forms.user.email} onChange={setAdminFormValue('user')} required />
-          <Field label="Password" type="password" name="password" value={forms.user.password} onChange={setAdminFormValue('user')} required />
-          <Field label="Title" name="job_title" value={forms.user.job_title} onChange={setAdminFormValue('user')} />
+          <Field label="Password" type="password" name="password" value={forms.user.password} onChange={setAdminFormValue('user')} required={!isEditingUser} placeholder={isEditingUser ? 'Leave blank to keep current' : 'Enter a secure temporary password'} />
           <Select label="Branch" name="branch_id" value={forms.user.branch_id} onChange={setAdminFormValue('user')}>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>
@@ -1384,26 +11711,75 @@ function AdminView({ organization, branches, clients, suppliers, roles, users, f
               </option>
             ))}
           </Select>
-          <Select label="Role" name="role_id" value={forms.user.role_id} onChange={setAdminFormValue('user')}>
+          <Select label="Role" name="role_id" value={forms.user.role_id} onChange={setUserRole}>
             {roles.map((role) => (
               <option key={role.id} value={role.id}>
-                {role.name}
+                {roleLabel(role)}
               </option>
             ))}
           </Select>
-          <button type="submit" className="primary-action">
-            <Plus size={17} />
-            Add user
-          </button>
+          <Select label="Status" name="status" value={forms.user.status} onChange={setAdminFormValue('user')}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="suspended">Suspended</option>
+          </Select>
+          <div className="access-selector admin-access-selector">
+            <div className="access-selector-head">
+              <span>Permitted Categories</span>
+              <div className="row-actions">
+                <button type="button" className="table-action" onClick={setAllUserAccess}>
+                  Grant all
+                </button>
+                <button type="button" className="table-action" onClick={clearUserAccess}>
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="access-grid">
+              {accessCategories.map((category) => (
+                <label key={category.id} className="access-option">
+                  <input
+                    type="checkbox"
+                    checked={hasCategoryPermissions(userPermissions, category)}
+                    onChange={() => toggleAccessCategory(category)}
+                  />
+                  <span>
+                    <strong>{category.label}</strong>
+                    <small>{category.description}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="row-actions">
+            <button type="submit" className="primary-action">
+              {isEditingUser ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+              {isEditingUser ? 'Save user' : 'Add user'}
+            </button>
+            {isEditingUser && (
+              <button type="button" className="table-action" onClick={() => afterSubmit('user', userReset)}>
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
         <DataTable
-          columns={['Name', 'Email', 'Role', 'Branch', 'Status']}
+          columns={['Name', 'Email', 'Role', 'Access', 'Branch', 'Status', 'Actions']}
           rows={users.map((item) => [
             item.name,
             item.email,
-            item.role?.name,
+            roleLabel(item.role),
+            permissionCategorySummary(explicitUserPermissions(item)),
             item.branch?.name,
             <Badge key="status" value={item.status} />,
+            <div key="actions" className="row-actions">
+              <button type="button" className="table-action" onClick={() => editUser(item)}>
+                Edit
+              </button>
+              <button type="button" className="table-action danger" onClick={() => deleteUser(item)} disabled={item.id === currentUser?.id}>
+                Delete
+              </button>
+            </div>,
           ])}
         />
       </section>
@@ -1425,6 +11801,15 @@ function Select({ label, className = '', children, ...props }) {
     <label className={`field ${className}`}>
       <span>{label}</span>
       <select {...props}>{children}</select>
+    </label>
+  )
+}
+
+function TextArea({ label, className = '', ...props }) {
+  return (
+    <label className={`field ${className}`}>
+      <span>{label}</span>
+      <textarea {...props} />
     </label>
   )
 }
@@ -1457,6 +11842,110 @@ function Metric({ label, value }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  )
+}
+
+const intelligenceChartColors = ['#2364d8', '#188a5a', '#b66a05', '#c3382f', '#6d5dfc', '#0f766e', '#7c3aed', '#475569']
+
+function toChartNumber(value) {
+  const parsed = Number(value)
+
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function shortChartLabel(value) {
+  const text = labelize(value)
+
+  return text.length > 16 ? `${text.slice(0, 16)}...` : text
+}
+
+function ChartPanel({ icon: Icon = BarChart3, title, children }) {
+  return (
+    <section className="panel chart-panel">
+      <PanelTitle icon={Icon} title={title} />
+      {children}
+    </section>
+  )
+}
+
+function EmptyChart() {
+  return <div className="analytics-chart-empty">No chart data</div>
+}
+
+function AnalyticsBarChart({ data = [], xKey = 'name', bars = [], height = 280, valueFormatter = (value) => compactFormatter.format(toChartNumber(value)) }) {
+  const chartData = (data || []).filter(Boolean).slice(0, 12)
+
+  if (chartData.length === 0 || bars.length === 0) {
+    return <EmptyChart />
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={chartData} margin={{ top: 10, right: 12, left: 2, bottom: 18 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <XAxis dataKey={xKey} tickFormatter={shortChartLabel} tick={{ fontSize: 11 }} />
+        <YAxis tickFormatter={valueFormatter} tick={{ fontSize: 11 }} />
+        <Tooltip
+          formatter={(value, name) => [valueFormatter(value), labelize(name)]}
+          labelFormatter={labelize}
+          contentStyle={{ borderRadius: 8, borderColor: '#d8e0ea' }}
+        />
+        <Legend formatter={labelize} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+        {bars.map((bar, index) => (
+          <Bar key={bar.key} dataKey={bar.key} fill={bar.color || intelligenceChartColors[index % intelligenceChartColors.length]} radius={[4, 4, 0, 0]} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function AnalyticsPieChart({ data = [], nameKey = 'name', valueKey = 'value', height = 280 }) {
+  const chartData = (data || []).filter((item) => toChartNumber(item?.[valueKey]) > 0).slice(0, 8)
+
+  if (chartData.length === 0) {
+    return <EmptyChart />
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <PieChart>
+        <Pie data={chartData} dataKey={valueKey} nameKey={nameKey} innerRadius={62} outerRadius={102} paddingAngle={3}>
+          {chartData.map((entry, index) => {
+            const healthKeys = ['green', 'amber', 'red', 'grey']
+            const fill = entry.color || (healthKeys.includes(entry.key) ? healthColor(entry.key) : intelligenceChartColors[index % intelligenceChartColors.length])
+
+            return <Cell key={`${entry[nameKey]}-${index}`} fill={fill} />
+          })}
+        </Pie>
+        <Tooltip formatter={(value, name) => [compactFormatter.format(toChartNumber(value)), labelize(name)]} />
+        <Legend formatter={labelize} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+      </PieChart>
+    </ResponsiveContainer>
+  )
+}
+
+function RankPanel({ title, rows, valueKey, valueSuffix = '' }) {
+  return (
+    <section className="panel">
+      <PanelTitle icon={BarChart3} title={title} />
+      <DataTable
+        columns={['Project', 'Health', 'Value']}
+        rows={(rows || []).slice(0, 8).map((row) => [
+          row.project,
+          <Badge key="health" value={row.health} />,
+          `${formatMetricValue(valueKey, row[valueKey])}${valueSuffix && !String(formatMetricValue(valueKey, row[valueKey])).endsWith(valueSuffix) ? valueSuffix : ''}`,
+        ])}
+      />
+    </section>
+  )
+}
+
+function DownloadButton({ filename, columns, rows, label = 'Download' }) {
+  return (
+    <button type="button" className="table-action" onClick={() => downloadCsv(filename, columns, rows)}>
+      <Download size={14} />
+      {label}
+    </button>
   )
 }
 
@@ -1519,8 +12008,183 @@ function money(value) {
   return currencyFormatter.format(Number(value || 0))
 }
 
+function requestStatusLabel(request = {}) {
+  return request.approval_status_label || labelize(request.status || '')
+}
+
+function approvalProgressLabel(request = {}) {
+  return request.approval_progress?.label || `${(request.approval_workflow || []).filter((step) => step.status === 'approved').length}/${(request.approval_workflow || []).length || 0}`
+}
+
+function workflowStatusSymbol(status) {
+  return {
+    approved: '✓',
+    pending: '...',
+    rejected: 'x',
+    waiting: '-',
+  }[status] || '-'
+}
+
+function timelineTime(value) {
+  if (!value) return ''
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function ratingStars(value) {
+  const rating = Math.max(0, Math.min(5, Math.round(Number(value || 0))))
+  return `${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}`
+}
+
+function emptyMaterialLine() {
+  return {
+    item_name: '',
+    description: '',
+    cost_code: '',
+    quantity: 1,
+    unit: 'each',
+    estimated_unit_cost: '',
+    tax_rate: 0,
+    discount_amount: 0,
+  }
+}
+
+function emptyQuoteLine() {
+  return {
+    item_name: '',
+    description: '',
+    cost_code: '',
+    quantity: 1,
+    unit: 'each',
+    unit_price: '',
+    tax_rate: 0,
+    discount_amount: 0,
+  }
+}
+
+function lineTotal(line, costKey) {
+  const subtotal = Number(line.quantity || 0) * Number(line[costKey] || 0)
+  const tax = subtotal * (Number(line.tax_rate || 0) / 100)
+  const discount = Number(line.discount_amount || 0)
+
+  return Math.max(0, subtotal + tax - discount)
+}
+
+function procurementTotals(lines = [], headerDiscount = 0) {
+  const subtotal = lines.reduce((total, line) => {
+    const unitCost = Number(line.estimated_unit_cost ?? line.unit_price ?? 0)
+    return total + Number(line.quantity || 0) * unitCost
+  }, 0)
+  const tax = lines.reduce((total, line) => {
+    const unitCost = Number(line.estimated_unit_cost ?? line.unit_price ?? 0)
+    return total + (Number(line.quantity || 0) * unitCost * Number(line.tax_rate || 0)) / 100
+  }, 0)
+  const lineDiscount = lines.reduce((total, line) => total + Number(line.discount_amount || 0), 0)
+  const discount = lineDiscount + Number(headerDiscount || 0)
+
+  return {
+    subtotal,
+    tax,
+    discount,
+    grandTotal: Math.max(0, subtotal + tax - discount),
+  }
+}
+
 function labelize(value = '') {
   return String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function moduleLabel(value = '') {
+  return ['staff', 'people', 'hr'].includes(String(value).toLowerCase()) ? 'HR & Workforce' : labelize(value)
+}
+
+function roleLabel(role) {
+  if (!role) return ''
+  return role.slug === 'owner' ? 'CEO' : role.name
+}
+
+function normalizePermissionList(permissions = []) {
+  if (!Array.isArray(permissions)) {
+    return []
+  }
+
+  return [...new Set(permissions.map((permission) => String(permission).trim()).filter(Boolean))]
+}
+
+function rolePermissions(role) {
+  return normalizePermissionList(role?.permissions)
+}
+
+function effectiveUserPermissions(user) {
+  return normalizePermissionList(user?.effective_permissions || user?.permissions || user?.role?.permissions)
+}
+
+function explicitUserPermissions(user) {
+  if (Array.isArray(user?.permissions)) {
+    return normalizePermissionList(user.permissions)
+  }
+
+  return effectiveUserPermissions(user)
+}
+
+function hasPermissionFromList(permissions, requiredPermissions = []) {
+  const normalized = normalizePermissionList(permissions)
+
+  if (requiredPermissions.length === 0 || normalized.includes('*')) {
+    return true
+  }
+
+  return requiredPermissions.some((permission) => normalized.includes(permission))
+}
+
+function hasAnyPermission(user, requiredPermissions = []) {
+  return hasPermissionFromList(effectiveUserPermissions(user), requiredPermissions)
+}
+
+function accessibleNavItems(user) {
+  if (!user) {
+    return []
+  }
+
+  return navItems.filter((item) => hasAnyPermission(user, item.permissions))
+}
+
+function hasCategoryPermissions(permissions, category) {
+  const normalized = normalizePermissionList(permissions)
+
+  return normalized.includes('*') || category.permissions.every((permission) => normalized.includes(permission))
+}
+
+function permissionCategorySummary(permissions) {
+  const normalized = normalizePermissionList(permissions)
+
+  if (normalized.includes('*')) {
+    return 'All access'
+  }
+
+  const categories = accessCategories
+    .filter((category) => hasCategoryPermissions(normalized, category))
+    .map((category) => category.label)
+
+  if (categories.length === 0) {
+    return 'No module access'
+  }
+
+  if (categories.length <= 3) {
+    return categories.join(', ')
+  }
+
+  return `${categories.slice(0, 3).join(', ')} +${categories.length - 3} more`
+}
+
+function canAdministerRecords(user) {
+  const permissions = effectiveUserPermissions(user)
+  return permissions.includes('*') || permissions.includes('settings.manage')
 }
 
 function initials(name = '') {
@@ -1537,6 +12201,62 @@ function shortDate(value) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value))
 }
 
+function dateInputValue(value) {
+  if (!value) return ''
+  return String(value).slice(0, 10)
+}
+
+function datetimeLocalInputValue(value) {
+  if (!value) return ''
+  return String(value).slice(0, 16)
+}
+
+function formatMetricValue(key, value) {
+  if (value === null || value === undefined) return ''
+
+  const numericValue = Number(value)
+  if (/(amount|balance|budget|cost|liability|receivable|total|value)/i.test(key) && Number.isFinite(numericValue)) {
+    return money(numericValue)
+  }
+
+  return value
+}
+
+function intelligenceValue(item = {}) {
+  if (item.unit === '%') return `${item.value || 0}%`
+  return formatMetricValue(item.key || item.label || '', item.value)
+}
+
+function healthColor(value) {
+  return {
+    green: '#188a5a',
+    amber: '#c47a16',
+    red: '#c24132',
+    grey: '#8a97a5',
+  }[value] || '#2c6d8f'
+}
+
+function filterIntelligenceProjects(projects = [], filters = {}) {
+  return projects.filter((project) => {
+    if (filters.project_id && String(project.project_id) !== String(filters.project_id)) return false
+    if (filters.country && project.country !== filters.country) return false
+    if (filters.project_status && project.status !== filters.project_status) return false
+
+    return true
+  })
+}
+
+function filterByProject(row = {}, filters = {}) {
+  if (!filters.project_id) return true
+  return String(row.project_id) === String(filters.project_id)
+}
+
+function filterByProjectName(row = {}, filters = {}, projects = []) {
+  if (!filters.project_id) return true
+  const project = projects.find((item) => String(item.project_id) === String(filters.project_id))
+  return !project || row.project === project.project
+}
+
 function nextPoStatus(status) {
   return {
     draft: 'issued',
@@ -1546,8 +12266,108 @@ function nextPoStatus(status) {
   }[status]
 }
 
+function nextPermitStatus(status) {
+  return {
+    submitted: 'approved',
+    approved: 'active',
+    active: 'closed',
+  }[status]
+}
+
 function sumBy(items = [], key) {
   return items.reduce((total, item) => total + Number(item[key] || 0), 0)
+}
+
+function downloadCsv(filename, columns, rows) {
+  const csv = [columns, ...rows].map((row) => row.map(csvCell).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function downloadSimplePdf(filename, title, rows) {
+  const textLines = [
+    title,
+    `Generated ${new Date().toLocaleString()}`,
+    '',
+    ...rows.map(([label, value]) => `${label}: ${String(value || '').replace(/[^\x20-\x7E]/g, '')}`),
+  ].map((line) => line.slice(0, 110))
+  const pageCommands = ['BT', '/F1 16 Tf', '50 790 Td', `(${pdfText(title)}) Tj`, '/F1 10 Tf', '0 -24 Td']
+
+  textLines.slice(1, 42).forEach((line) => {
+    pageCommands.push(`(${pdfText(line)}) Tj`, '0 -16 Td')
+  })
+
+  pageCommands.push('ET')
+
+  const stream = pageCommands.join('\n')
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+  ]
+  let pdf = '%PDF-1.4\n'
+  const offsets = [0]
+
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length)
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`
+  })
+
+  const xref = pdf.length
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
+  })
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`
+
+  const blob = new Blob([pdf], { type: 'application/pdf' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function pdfText(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+}
+
+function csvCell(value) {
+  if (value === null || value === undefined) return '""'
+
+  const text = Array.isArray(value)
+    ? value.join('; ')
+    : typeof value === 'object'
+      ? JSON.stringify(value)
+      : String(value)
+
+  return `"${text.replace(/\s+/g, ' ').trim().replaceAll('"', '""')}"`
+}
+
+function csvList(value = '') {
+  return String(value)
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean)
 }
 
 export default App

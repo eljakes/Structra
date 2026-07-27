@@ -7,8 +7,15 @@ use App\Models\Client;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\Drawing;
+use App\Models\FinanceCreditNote;
+use App\Models\FinanceLedgerEntry;
+use App\Models\FinanceRetention;
+use App\Models\Invoice;
+use App\Models\Payment;
+use App\Models\PayrollRun;
 use App\Models\Project;
 use App\Models\Role;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -105,6 +112,192 @@ class StructraPhaseThreeApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('journal_entry.status', 'posted')
             ->assertJsonCount(2, 'journal_entry.lines');
+
+        $this->assertDatabaseHas('finance_ledger_entries', [
+            'source_type' => Invoice::class,
+            'source_id' => $invoiceId,
+        ]);
+        $this->assertDatabaseHas('finance_ledger_entries', [
+            'source_type' => Payment::class,
+        ]);
+
+        $bankAccountId = $this->postJson('/api/v1/finance/bank-accounts', [
+            'account_name' => 'Project Collections',
+            'bank_name' => 'GCB Bank',
+            'currency' => 'GHS',
+            'opening_balance' => 1000,
+            'is_default' => true,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('bank_account.current_balance', '1000.00')
+            ->json('bank_account.id');
+
+        $this->postJson('/api/v1/finance/bank-reconciliations', [
+            'finance_bank_account_id' => $bankAccountId,
+            'statement_date' => now()->toDateString(),
+            'statement_balance' => 1000,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('bank_reconciliation.status', 'reconciled');
+
+        $this->postJson('/api/v1/finance/accounts', [
+            'account_name' => 'Retention control',
+            'account_type' => 'asset',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('account.account_type', 'asset');
+
+        $this->postJson('/api/v1/finance/credit-notes', [
+            'invoice_id' => $invoiceId,
+            'amount' => 25,
+            'tax_amount' => 0,
+            'reason' => 'Client certified adjustment',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('credit_note.status', 'approved');
+
+        $retentionId = $this->postJson('/api/v1/finance/retentions', [
+            'project_id' => $project->id,
+            'invoice_id' => $invoiceId,
+            'party_type' => 'client',
+            'base_amount' => 1000,
+            'retention_percent' => 10,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('retention.balance_amount', '100.00')
+            ->json('retention.id');
+
+        $this->postJson("/api/v1/finance/retentions/{$retentionId}/release", [
+            'amount' => 40,
+        ])
+            ->assertOk()
+            ->assertJsonPath('retention.status', 'partial')
+            ->assertJsonPath('retention.balance_amount', '60.00');
+
+        $this->postJson('/api/v1/finance/progress-billings', [
+            'project_id' => $project->id,
+            'milestone_name' => 'Foundation certified',
+            'progress_percent' => 20,
+            'billable_amount' => 5000,
+            'retention_percent' => 10,
+            'create_invoice' => true,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('progress_billing.status', 'invoiced');
+
+        $this->postJson('/api/v1/finance/tax-rules', [
+            'tax_name' => 'VAT',
+            'tax_type' => 'vat',
+            'rate' => 15,
+            'applies_to' => 'sales',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('tax_rule.tax_type', 'vat');
+
+        $this->postJson('/api/v1/finance/cost-centers', [
+            'project_id' => $project->id,
+            'name' => 'Finance Project Cost Center',
+            'type' => 'project',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('cost_center.type', 'project');
+
+        $this->postJson('/api/v1/finance/fixed-assets', [
+            'branch_id' => $branch->id,
+            'name' => 'Site generator',
+            'category' => 'equipment',
+            'purchase_cost' => 12000,
+            'useful_life_months' => 60,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('fixed_asset.asset_number', fn (string $number): bool => str_starts_with($number, 'FAS-'));
+
+        $this->getJson('/api/v1/finance')
+            ->assertOk()
+            ->assertJsonStructure([
+                'summary' => ['cash_balance', 'accounts_receivable', 'accounts_payable', 'profit', 'budget_utilization', 'taxes_payable'],
+                'accounts_receivable' => ['aging', 'customers', 'statements'],
+                'accounts_payable' => ['aging', 'suppliers'],
+                'chart_of_accounts' => ['accounts', 'by_type'],
+                'general_ledger' => ['entries', 'account_balances'],
+                'financial_reports' => ['income_statement', 'balance_sheet', 'cash_flow_statement', 'trial_balance', 'project_profitability'],
+                'bank_accounts',
+                'retentions',
+                'progress_billings',
+            ]);
+
+        $this->assertDatabaseHas('finance_credit_notes', [
+            'invoice_id' => $invoiceId,
+            'status' => 'approved',
+        ]);
+        $this->assertDatabaseHas('finance_retentions', [
+            'id' => $retentionId,
+            'status' => 'partial',
+        ]);
+        $this->assertGreaterThan(0, FinanceLedgerEntry::query()->count());
+        $this->assertSame(1, FinanceCreditNote::query()->count());
+        $this->assertGreaterThanOrEqual(1, FinanceRetention::query()->count());
+    }
+
+    public function test_admin_approval_inbox_lists_and_reviews_pending_expenses(): void
+    {
+        [$admin, $branch] = $this->tenantUser();
+        Sanctum::actingAs($admin);
+
+        $expenseId = $this->postJson('/api/v1/finance/expenses', [
+            'branch_id' => $branch->id,
+            'description' => 'Generator fuel reimbursement',
+            'amount' => 750,
+            'tax_amount' => 0,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('expense.status', 'submitted')
+            ->json('expense.id');
+
+        $this->getJson('/api/v1/admin/approvals')
+            ->assertOk()
+            ->assertJsonPath('summary.total_pending', 1)
+            ->assertJsonPath('items.0.type', 'expense')
+            ->assertJsonPath('items.0.reference', fn (string $reference): bool => str_starts_with($reference, 'EXP-'));
+
+        $financeRole = Role::query()->create([
+            'company_id' => $admin->company_id,
+            'name' => 'Finance Officer',
+            'slug' => 'finance-officer',
+            'permissions' => ['finance.manage'],
+            'is_system' => false,
+        ]);
+
+        $financeUser = User::query()->create([
+            'company_id' => $admin->company_id,
+            'branch_id' => $branch->id,
+            'role_id' => $financeRole->id,
+            'name' => 'Finance User',
+            'email' => fake()->unique()->safeEmail(),
+            'password' => 'Structra2026',
+        ]);
+
+        Sanctum::actingAs($financeUser);
+        $this->getJson('/api/v1/admin/approvals')->assertForbidden();
+
+        Sanctum::actingAs($admin);
+        $this->postJson("/api/v1/admin/approvals/expense/{$expenseId}/review", [
+            'decision' => 'approved',
+            'notes' => 'Approved by admin.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('approval.type', 'expense')
+            ->assertJsonPath('approval.status', 'approved');
+
+        $this->assertDatabaseHas('expenses', [
+            'id' => $expenseId,
+            'status' => 'approved',
+            'approved_by' => $admin->id,
+        ]);
+
+        $this->getJson('/api/v1/admin/approvals')
+            ->assertOk()
+            ->assertJsonPath('summary.total_pending', 0);
     }
 
     public function test_people_payroll_and_leave_workflows_work(): void
@@ -161,16 +354,401 @@ class StructraPhaseThreeApiTest extends TestCase
         ])
             ->assertCreated()
             ->assertJsonPath('payroll_run.net_pay', '6000.00')
+            ->assertJsonPath('payroll_run.finance_status', 'forecast_in_finance')
             ->json('payroll_run.id');
 
         $this->postJson("/api/v1/people/payroll-runs/{$runId}/approve")
             ->assertOk()
-            ->assertJsonPath('payroll_run.status', 'approved');
+            ->assertJsonPath('payroll_run.status', 'approved')
+            ->assertJsonPath('payroll_run.finance_status', 'approved_posted')
+            ->assertJsonPath('payroll_run.finance_posting.approval_posted', true);
 
         $this->postJson("/api/v1/people/payroll-runs/{$runId}/approve", ['status' => 'paid'])
             ->assertOk()
             ->assertJsonPath('payroll_run.status', 'paid')
-            ->assertJsonPath('payroll_run.payslips.0.status', 'paid');
+            ->assertJsonPath('payroll_run.payslips.0.status', 'paid')
+            ->assertJsonPath('payroll_run.finance_status', 'paid_posted')
+            ->assertJsonPath('payroll_run.finance_posting.payment_posted', true);
+
+        $this->assertDatabaseHas('finance_ledger_entries', [
+            'source_type' => PayrollRun::class,
+            'source_id' => $runId,
+        ]);
+        $this->assertDatabaseHas('finance_ledger_entries', [
+            'source_type' => PayrollRun::class.'#payment',
+            'source_id' => $runId,
+        ]);
+
+        $this->getJson('/api/v1/people')
+            ->assertOk()
+            ->assertJsonPath('payroll_runs.0.finance_status', 'paid_posted')
+            ->assertJsonPath('payroll_runs.0.finance_linked', true);
+
+        $this->getJson('/api/v1/finance')
+            ->assertOk()
+            ->assertJsonPath('payroll_integration.runs.0.finance_status', 'paid_posted')
+            ->assertJsonPath('payroll_integration.runs.0.finance_posting.payment_posted', true);
+    }
+
+    public function test_hr_workforce_lifecycle_records_are_real_and_payroll_uses_approved_overtime(): void
+    {
+        [$user, $branch] = $this->tenantUser();
+        Sanctum::actingAs($user);
+
+        $project = Project::query()->create([
+            'company_id' => $user->company_id,
+            'branch_id' => $branch->id,
+            'code' => 'PRJ-HR-001',
+            'name' => 'Workforce Test Project',
+        ]);
+
+        $supplier = Supplier::query()->create([
+            'company_id' => $user->company_id,
+            'branch_id' => $branch->id,
+            'name' => 'Reliable Labour Services',
+        ]);
+
+        $vacancyId = $this->postJson('/api/v1/people/job-vacancies', [
+            'branch_id' => $branch->id,
+            'project_id' => $project->id,
+            'title' => 'Site Engineer',
+            'department' => 'construction',
+            'employment_type' => 'full_time',
+            'openings' => 1,
+            'priority' => 'critical',
+            'required_skills' => 'setting out, QA, site supervision',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('vacancy.vacancy_number', fn (string $number): bool => str_starts_with($number, 'VAC-'))
+            ->json('vacancy.id');
+
+        $candidateId = $this->postJson('/api/v1/people/candidates', [
+            'full_name' => 'Aba Site',
+            'email' => fake()->unique()->safeEmail(),
+            'phone' => '0240000001',
+            'trade' => 'Site engineering',
+            'rating' => 5,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('candidate.candidate_number', fn (string $number): bool => str_starts_with($number, 'CAN-'))
+            ->json('candidate.id');
+
+        $applicationId = $this->postJson('/api/v1/people/applications', [
+            'job_vacancy_id' => $vacancyId,
+            'candidate_id' => $candidateId,
+            'expected_salary' => 7000,
+            'screening_score' => 92,
+            'background_check_status' => 'clear',
+            'offer_status' => 'sent',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('application.application_number', fn (string $number): bool => str_starts_with($number, 'APP-'))
+            ->json('application.id');
+
+        $this->postJson('/api/v1/people/interviews', [
+            'application_id' => $applicationId,
+            'scheduled_at' => now()->addDay()->toIso8601String(),
+            'stage' => 'technical',
+            'interviewers' => 'Project Manager, HR Manager',
+            'result' => 'passed',
+            'score' => 88,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('interview.result', 'passed');
+
+        $employeeId = $this->postJson("/api/v1/people/applications/{$applicationId}/hire", [
+            'branch_id' => $branch->id,
+            'project_id' => $project->id,
+            'manager_id' => $user->id,
+            'base_salary' => 7000,
+            'hourly_rate' => 50,
+            'hire_date' => now()->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('employee.status', 'active')
+            ->assertJsonPath('employee.hourly_rate', '50.00')
+            ->assertJsonPath('application.status', 'hired')
+            ->json('employee.id');
+
+        $this->postJson('/api/v1/people/onboarding-checklists', [
+            'employee_profile_id' => $employeeId,
+            'completed_items' => 'Employment Contract, National ID, Tax Number, SSNIT Number, Bank Details, Emergency Contact, Laptop Assigned, PPE Issued, Orientation Completed',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('onboarding.status', 'completed');
+
+        $shiftId = $this->postJson('/api/v1/people/shifts', [
+            'branch_id' => $branch->id,
+            'project_id' => $project->id,
+            'name' => 'Day site shift',
+            'shift_type' => 'day',
+            'start_time' => '07:00',
+            'end_time' => '17:00',
+            'break_minutes' => 60,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('shift.shift_code', fn (string $number): bool => str_starts_with($number, 'SFT-'))
+            ->json('shift.id');
+
+        $this->postJson('/api/v1/people/shift-assignments', [
+            'shift_id' => $shiftId,
+            'employee_profile_id' => $employeeId,
+            'project_id' => $project->id,
+            'starts_on' => now()->startOfMonth()->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('shift_assignment.status', 'active');
+
+        $this->postJson('/api/v1/people/workforce-allocations', [
+            'employee_profile_id' => $employeeId,
+            'project_id' => $project->id,
+            'supervisor_id' => $user->id,
+            'role' => 'Site Engineer',
+            'allocation_percent' => 100,
+            'start_date' => now()->startOfMonth()->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('allocation.status', 'active');
+
+        $timesheetId = $this->postJson('/api/v1/people/timesheets', [
+            'employee_profile_id' => $employeeId,
+            'project_id' => $project->id,
+            'shift_id' => $shiftId,
+            'work_date' => now()->toDateString(),
+            'hours_worked' => 10,
+            'overtime_hours' => 2,
+            'cost_rate' => 50,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('timesheet.cost_amount', '550.00')
+            ->json('timesheet.id');
+
+        $this->postJson("/api/v1/people/timesheets/{$timesheetId}/review", ['status' => 'approved'])
+            ->assertOk()
+            ->assertJsonPath('timesheet.status', 'approved');
+
+        $overtimeId = $this->postJson('/api/v1/people/overtime-requests', [
+            'employee_profile_id' => $employeeId,
+            'project_id' => $project->id,
+            'work_date' => now()->toDateString(),
+            'hours' => 3,
+            'reason' => 'Concrete pour extension',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('overtime_request.status', 'pending')
+            ->json('overtime_request.id');
+
+        $this->postJson("/api/v1/people/overtime-requests/{$overtimeId}/review", ['status' => 'approved'])
+            ->assertOk()
+            ->assertJsonPath('overtime_request.status', 'approved');
+
+        $this->postJson('/api/v1/people/payroll-runs', [
+            'branch_id' => $branch->id,
+            'period_start' => now()->startOfMonth()->toDateString(),
+            'period_end' => now()->endOfMonth()->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('payroll_run.gross_pay', '7375.00')
+            ->assertJsonPath('payroll_run.payslips.0.overtime_pay', '375.00');
+
+        $courseId = $this->postJson('/api/v1/people/training-courses', [
+            'title' => 'Working at Height',
+            'category' => 'safety',
+            'provider' => 'HSE Institute',
+            'duration_hours' => 4,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('training_course.course_code', fn (string $number): bool => str_starts_with($number, 'SAF-'))
+            ->json('training_course.id');
+
+        $this->postJson('/api/v1/people/training-records', [
+            'employee_profile_id' => $employeeId,
+            'training_course_id' => $courseId,
+            'status' => 'completed',
+            'completed_on' => now()->toDateString(),
+            'score' => 90,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('training_record.status', 'completed');
+
+        $this->postJson('/api/v1/people/certifications', [
+            'employee_profile_id' => $employeeId,
+            'name' => 'Engineer Practicing Certificate',
+            'issuing_authority' => 'Engineering Council',
+            'issued_on' => now()->subYear()->toDateString(),
+            'expires_on' => now()->addDays(30)->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('certification.status', 'valid');
+
+        $this->postJson('/api/v1/people/ppe-issues', [
+            'employee_profile_id' => $employeeId,
+            'project_id' => $project->id,
+            'item_name' => 'Safety harness',
+            'quantity' => 1,
+            'replacement_due_on' => now()->addDays(20)->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('ppe_issue.status', 'issued');
+
+        $this->postJson('/api/v1/people/contractors', [
+            'supplier_id' => $supplier->id,
+            'name' => 'Reliable Labour Crew',
+            'trade' => 'General labour',
+            'worker_count' => 12,
+            'contract_expires_on' => now()->addMonths(6)->toDateString(),
+            'insurance_expires_on' => now()->addMonths(6)->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('contractor.compliance_status', 'compliant');
+
+        $this->postJson('/api/v1/people/assets', [
+            'employee_profile_id' => $employeeId,
+            'item_name' => 'Survey tablet',
+            'category' => 'device',
+            'serial_number' => 'TAB-100',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('employee_asset.status', 'assigned');
+
+        $this->postJson('/api/v1/people/documents', [
+            'employee_profile_id' => $employeeId,
+            'document_type' => 'contract',
+            'title' => 'Signed employment contract',
+            'file_path' => 'documents/hr/contracts/site-engineer.pdf',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('document.status', 'active');
+
+        $this->postJson('/api/v1/people/performance-reviews', [
+            'employee_profile_id' => $employeeId,
+            'safety_score' => 5,
+            'quality_score' => 4,
+            'productivity_score' => 4,
+            'teamwork_score' => 5,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('performance_review.overall_score', '4.50');
+
+        $this->postJson('/api/v1/people/benefits', [
+            'employee_profile_id' => $employeeId,
+            'benefit_type' => 'health_insurance',
+            'provider' => 'Enterprise Health',
+            'amount' => 250,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('benefit.status', 'active');
+
+        $this->postJson('/api/v1/people/exit-records', [
+            'employee_profile_id' => $employeeId,
+            'exit_type' => 'resignation',
+            'notice_date' => now()->toDateString(),
+            'exit_date' => now()->addMonth()->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('exit_record.status', 'open');
+
+        $this->getJson('/api/v1/people')
+            ->assertOk()
+            ->assertJsonPath('summary.expiring_certifications', 1)
+            ->assertJsonPath('summary.training_compliance', 100)
+            ->assertJsonStructure([
+                'recruitment' => ['vacancies', 'candidates', 'applications', 'interviews'],
+                'onboarding',
+                'attendance' => ['records', 'summary'],
+                'shifts',
+                'shift_assignments',
+                'timesheets',
+                'workforce_allocations',
+                'overtime_requests',
+                'benefits',
+                'performance_reviews',
+                'training_courses',
+                'training_records',
+                'certifications',
+                'health_safety' => ['ppe_issues', 'expiring_ppe', 'certification_risk'],
+                'contractors',
+                'employee_assets',
+                'documents',
+                'self_service',
+                'manager_portal',
+                'exit_records',
+                'reports',
+                'analytics',
+                'automation',
+            ]);
+
+        $this->assertDatabaseHas('workforce_applications', ['id' => $applicationId, 'status' => 'hired']);
+        $this->assertDatabaseHas('employee_profiles', ['id' => $employeeId, 'status' => 'exiting']);
+    }
+
+    public function test_hr_can_manage_users_and_roles_without_company_admin_access(): void
+    {
+        [$admin, $branch] = $this->tenantUser();
+
+        $hrRole = Role::query()->create([
+            'company_id' => $admin->company_id,
+            'name' => 'HR Manager',
+            'slug' => 'hr-manager',
+            'permissions' => ['payroll.manage'],
+            'is_system' => false,
+        ]);
+
+        $hrUser = User::query()->create([
+            'company_id' => $admin->company_id,
+            'branch_id' => $branch->id,
+            'role_id' => $hrRole->id,
+            'name' => 'HR User',
+            'email' => fake()->unique()->safeEmail(),
+            'password' => 'Structra2026',
+        ]);
+
+        Sanctum::actingAs($hrUser);
+
+        $this->patchJson('/api/v1/organization/company', [
+            'name' => 'Attempted HR Company Edit',
+        ])->assertForbidden();
+
+        $roleId = $this->postJson('/api/v1/organization/roles', [
+            'name' => 'Site Attendance Officer',
+            'permissions' => ['payroll.manage', 'attendance.manage'],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('role.slug', 'site-attendance-officer')
+            ->assertJsonPath('role.permissions.1', 'attendance.manage')
+            ->json('role.id');
+
+        $newUserId = $this->postJson('/api/v1/organization/users', [
+            'name' => 'Attendance Clerk',
+            'email' => fake()->unique()->safeEmail(),
+            'password' => 'TempPass2026',
+            'branch_id' => $branch->id,
+            'role_id' => $roleId,
+            'permissions' => ['payroll.manage', 'attendance.manage'],
+            'status' => 'active',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('user.role.slug', 'site-attendance-officer')
+            ->json('user.id');
+
+        $this->patchJson("/api/v1/organization/users/{$newUserId}", [
+            'status' => 'suspended',
+            'permissions' => ['payroll.manage'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('user.status', 'suspended')
+            ->assertJsonPath('user.permissions.0', 'payroll.manage');
+
+        $this->deleteJson("/api/v1/organization/users/{$newUserId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'User deleted.');
+
+        $this->deleteJson("/api/v1/organization/roles/{$roleId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Role deleted.');
+
+        $this->assertDatabaseMissing('roles', ['id' => $roleId]);
+        $this->assertDatabaseMissing('users', ['id' => $newUserId]);
     }
 
     public function test_equipment_assignment_maintenance_and_fuel_work(): void
@@ -433,6 +1011,89 @@ class StructraPhaseThreeApiTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('consultant_submittal.status', 'approved');
+
+        $supplier = Supplier::query()->create([
+            'company_id' => $user->company_id,
+            'branch_id' => $branch->id,
+            'name' => 'Portal Supplier',
+            'email' => 'supplier@example.com',
+        ]);
+
+        $supplierPortalId = $this->postJson('/api/v1/portals/users', [
+            'user_type' => 'supplier',
+            'name' => 'Supplier Accounts',
+            'email' => 'supplier-portal@example.com',
+            'organization' => 'Portal Supplier',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('portal_user.user_type', 'supplier')
+            ->json('portal_user.id');
+
+        $this->postJson("/api/v1/portals/users/{$supplierPortalId}/access", [
+            'project_id' => $project->id,
+            'access_level' => 'submit',
+            'access_scope' => 'contract',
+            'features' => ['purchase_orders', 'invoice_submission', 'payment_status'],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('access.access_level', 'submit')
+            ->assertJsonPath('access.access_scope', 'contract');
+
+        $workItemId = $this->postJson("/api/v1/projects/{$project->id}/portal-work-items", [
+            'portal_user_id' => $supplierPortalId,
+            'supplier_id' => $supplier->id,
+            'portal_type' => 'supplier',
+            'item_type' => 'invoice_submission',
+            'title' => 'Submit supplier invoice',
+            'description' => 'Supplier submitted invoice for delivered materials.',
+            'priority' => 'high',
+            'due_date' => now()->addDays(7)->toDateString(),
+        ])
+            ->assertCreated()
+            ->assertJsonPath('work_item.portal_type', 'supplier')
+            ->assertJsonPath('work_item.item_type', 'invoice_submission')
+            ->assertJsonPath('work_item.status', 'submitted')
+            ->json('work_item.id');
+
+        $this->getJson('/api/v1/admin/approvals')
+            ->assertOk()
+            ->assertJsonFragment([
+                'type' => 'portal_work_item',
+                'record_id' => $workItemId,
+            ]);
+
+        $this->postJson("/api/v1/portals/work-items/{$workItemId}/review", [
+            'status' => 'in_review',
+            'response' => 'Finance review started.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('work_item.status', 'in_review');
+
+        $this->patchJson("/api/v1/portals/work-items/{$workItemId}", [
+            'title' => 'Submit supplier invoice updated',
+            'priority' => 'critical',
+        ])
+            ->assertOk()
+            ->assertJsonPath('work_item.title', 'Submit supplier invoice updated')
+            ->assertJsonPath('work_item.priority', 'critical');
+
+        $this->getJson('/api/v1/portals')
+            ->assertOk()
+            ->assertJsonPath('summary.active_users', 2)
+            ->assertJsonPath('portal_types.2.key', 'supplier')
+            ->assertJsonCount(1, 'work_items');
+
+        $this->postJson("/api/v1/portals/work-items/{$workItemId}/review", [
+            'status' => 'paid',
+            'response' => 'Payment released.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('work_item.status', 'paid');
+
+        $this->deleteJson("/api/v1/portals/work-items/{$workItemId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Portal work item archived.');
+        $this->assertSoftDeleted('portal_work_items', ['id' => $workItemId]);
     }
 
     private function tenantUser(): array

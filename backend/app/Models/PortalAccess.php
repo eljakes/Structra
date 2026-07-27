@@ -13,13 +13,14 @@ class PortalAccess extends Model
 
     protected $fillable = [
         'company_id', 'portal_user_id', 'project_id', 'access_level',
-        'disciplines', 'expires_at', 'granted_by',
+        'access_scope', 'disciplines', 'features', 'expires_at', 'granted_by',
     ];
 
     protected function casts(): array
     {
         return [
             'disciplines' => 'array',
+            'features' => 'array',
             'expires_at' => 'datetime',
         ];
     }

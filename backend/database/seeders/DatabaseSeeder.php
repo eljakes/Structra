@@ -177,7 +177,7 @@ class DatabaseSeeder extends Seeder
 
         $qhseRole = Role::query()->firstOrCreate(
             ['company_id' => $company->id, 'slug' => 'qhse-manager'],
-            ['name' => 'QHSE Manager', 'permissions' => ['quality.manage', 'safety.manage', 'field.manage', 'documents.manage', 'bi.manage', 'automation.manage', 'reports.view'], 'is_system' => true],
+            ['name' => 'Quality Assurance and Health, Safety, and Environment Manager', 'permissions' => ['quality.manage', 'safety.manage', 'field.manage', 'documents.manage', 'bi.manage', 'automation.manage', 'reports.view'], 'is_system' => true],
         );
 
         $owner = User::query()->firstOrCreate(
@@ -266,7 +266,7 @@ class DatabaseSeeder extends Seeder
                 'role_id' => $qhseRole->id,
                 'name' => 'Kofi Agyeman',
                 'phone' => '+233 24 000 0007',
-                'job_title' => 'QHSE Manager',
+                'job_title' => 'Quality Assurance and Health, Safety, and Environment Manager',
                 'password' => 'Structra2026',
             ],
         );
@@ -1514,7 +1514,7 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
-        foreach ([['Project overrun monitor', 'project_overrun', ['threshold_percent' => 0], 'high'], ['Low stock monitor', 'low_stock', ['compare' => 'quantity_on_hand <= reorder_level'], 'medium'], ['Open QHSE monitor', 'hse_open', ['include_ncrs' => true, 'include_incidents' => true], 'high']] as [$name, $ruleType, $conditions, $severity]) {
+        foreach ([['Project overrun monitor', 'project_overrun', ['threshold_percent' => 0], 'high'], ['Low stock monitor', 'low_stock', ['compare' => 'quantity_on_hand <= reorder_level'], 'medium'], ['Open Quality Assurance and Health, Safety, and Environment monitor', 'hse_open', ['include_ncrs' => true, 'include_incidents' => true], 'high']] as [$name, $ruleType, $conditions, $severity]) {
             AutomationRule::query()->firstOrCreate(
                 ['company_id' => $company->id, 'name' => $name],
                 [

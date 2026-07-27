@@ -12,8 +12,9 @@ class Payment extends Model
     use BelongsToCompany, HasFactory;
 
     protected $fillable = [
-        'company_id', 'invoice_id', 'client_id', 'payment_number', 'amount',
-        'currency', 'method', 'reference', 'received_at', 'received_by', 'notes',
+        'company_id', 'invoice_id', 'client_id', 'finance_bank_account_id',
+        'payment_number', 'amount', 'currency', 'method', 'reference',
+        'received_at', 'received_by', 'notes',
     ];
 
     protected function casts(): array
@@ -32,5 +33,10 @@ class Payment extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function bankAccount(): BelongsTo
+    {
+        return $this->belongsTo(FinanceBankAccount::class, 'finance_bank_account_id');
     }
 }

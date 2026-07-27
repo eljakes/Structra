@@ -98,18 +98,7 @@ class BusinessIntelligenceController extends ApiController
     {
         $companyId = $this->companyId($request);
 
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'audience' => ['nullable', Rule::in(['executive', 'operations', 'finance', 'commercial', 'qhse'])],
-            'refresh_interval' => ['nullable', Rule::in(['hourly', 'daily', 'weekly', 'monthly'])],
-            'filters' => ['nullable', 'array'],
-            'is_default' => ['nullable', 'boolean'],
-            'widgets' => ['nullable', 'array'],
-            'widgets.*.title' => ['required_with:widgets', 'string', 'max:255'],
-            'widgets.*.widget_type' => ['nullable', Rule::in(['metric', 'bar', 'line', 'table', 'pie'])],
-            'widgets.*.metric_key' => ['required_with:widgets', 'string', 'max:120'],
-            'widgets.*.configuration' => ['nullable', 'array'],
-        ]);
+        $data = $this->validatedDashboard($request);
 
         $dashboard = DB::transaction(function () use ($request, $companyId, $data) {
             if ($data['is_default'] ?? false) {
@@ -143,6 +132,50 @@ class BusinessIntelligenceController extends ApiController
         });
 
         return response()->json(['dashboard' => $dashboard->fresh('widgets')], 201);
+    }
+
+    public function updateDashboard(Request $request, BiDashboard $dashboard): JsonResponse
+    {
+        $this->assertDashboardTenant($request, $dashboard);
+        $data = $this->validatedDashboard($request, true);
+
+        DB::transaction(function () use ($dashboard, $data): void {
+            if ($data['is_default'] ?? false) {
+                BiDashboard::query()
+                    ->forCompany($dashboard->company_id)
+                    ->where('id', '!=', $dashboard->id)
+                    ->update(['is_default' => false]);
+            }
+
+            $dashboard->update(collect($data)->except('widgets')->all());
+
+            if (array_key_exists('widgets', $data)) {
+                $dashboard->widgets()->delete();
+
+                foreach ($data['widgets'] ?? [] as $index => $widget) {
+                    BiWidget::query()->create([
+                        'company_id' => $dashboard->company_id,
+                        'bi_dashboard_id' => $dashboard->id,
+                        'title' => $widget['title'],
+                        'widget_type' => $widget['widget_type'] ?? 'metric',
+                        'metric_key' => $widget['metric_key'],
+                        'configuration' => $widget['configuration'] ?? [],
+                        'position' => $index + 1,
+                    ]);
+                }
+            }
+        });
+
+        return response()->json(['dashboard' => $dashboard->fresh('widgets')]);
+    }
+
+    public function destroyDashboard(Request $request, BiDashboard $dashboard): JsonResponse
+    {
+        $this->assertDashboardTenant($request, $dashboard);
+
+        $dashboard->delete();
+
+        return response()->json(['message' => 'Dashboard archived.']);
     }
 
     public function createSnapshot(Request $request): JsonResponse
@@ -294,7 +327,7 @@ class BusinessIntelligenceController extends ApiController
                 ['key' => 'active_projects', 'label' => 'Active projects', 'value' => $metrics['active_projects']],
                 ['key' => 'projects_at_risk', 'label' => 'Projects at risk', 'value' => $metrics['projects_at_risk']],
                 ['key' => 'lost_time_incidents', 'label' => 'Lost-time incidents', 'value' => $metrics['lost_time_incidents']],
-                ['key' => 'open_critical_ncrs', 'label' => 'Open critical NCRs', 'value' => $metrics['open_critical_ncrs']],
+                ['key' => 'open_critical_ncrs', 'label' => 'Open critical Non-Conformance Reports(NCRs)', 'value' => $metrics['open_critical_ncrs']],
             ],
             'health_matrix' => $projectAnalytics['projects'],
             'trends' => [
@@ -823,7 +856,7 @@ class BusinessIntelligenceController extends ApiController
                 'certified_value' => $project['billed_revenue'],
                 'payment_status' => $project['receivable_balance'] > 0 ? 'outstanding' : 'current',
                 'major_risks' => $project['health'] === 'red' ? 'Executive attention required' : 'Within reporting tolerance',
-                'quality_summary' => "{$project['open_ncrs']} open NCRs",
+                'quality_summary' => "{$project['open_ncrs']} open Non-Conformance Reports(NCRs)",
                 'safety_summary' => "{$project['open_safety_incidents']} open incidents",
             ])->values(),
             'hidden_internal_fields' => ['gross_margin', 'supplier_margin', 'internal_forecast_assumptions', 'confidential_commercial_notes'],
@@ -874,7 +907,7 @@ class BusinessIntelligenceController extends ApiController
             ->limit(25)
             ->get()
             ->each(function (NonConformanceReport $ncr) use (&$items): void {
-                $items[] = $this->alert('critical', 'QA/QC', $ncr->project?->name, "Critical NCR {$ncr->ncr_number} open", 'Assign responsible person and verify corrective action.', 'ncr', $ncr->id, optional($ncr->due_date)->toDateString());
+                $items[] = $this->alert('critical', 'Quality Assurance / Quality Control', $ncr->project?->name, "Critical Non-Conformance Report(NCR) {$ncr->ncr_number} open", 'Assign responsible person and verify corrective action.', 'ncr', $ncr->id, optional($ncr->due_date)->toDateString());
             });
 
         InventoryItem::query()
@@ -1194,6 +1227,27 @@ class BusinessIntelligenceController extends ApiController
             'LTIFR' => 'Lost-time injuries multiplied by 200,000 divided by recorded labour hours.',
             'TRIR' => 'Total recordable incidents multiplied by 200,000 divided by recorded labour hours.',
         ];
+    }
+
+    private function validatedDashboard(Request $request, bool $partial = false): array
+    {
+        return $request->validate([
+            'name' => [$partial ? 'sometimes' : 'required', 'string', 'max:255'],
+            'audience' => [$partial ? 'sometimes' : 'nullable', Rule::in(['executive', 'operations', 'finance', 'commercial', 'qhse'])],
+            'refresh_interval' => [$partial ? 'sometimes' : 'nullable', Rule::in(['hourly', 'daily', 'weekly', 'monthly'])],
+            'filters' => ['nullable', 'array'],
+            'is_default' => ['nullable', 'boolean'],
+            'widgets' => ['nullable', 'array'],
+            'widgets.*.title' => ['required_with:widgets', 'string', 'max:255'],
+            'widgets.*.widget_type' => ['nullable', Rule::in(['metric', 'bar', 'line', 'table', 'pie'])],
+            'widgets.*.metric_key' => ['required_with:widgets', 'string', 'max:120'],
+            'widgets.*.configuration' => ['nullable', 'array'],
+        ]);
+    }
+
+    private function assertDashboardTenant(Request $request, BiDashboard $dashboard): void
+    {
+        abort_if($dashboard->company_id !== $this->companyId($request), 404);
     }
 
     private function uniqueSlug(int $companyId, string $name): string

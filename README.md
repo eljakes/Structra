@@ -20,6 +20,34 @@ This repo is organized as a fullstack workspace:
 - Executive dashboard, reports, and audit log API
 - React workspace for dashboard, projects, procurement, documents, reports, and admin
 
+## Implemented Phase 2
+
+- CRM: leads, qualification, opportunities, and lead-to-client conversion
+- Tendering: opportunity-to-tender flow, tender submission/win/loss, tender RFIs, tender document upload
+- Estimating: pricing library, estimate headers/lines, overhead/profit/tax rollups, approval, tender-to-project budget handoff
+- Inventory: warehouses, inventory items, stock receipts/issues/transfers/adjustments, reorder alerts
+- Supplier management: supplier price catalogs, lead times, performance reviews, rating updates
+- Web field app: daily site diaries, field issues with optional photo/GPS data, report submit/approve workflow
+- Time & attendance: browser clock-in/out with optional GPS and face/image verification upload
+- Drawing expansion: discipline-aware library, markups, markup resolution, architect/designer review decisions
+
+## Implemented Phase 3
+
+- Finance: invoices, invoice lines, issue workflow, payment receipts, expenses, expense review/payment, balanced journal entries
+- Payroll/people: employee profiles tied to users, leave requests/reviews, payroll run generation, payslips, approval and paid transitions
+- Equipment management: plant/equipment register, project assignment/release, maintenance logs, fuel logs, availability and meter tracking
+- Quality control: inspections with checklist items, inspection completion/scoring, Non-Conformance Report(NCR) creation and closure workflow
+- Health, Safety, and Environment: incidents, toolbox talks, observations, work permits, corrective action and permit status transitions
+- Client/consultant portals: external users, project access grants, client approvals, consultant submittals and reviews
+- Dashboard/report expansion for receivables, payroll liability, equipment availability, Non-Conformance Reports(NCRs), incidents, and portal reviews
+
+## Implemented Phase 4
+
+- Predictive forecasts: project cost/schedule forecasts and 30-day cash-flow forecasts with confidence scores and drivers
+- Business intelligence: dashboard builder, metric snapshots, executive metrics, cost/category, project health, receivables, and insight severity datasets
+- Workflow automation: configurable rules for project overruns, overdue invoices, low stock, open Health, Safety, and Environment actions, and expiring permits with run history
+- React workspace modules for Intelligence and Automation
+
 ## Local Setup
 
 Backend:
@@ -29,7 +57,7 @@ cd backend
 composer install
 cp .env.example .env
 php artisan key:generate
-php artisan migrate:fresh --seed
+php artisan migrate --force
 php artisan serve
 ```
 
@@ -44,17 +72,20 @@ npm run dev
 
 Default local URLs:
 
-- API: `http://127.0.0.1:8000/api/v1`
+- API: `/api/v1` through the Vite proxy, or `http://127.0.0.1:8000/api/v1` when configured with `VITE_API_URL`
 - Web: `http://127.0.0.1:5173`
 
 If `8000` is already in use, run Laravel on another port, for example
 `php artisan serve --host=127.0.0.1 --port=8010`, and set
 `frontend/.env.local` to `VITE_API_URL=http://127.0.0.1:8010/api/v1`.
 
-Seeded login:
+Create the first real company workspace from the registration screen. The production path does not require seeded demo users or sample project data.
 
-- Email: `owner@structra.test`
-- Password: `Structra2026`
+Disposable development databases can load sample records with:
+
+```bash
+STRUCTRA_SEED_DEMO=true php artisan db:seed
+```
 
 ## PostgreSQL
 
@@ -78,6 +109,14 @@ DB_USERNAME=structra
 DB_PASSWORD=structra_secret
 ```
 
+## Production Notes
+
+- Point `FRONTEND_URL` and `CORS_ALLOWED_ORIGINS` to the hosted frontend origin.
+- Keep `VITE_API_URL` blank when the frontend and API are served from the same domain behind `/api/v1`; set it only for separate frontend/API domains.
+- Set `APP_ENV=production`, `APP_DEBUG=false`, a real `APP_KEY`, secure mail/storage credentials, and a managed PostgreSQL database.
+- Run `php artisan migrate --force`, not `migrate:fresh --seed`, on production data.
+- The frontend refreshes authenticated ERP data from Laravel every `VITE_LIVE_REFRESH_MS` milliseconds. Set it to `0` to disable polling when replacing it with websockets.
+
 ## Verification
 
 Backend:
@@ -86,6 +125,12 @@ Backend:
 cd backend
 php artisan test
 ```
+
+Current backend test coverage includes Phase 1, Phase 2, Phase 3, and Phase 4 workflow tests:
+auth/tenancy, projects, procurement, documents, drawings, CRM, tendering,
+estimating, inventory, supplier reviews, field reports, attendance, finance,
+payroll, equipment, Quality Assurance, Health, Safety, and Environment, portal approvals, AI analysis, assistant Q&A,
+BI dashboards/snapshots, automation rules, tax, exchange rates, and currency conversion.
 
 Frontend:
 

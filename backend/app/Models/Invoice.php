@@ -16,8 +16,10 @@ class Invoice extends Model
     protected $fillable = [
         'company_id', 'branch_id', 'project_id', 'client_id', 'invoice_number', 'title',
         'status', 'issue_date', 'due_date', 'currency', 'subtotal', 'tax_amount',
-        'total_amount', 'amount_paid', 'balance_due', 'payment_status', 'notes',
-        'issued_by', 'issued_at', 'paid_at', 'created_by', 'updated_by',
+        'retention_percent', 'retention_amount', 'progress_percent', 'billing_stage',
+        'total_amount', 'amount_paid', 'credit_note_amount', 'balance_due',
+        'payment_status', 'notes', 'issued_by', 'issued_at', 'paid_at',
+        'created_by', 'updated_by',
     ];
 
     protected function casts(): array
@@ -27,8 +29,12 @@ class Invoice extends Model
             'due_date' => 'date',
             'subtotal' => 'decimal:2',
             'tax_amount' => 'decimal:2',
+            'retention_percent' => 'decimal:2',
+            'retention_amount' => 'decimal:2',
+            'progress_percent' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'amount_paid' => 'decimal:2',
+            'credit_note_amount' => 'decimal:2',
             'balance_due' => 'decimal:2',
             'issued_at' => 'datetime',
             'paid_at' => 'datetime',
@@ -58,5 +64,15 @@ class Invoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(FinanceCreditNote::class);
+    }
+
+    public function retentions(): HasMany
+    {
+        return $this->hasMany(FinanceRetention::class);
     }
 }

@@ -17,8 +17,9 @@ class SupplierInvoice extends Model
         'company_id', 'branch_id', 'project_id', 'supplier_id', 'purchase_order_id',
         'goods_receipt_id', 'invoice_number', 'supplier_reference', 'status',
         'invoice_date', 'due_date', 'currency', 'subtotal_amount', 'tax_amount',
-        'discount_amount', 'total_amount', 'amount_paid', 'balance_due',
-        'submitted_by', 'approved_by', 'approved_at', 'paid_at', 'notes',
+        'retention_percent', 'retention_amount', 'discount_amount', 'total_amount',
+        'amount_paid', 'balance_due', 'submitted_by', 'approved_by', 'approved_at',
+        'paid_at', 'notes',
     ];
 
     protected function casts(): array
@@ -30,6 +31,8 @@ class SupplierInvoice extends Model
             'paid_at' => 'datetime',
             'subtotal_amount' => 'decimal:2',
             'tax_amount' => 'decimal:2',
+            'retention_percent' => 'decimal:2',
+            'retention_amount' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'amount_paid' => 'decimal:2',
@@ -55,5 +58,10 @@ class SupplierInvoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(SupplierPayment::class);
+    }
+
+    public function retentions(): HasMany
+    {
+        return $this->hasMany(FinanceRetention::class);
     }
 }

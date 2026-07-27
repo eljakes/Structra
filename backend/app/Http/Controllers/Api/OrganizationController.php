@@ -9,6 +9,7 @@ use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -37,9 +38,17 @@ class OrganizationController extends ApiController
             'default_currency' => ['sometimes', 'string', 'size:3'],
             'country' => ['sometimes', 'string', 'size:2'],
             'base_timezone' => ['sometimes', 'string', 'max:80'],
+            'settings' => ['nullable', 'array'],
+            'settings.appearance' => ['nullable', 'array'],
+            'settings.appearance.theme' => ['nullable', Rule::in(['light', 'dark'])],
         ]);
 
         $company = $this->user($request)->company;
+
+        if (array_key_exists('settings', $data)) {
+            $data['settings'] = array_replace_recursive($company->settings ?? [], $data['settings'] ?? []);
+        }
+
         $company->update($data);
 
         return response()->json(['company' => $company->fresh(['branches', 'roles'])]);
@@ -58,9 +67,11 @@ class OrganizationController extends ApiController
 
     public function storeBranch(Request $request): JsonResponse
     {
+        $companyId = $this->companyId($request);
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'code' => ['required', 'string', 'max:24'],
+            'code' => ['nullable', 'string', 'max:24', Rule::unique('branches')->where('company_id', $companyId)],
             'city' => ['nullable', 'string', 'max:120'],
             'country' => ['nullable', 'string', 'size:2'],
             'phone' => ['nullable', 'string', 'max:60'],
@@ -69,9 +80,10 @@ class OrganizationController extends ApiController
         ]);
 
         $branch = Branch::query()->create([
-            'company_id' => $this->companyId($request),
+            'company_id' => $companyId,
             ...$data,
-            'code' => strtoupper($data['code']),
+            'code' => $this->suppliedCode($data['code'] ?? null)
+                ?? $this->nextCompanyCode($this->codePrefix($data['name'], 'BRN'), Branch::class, 'code', $companyId),
             'country' => strtoupper($data['country'] ?? $this->user($request)->company->country),
         ]);
 
@@ -103,6 +115,62 @@ class OrganizationController extends ApiController
         ]);
 
         return response()->json(['user' => $user->load(['branch', 'role'])], 201);
+    }
+
+    public function storeRole(Request $request): JsonResponse
+    {
+        $companyId = $this->companyId($request);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'permissions' => ['nullable', 'array'],
+            'permissions.*' => ['string', 'max:120'],
+        ]);
+
+        $role = Role::query()->create([
+            'company_id' => $companyId,
+            'name' => $data['name'],
+            'slug' => $this->uniqueRoleSlug($data['name'], $companyId),
+            'permissions' => $this->normalizePermissions($data['permissions'] ?? []),
+            'is_system' => false,
+        ]);
+
+        return response()->json(['role' => $role], 201);
+    }
+
+    public function updateRole(Request $request, Role $role): JsonResponse
+    {
+        $this->assertRoleTenant($request, $role);
+        abort_if($role->is_system, 422, 'System roles cannot be edited.');
+
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:120'],
+            'permissions' => ['nullable', 'array'],
+            'permissions.*' => ['string', 'max:120'],
+        ]);
+
+        if (array_key_exists('name', $data)) {
+            $data['slug'] = $this->uniqueRoleSlug($data['name'], $this->companyId($request), $role);
+        }
+
+        if (array_key_exists('permissions', $data)) {
+            $data['permissions'] = $this->normalizePermissions($data['permissions']);
+        }
+
+        $role->update($data);
+
+        return response()->json(['role' => $role->fresh()]);
+    }
+
+    public function destroyRole(Request $request, Role $role): JsonResponse
+    {
+        $this->assertRoleTenant($request, $role);
+        abort_if($role->is_system, 422, 'System roles cannot be deleted.');
+        abort_if($role->users()->exists(), 422, 'Assign users to another role before deleting this role.');
+
+        $role->delete();
+
+        return response()->json(['message' => 'Role deleted.']);
     }
 
     public function updateUser(Request $request, User $user): JsonResponse
@@ -155,6 +223,26 @@ class OrganizationController extends ApiController
             ->unique()
             ->values()
             ->all();
+    }
+
+    private function uniqueRoleSlug(string $name, int $companyId, ?Role $ignore = null): string
+    {
+        $base = Str::slug($name) ?: 'custom-role';
+        $slug = $base;
+        $next = 2;
+
+        while (
+            Role::query()
+                ->forCompany($companyId)
+                ->when($ignore, fn ($query) => $query->whereKeyNot($ignore->id))
+                ->where('slug', $slug)
+                ->exists()
+        ) {
+            $slug = "{$base}-{$next}";
+            $next++;
+        }
+
+        return $slug;
     }
 
     public function destroyUser(Request $request, User $user): JsonResponse
@@ -294,6 +382,11 @@ class OrganizationController extends ApiController
     private function assertUserTenant(Request $request, User $user): void
     {
         abort_unless((int) $user->company_id === $this->companyId($request), 404);
+    }
+
+    private function assertRoleTenant(Request $request, Role $role): void
+    {
+        abort_unless((int) $role->company_id === $this->companyId($request), 404);
     }
 
     private function assertClientTenant(Request $request, Client $client): void

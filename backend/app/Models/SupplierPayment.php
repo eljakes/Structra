@@ -12,8 +12,9 @@ class SupplierPayment extends Model
     use BelongsToCompany, HasFactory;
 
     protected $fillable = [
-        'company_id', 'supplier_invoice_id', 'payment_number', 'amount',
-        'payment_date', 'method', 'reference', 'created_by',
+        'company_id', 'supplier_invoice_id', 'finance_bank_account_id',
+        'payment_number', 'amount', 'payment_date', 'method', 'reference',
+        'created_by',
     ];
 
     protected function casts(): array
@@ -27,5 +28,10 @@ class SupplierPayment extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(SupplierInvoice::class, 'supplier_invoice_id');
+    }
+
+    public function bankAccount(): BelongsTo
+    {
+        return $this->belongsTo(FinanceBankAccount::class, 'finance_bank_account_id');
     }
 }

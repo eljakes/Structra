@@ -97,19 +97,20 @@ class StructraPhaseTwoApiTest extends TestCase
         $warehouseId = $this->postJson('/api/v1/inventory/warehouses', [
             'branch_id' => $branch->id,
             'name' => 'Main Store',
-            'code' => 'MAIN',
         ])
             ->assertCreated()
+            ->assertJsonPath('warehouse.code', 'MAI-000001')
             ->json('warehouse.id');
 
         $itemId = $this->postJson('/api/v1/inventory/items', [
-            'sku' => 'CEM-TEST',
             'name' => 'Cement Bag',
+            'category' => 'Cement',
             'unit' => 'bag',
             'reorder_level' => 20,
             'average_cost' => 100,
         ])
             ->assertCreated()
+            ->assertJsonPath('item.sku', 'CEM-000001')
             ->json('item.id');
 
         $this->postJson('/api/v1/inventory/movements', [
@@ -134,6 +135,14 @@ class StructraPhaseTwoApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('items.0.quantity_on_hand', '70.00');
 
+        $this->patchJson("/api/v1/inventory/items/{$itemId}", [
+            'sku' => 'CEM-EDIT-001',
+            'name' => 'Cement Bag 50kg',
+        ])
+            ->assertOk()
+            ->assertJsonPath('item.sku', 'CEM-EDIT-001')
+            ->assertJsonPath('item.name', 'Cement Bag 50kg');
+
         $supplier = Supplier::query()->create([
             'company_id' => $user->company_id,
             'branch_id' => $branch->id,
@@ -154,6 +163,11 @@ class StructraPhaseTwoApiTest extends TestCase
         ])->assertCreated();
 
         $this->assertSame(5, $supplier->fresh()->rating);
+
+        $this->deleteJson("/api/v1/inventory/items/{$itemId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Inventory item archived.');
+        $this->assertSoftDeleted('inventory_items', ['id' => $itemId]);
     }
 
     public function test_field_daily_reports_issues_and_attendance_work(): void
@@ -195,6 +209,11 @@ class StructraPhaseTwoApiTest extends TestCase
         $this->patchJson("/api/v1/field/issues/{$issueId}", ['status' => 'resolved'])
             ->assertOk()
             ->assertJsonPath('issue.status', 'resolved');
+
+        $this->deleteJson("/api/v1/field/issues/{$issueId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Field issue archived.');
+        $this->assertSoftDeleted('field_issues', ['id' => $issueId]);
 
         $attendanceId = $this->post('/api/v1/attendance/clock-in', [
             'project_id' => $project->id,

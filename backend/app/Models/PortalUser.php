@@ -44,4 +44,9 @@ class PortalUser extends Model
     {
         return $this->hasMany(ConsultantSubmittal::class);
     }
+
+    public function workItems(): HasMany
+    {
+        return $this->hasMany(PortalWorkItem::class);
+    }
 }

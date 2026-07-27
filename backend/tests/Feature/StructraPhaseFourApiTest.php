@@ -51,6 +51,16 @@ class StructraPhaseFourApiTest extends TestCase
             ->assertJsonCount(2, 'dashboard.widgets')
             ->json('dashboard.id');
 
+        $this->patchJson("/api/v1/bi/dashboards/{$dashboardId}", [
+            'name' => 'Operations Intelligence Updated',
+            'audience' => 'executive',
+            'refresh_interval' => 'daily',
+            'is_default' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('dashboard.name', 'Operations Intelligence Updated')
+            ->assertJsonPath('dashboard.audience', 'executive');
+
         $this->postJson('/api/v1/bi/snapshots', [
             'period_label' => 'Phase 4 Test',
             'snapshot_date' => now()->toDateString(),
@@ -72,6 +82,11 @@ class StructraPhaseFourApiTest extends TestCase
                 'procurement' => ['kpis', 'funnel', 'supplier_scorecards'],
                 'alerts' => ['items'],
             ]);
+
+        $this->deleteJson("/api/v1/bi/dashboards/{$dashboardId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Dashboard archived.');
+        $this->assertSoftDeleted('bi_dashboards', ['id' => $dashboardId]);
     }
 
     public function test_automation_rules_create_operational_insights(): void
@@ -91,13 +106,78 @@ class StructraPhaseFourApiTest extends TestCase
         ])
             ->assertCreated()
             ->assertJsonPath('rule.rule_type', 'low_stock')
+            ->assertJsonPath('rule.version', 1)
+            ->assertJsonPath('rule.workflow_definition.schema', 'structra.workflow.v1')
             ->json('rule.id');
+
+        $this->getJson('/api/v1/automation/catalog')
+            ->assertOk()
+            ->assertJsonStructure(['modules', 'triggers', 'operators', 'actions', 'schedules', 'approval_modes']);
+
+        $templateRuleId = $this->postJson('/api/v1/automation/templates/procurement_approval/instantiate', [
+            'name' => 'High value procurement approval',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('rule.name', 'High value procurement approval')
+            ->assertJsonPath('rule.status', 'draft')
+            ->assertJsonPath('rule.is_active', false)
+            ->json('rule.id');
+
+        $this->assertDatabaseHas('automation_rule_versions', [
+            'automation_rule_id' => $ruleId,
+            'version' => 1,
+        ]);
+
+        $eventRuleId = $this->postJson('/api/v1/automation/rules', [
+            'name' => 'Low stock event workflow',
+            'rule_type' => 'low_stock',
+            'trigger_event' => 'stock_low',
+            'severity' => 'medium',
+            'actions' => [
+                'type' => 'create_insight',
+                'recommendation' => 'Open a replenishment workflow.',
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('rule.trigger_event', 'stock_low')
+            ->json('rule.id');
+
+        $this->postJson('/api/v1/automation/triggers/stock_low', [
+            'payload' => ['source' => 'feature_test'],
+        ])
+            ->assertOk()
+            ->assertJsonCount(1, 'runs')
+            ->assertJsonPath('runs.0.status', 'completed')
+            ->assertJsonPath('runs.0.trigger_event', 'stock_low');
+
+        $this->deleteJson("/api/v1/automation/rules/{$eventRuleId}")
+            ->assertOk();
 
         $this->postJson("/api/v1/automation/rules/{$ruleId}/run")
             ->assertOk()
             ->assertJsonPath('run.status', 'completed')
             ->assertJsonPath('run.matched_count', 1)
             ->assertJsonPath('run.actions_executed', 1);
+
+        $this->patchJson("/api/v1/automation/rules/{$ruleId}", [
+            'name' => 'Low stock action test updated',
+            'trigger_event' => 'daily',
+            'severity' => 'critical',
+        ])
+            ->assertOk()
+            ->assertJsonPath('rule.name', 'Low stock action test updated')
+            ->assertJsonPath('rule.severity', 'critical')
+            ->assertJsonPath('rule.version', 2);
+
+        $this->assertDatabaseHas('automation_rule_versions', [
+            'automation_rule_id' => $ruleId,
+            'version' => 2,
+        ]);
+
+        $this->postJson("/api/v1/automation/rules/{$ruleId}/versions/1/rollback")
+            ->assertOk()
+            ->assertJsonPath('rule.name', 'Low stock action test')
+            ->assertJsonPath('rule.version', 3);
 
         $this->assertDatabaseHas('ai_insights', [
             'company_id' => $user->company_id,
@@ -109,6 +189,12 @@ class StructraPhaseFourApiTest extends TestCase
         $this->postJson('/api/v1/automation/run-active')
             ->assertOk()
             ->assertJsonCount(1, 'runs');
+
+        $this->deleteJson("/api/v1/automation/rules/{$ruleId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Automation rule archived.');
+        $this->assertSoftDeleted('automation_rules', ['id' => $ruleId]);
+        $this->assertDatabaseHas('automation_rules', ['id' => $templateRuleId, 'status' => 'draft']);
     }
 
     private function tenantScenario(): array
