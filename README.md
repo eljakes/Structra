@@ -116,7 +116,8 @@ DB_PASSWORD=structra_secret
 - Keep `VITE_API_URL` blank when the frontend and API are served from the same domain behind `/api/v1`; set it only for separate frontend/API domains.
 - Set `APP_ENV=production`, `APP_DEBUG=false`, a real `APP_KEY`, `APP_URL=https://...`, `APP_VERSION`, secure mail/storage credentials, and a managed PostgreSQL database with TLS.
 - Keep `STRUCTRA_SEED_DEVELOPMENT=false` in production. Run `php artisan migrate --force`, not `migrate:fresh --seed`, on production data.
-- Run `composer install --no-dev --optimize-autoloader`, `php artisan config:cache`, `php artisan route:cache`, and `php artisan view:cache` during release.
+- Before release, run `composer release-check` from `backend/` with production environment variables loaded, and `npm run release-check` from `frontend/`.
+- Run `composer install --no-dev --optimize-autoloader`, `php artisan migrate --force`, `php artisan config:cache`, `php artisan route:cache`, and `php artisan view:cache` during release.
 - Run `php artisan storage:link` only when using Laravel public storage. Current ERP file downloads are served from private storage through authenticated API endpoints.
 - Run a queue worker for `QUEUE_CONNECTION=database`, and monitor failed jobs.
 - Create the first Cloud Console administrator with `php artisan structra:platform-admin admin@example.com --create`, then change the temporary password immediately and enable MFA.

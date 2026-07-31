@@ -106,6 +106,26 @@ class SecurityHardeningTest extends TestCase
         $this->assertNotNull(DB::table('personal_access_tokens')->latest('id')->value('expires_at'));
     }
 
+    public function test_development_seed_data_is_blocked_in_production(): void
+    {
+        config(['app.env' => 'production']);
+
+        $this->artisan('db:seed')
+            ->assertSuccessful();
+
+        $this->assertDatabaseMissing('companies', ['name' => 'Structra Workspace']);
+        $this->assertDatabaseMissing('users', ['email' => 'owner@structra.test']);
+    }
+
+    public function test_strict_production_check_rejects_non_production_environment(): void
+    {
+        config(['app.env' => 'local']);
+
+        $this->artisan('structra:production-check --strict')
+            ->expectsOutputToContain('APP_ENV must be production for deployment.')
+            ->assertFailed();
+    }
+
     private function userWithPermissions(array $permissions): array
     {
         $company = Company::query()->create([

@@ -87,6 +87,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if (app()->environment('production')) {
+            $this->command?->error('Structra development seed data is blocked in production.');
+
+            return;
+        }
+
         if (! (bool) env('STRUCTRA_SEED_DEVELOPMENT', false)) {
             $this->command?->warn('Structra development seed data skipped. Set STRUCTRA_SEED_DEVELOPMENT=true only in disposable development databases.');
 
