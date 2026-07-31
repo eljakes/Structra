@@ -1,6 +1,6 @@
 const configuredApiBase = import.meta.env.VITE_API_URL || '/api/v1'
 const API_BASE = configuredApiBase.endsWith('/') ? configuredApiBase.slice(0, -1) : configuredApiBase
-const TOKEN_KEY = 'structra_token'
+const TOKEN_KEY = 'navkwabuild_token'
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)

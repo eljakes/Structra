@@ -88,13 +88,15 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         if (app()->environment('production')) {
-            $this->command?->error('Structra development seed data is blocked in production.');
+            $this->command?->error('Navkwa Build development seed data is blocked in production.');
 
             return;
         }
 
-        if (! (bool) env('STRUCTRA_SEED_DEVELOPMENT', false)) {
-            $this->command?->warn('Structra development seed data skipped. Set STRUCTRA_SEED_DEVELOPMENT=true only in disposable development databases.');
+        $seedDevelopment = (bool) env('NAVKWA_BUILD_SEED_DEVELOPMENT', false);
+
+        if (! $seedDevelopment) {
+            $this->command?->warn('Navkwa Build development seed data skipped. Set NAVKWA_BUILD_SEED_DEVELOPMENT=true only in disposable development databases.');
 
             return;
         }
@@ -102,7 +104,7 @@ class DatabaseSeeder extends Seeder
         $company = Company::query()->updateOrCreate(
             ['registration_number' => 'NCG-2026-001'],
             [
-                'name' => 'Structra Workspace',
+                'name' => 'Navkwa Build Workspace',
                 'tax_id' => 'GH-TAX-452090',
                 'default_currency' => 'GHS',
                 'country' => 'GH',
@@ -123,7 +125,7 @@ class DatabaseSeeder extends Seeder
                 'city' => 'Accra',
                 'country' => 'GH',
                 'phone' => '+233 30 000 1000',
-                'email' => 'operations@structra.local',
+                'email' => 'operations@navkwabuild.local',
                 'address' => 'Airport City, Accra',
             ],
         );
@@ -135,7 +137,7 @@ class DatabaseSeeder extends Seeder
                 'city' => 'Kumasi',
                 'country' => 'GH',
                 'phone' => '+233 32 000 2000',
-                'email' => 'kumasi@structra.local',
+                'email' => 'kumasi@navkwabuild.local',
                 'address' => 'Adum, Kumasi',
             ],
         );
@@ -187,7 +189,7 @@ class DatabaseSeeder extends Seeder
         );
 
         $owner = User::query()->firstOrCreate(
-            ['email' => 'owner@structra.test'],
+            ['email' => 'owner@navkwabuild.test'],
             [
                 'company_id' => $company->id,
                 'branch_id' => $headOffice->id,
@@ -195,12 +197,12 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Ama Mensah',
                 'phone' => '+233 24 000 0001',
                 'job_title' => 'Managing Director',
-                'password' => 'Structra2026',
+                'password' => 'NavkwaBuild2026',
             ],
         );
 
         $projectDirector = User::query()->firstOrCreate(
-            ['email' => 'pm@structra.test'],
+            ['email' => 'pm@navkwabuild.test'],
             [
                 'company_id' => $company->id,
                 'branch_id' => $headOffice->id,
@@ -208,12 +210,12 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Kwame Boateng',
                 'phone' => '+233 24 000 0002',
                 'job_title' => 'Project Director',
-                'password' => 'Structra2026',
+                'password' => 'NavkwaBuild2026',
             ],
         );
 
         $procurementUser = User::query()->firstOrCreate(
-            ['email' => 'procurement@structra.test'],
+            ['email' => 'procurement@navkwabuild.test'],
             [
                 'company_id' => $company->id,
                 'branch_id' => $headOffice->id,
@@ -221,12 +223,12 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Esi Appiah',
                 'phone' => '+233 24 000 0003',
                 'job_title' => 'Procurement Manager',
-                'password' => 'Structra2026',
+                'password' => 'NavkwaBuild2026',
             ],
         );
 
         $salesUser = User::query()->firstOrCreate(
-            ['email' => 'sales@structra.test'],
+            ['email' => 'sales@navkwabuild.test'],
             [
                 'company_id' => $company->id,
                 'branch_id' => $headOffice->id,
@@ -234,12 +236,12 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Yaw Asiedu',
                 'phone' => '+233 24 000 0004',
                 'job_title' => 'Estimating Lead',
-                'password' => 'Structra2026',
+                'password' => 'NavkwaBuild2026',
             ],
         );
 
         $siteUser = User::query()->firstOrCreate(
-            ['email' => 'site@structra.test'],
+            ['email' => 'site@navkwabuild.test'],
             [
                 'company_id' => $company->id,
                 'branch_id' => $headOffice->id,
@@ -247,12 +249,12 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Akosua Danquah',
                 'phone' => '+233 24 000 0005',
                 'job_title' => 'Site Engineer',
-                'password' => 'Structra2026',
+                'password' => 'NavkwaBuild2026',
             ],
         );
 
         $financeUser = User::query()->firstOrCreate(
-            ['email' => 'finance@structra.test'],
+            ['email' => 'finance@navkwabuild.test'],
             [
                 'company_id' => $company->id,
                 'branch_id' => $headOffice->id,
@@ -260,12 +262,12 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Abena Nkrumah',
                 'phone' => '+233 24 000 0006',
                 'job_title' => 'Finance Manager',
-                'password' => 'Structra2026',
+                'password' => 'NavkwaBuild2026',
             ],
         );
 
         $qhseUser = User::query()->firstOrCreate(
-            ['email' => 'qhse@structra.test'],
+            ['email' => 'qhse@navkwabuild.test'],
             [
                 'company_id' => $company->id,
                 'branch_id' => $headOffice->id,
@@ -273,7 +275,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Kofi Agyeman',
                 'phone' => '+233 24 000 0007',
                 'job_title' => 'Quality Assurance and Health, Safety, and Environment Manager',
-                'password' => 'Structra2026',
+                'password' => 'NavkwaBuild2026',
             ],
         );
 
@@ -882,9 +884,9 @@ class DatabaseSeeder extends Seeder
                     'department' => str_contains(strtolower((string) $staff->job_title), 'finance') ? 'finance' : 'operations',
                     'position' => $staff->job_title,
                     'base_salary' => match ($staff->email) {
-                        'pm@structra.test' => 18500,
-                        'finance@structra.test' => 14500,
-                        'qhse@structra.test' => 13200,
+                        'pm@navkwabuild.test' => 18500,
+                        'finance@navkwabuild.test' => 14500,
+                        'qhse@navkwabuild.test' => 13200,
                         default => 9200,
                     },
                     'hourly_rate' => 0,
@@ -1402,7 +1404,7 @@ class DatabaseSeeder extends Seeder
                 ],
                 'confidence_score' => 84,
                 'status' => 'open',
-                'source' => 'structra_ai',
+                'source' => 'navkwabuild_ai',
                 'detected_at' => now()->subHours(3),
                 'created_by' => $projectDirector->id,
             ],
@@ -1423,7 +1425,7 @@ class DatabaseSeeder extends Seeder
                 ],
                 'confidence_score' => 91,
                 'status' => 'open',
-                'source' => 'structra_ai',
+                'source' => 'navkwabuild_ai',
                 'detected_at' => now()->subHours(2),
                 'created_by' => $procurementUser->id,
             ],
@@ -1551,8 +1553,8 @@ class DatabaseSeeder extends Seeder
             ['company_id' => $company->id, 'name' => 'Finance Events Webhook'],
             [
                 'event_type' => 'invoice.issued',
-                'target_url' => 'https://example.com/structra/webhooks',
-                'secret' => 'structra-phase4-secret',
+                'target_url' => 'https://example.com/navkwabuild/webhooks',
+                'secret' => 'navkwabuild-phase4-secret',
                 'is_active' => true,
                 'last_dispatched_at' => now()->subDay(),
                 'created_by' => $financeUser->id,

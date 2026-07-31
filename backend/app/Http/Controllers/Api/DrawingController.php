@@ -304,7 +304,7 @@ class DrawingController extends ApiController
         }
 
         $file = $request->file('file');
-        $path = $file->store("structra/companies/{$companyId}/branches/{$branchId}/drawings/".($projectId ?: 'shared'), 'local');
+        $path = $file->store("navkwabuild/companies/{$companyId}/branches/{$branchId}/drawings/".($projectId ?: 'shared'), 'local');
 
         return [
             'file_path' => $path,

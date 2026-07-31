@@ -660,7 +660,7 @@ class AutomationController extends ApiController
         }
 
         return [
-            'schema' => 'structra.workflow.v1',
+            'schema' => 'navkwabuild.workflow.v1',
             'nodes' => $nodes,
             'edges' => collect($nodes)->values()->map(fn (array $node, int $index) => isset($nodes[$index + 1]) ? ['from' => $node['id'], 'to' => $nodes[$index + 1]['id']] : null)->filter()->values()->all(),
         ];

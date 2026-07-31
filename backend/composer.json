@@ -1,9 +1,9 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "navkwa/navkwa-build-backend",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "Laravel API backend for Navkwa Build ERP and Navkwa Build Cloud Console.",
+    "keywords": ["navkwa-build", "erp", "construction", "laravel"],
     "license": "MIT",
     "require": {
         "php": "^8.3",
@@ -52,7 +52,7 @@
         "release-check": [
             "composer validate --strict",
             "composer audit",
-            "@php artisan structra:production-check --strict"
+            "@php artisan navkwabuild:production-check --strict"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

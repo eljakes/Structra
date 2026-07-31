@@ -1,12 +1,12 @@
-# Structra
+# Navkwa Build
 
-Structra is a construction operations web application built from the PRD in
-`/Users/eljakes/Documents/NAVKWA GROUP LTD/Contruction ERP/Structra_PRD.md`.
+Navkwa Build is a construction operations web application built from the
+construction ERP product requirements.
 
 This repo is organized as a fullstack workspace:
 
 - `backend/` — Laravel API, Sanctum token auth, PostgreSQL persistence
-- `frontend/` — React/Vite web app
+- `frontend/` — React/Vite web app for the ERP and Navkwa Build Cloud Console
 - `docker-compose.yml` — PostgreSQL and Redis services for local development
 
 ## Implemented Phase 1
@@ -84,13 +84,14 @@ Create the first real company workspace from the registration screen. The produc
 Disposable development databases can load sample records with:
 
 ```bash
-STRUCTRA_SEED_DEVELOPMENT=true php artisan db:seed
+NAVKWA_BUILD_SEED_DEVELOPMENT=true php artisan db:seed
 ```
 
 ## PostgreSQL
 
-The current local `backend/.env` is configured for the PostgreSQL database
-`structra` on `127.0.0.1:5432` with username `eljakes`.
+Fresh local environments should use the PostgreSQL database `navkwabuild` on
+`127.0.0.1:5432`. Existing local environments can keep their current database
+name until they are intentionally recreated.
 
 For a portable Docker setup:
 
@@ -104,23 +105,24 @@ Then set `backend/.env` database values to:
 DB_CONNECTION=pgsql
 DB_HOST=127.0.0.1
 DB_PORT=5432
-DB_DATABASE=structra
-DB_USERNAME=structra
-DB_PASSWORD=structra_secret
+DB_DATABASE=navkwabuild
+DB_USERNAME=navkwabuild
+DB_PASSWORD=navkwabuild_secret
 ```
 
 ## Production Notes
 
 - Start from `backend/.env.production.example` and `frontend/.env.production.example`; do not deploy the local `.env.example` values.
-- Point `FRONTEND_URL` and `CORS_ALLOWED_ORIGINS` to the hosted frontend origin.
+- For the initial Hetzner launch, use `https://app.navkwabuild.com` for the ERP, `https://app.navkwabuild.com/cloud-console` for Navkwa Build Cloud Console, and `/api/v1` for the Laravel API.
+- Set `APP_URL=https://app.navkwabuild.com`, `FRONTEND_URL=https://app.navkwabuild.com`, and `CORS_ALLOWED_ORIGINS=https://app.navkwabuild.com`.
 - Keep `VITE_API_URL` blank when the frontend and API are served from the same domain behind `/api/v1`; set it only for separate frontend/API domains.
-- Set `APP_ENV=production`, `APP_DEBUG=false`, a real `APP_KEY`, `APP_URL=https://...`, `APP_VERSION`, secure mail/storage credentials, and a managed PostgreSQL database with TLS.
-- Keep `STRUCTRA_SEED_DEVELOPMENT=false` in production. Run `php artisan migrate --force`, not `migrate:fresh --seed`, on production data.
+- Set `APP_ENV=production`, `APP_DEBUG=false`, a real `APP_KEY`, `APP_VERSION`, secure mail/storage credentials, and a managed PostgreSQL database with TLS.
+- Keep `NAVKWA_BUILD_SEED_DEVELOPMENT=false` in production. Run `php artisan migrate --force`, not `migrate:fresh --seed`, on production data.
 - Before release, run `composer release-check` from `backend/` with production environment variables loaded, and `npm run release-check` from `frontend/`.
 - Run `composer install --no-dev --optimize-autoloader`, `php artisan migrate --force`, `php artisan config:cache`, `php artisan route:cache`, and `php artisan view:cache` during release.
 - Run `php artisan storage:link` only when using Laravel public storage. Current ERP file downloads are served from private storage through authenticated API endpoints.
 - Run a queue worker for `QUEUE_CONNECTION=database`, and monitor failed jobs.
-- Create the first Cloud Console administrator with `php artisan structra:platform-admin admin@example.com --create`, then change the temporary password immediately and enable MFA.
+- Create the first Navkwa Build Cloud Console administrator with `php artisan navkwabuild:platform-admin admin@navkwabuild.com --create`, then change the temporary password immediately and enable MFA.
 - The frontend refreshes authenticated ERP data from Laravel every `VITE_LIVE_REFRESH_MS` milliseconds. Set it to `0` to disable polling when replacing it with websockets.
 
 ## Verification

@@ -113,15 +113,15 @@ class SecurityHardeningTest extends TestCase
         $this->artisan('db:seed')
             ->assertSuccessful();
 
-        $this->assertDatabaseMissing('companies', ['name' => 'Structra Workspace']);
-        $this->assertDatabaseMissing('users', ['email' => 'owner@structra.test']);
+        $this->assertDatabaseMissing('companies', ['name' => 'Navkwa Build Workspace']);
+        $this->assertDatabaseMissing('users', ['email' => 'owner@navkwabuild.test']);
     }
 
     public function test_strict_production_check_rejects_non_production_environment(): void
     {
         config(['app.env' => 'local']);
 
-        $this->artisan('structra:production-check --strict')
+        $this->artisan('navkwabuild:production-check --strict')
             ->expectsOutputToContain('APP_ENV must be production for deployment.')
             ->assertFailed();
     }

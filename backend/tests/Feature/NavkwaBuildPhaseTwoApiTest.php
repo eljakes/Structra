@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
-class StructraPhaseTwoApiTest extends TestCase
+class NavkwaBuildPhaseTwoApiTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -388,7 +388,7 @@ class StructraPhaseTwoApiTest extends TestCase
             'role_id' => $role->id,
             'name' => 'Owner User',
             'email' => fake()->unique()->safeEmail(),
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         return [$user, $branch, $company];

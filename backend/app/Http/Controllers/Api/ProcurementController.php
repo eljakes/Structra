@@ -1090,7 +1090,7 @@ class ProcurementController extends ApiController
             foreach ($request->file($bucket, []) as $file) {
                 $attachments[$bucket][] = [
                     'name' => $file->getClientOriginalName(),
-                    'path' => $file->store("structra/companies/{$companyId}/procurement/{$bucket}", 'local'),
+                    'path' => $file->store("navkwabuild/companies/{$companyId}/procurement/{$bucket}", 'local'),
                     'size' => $file->getSize(),
                 ];
             }

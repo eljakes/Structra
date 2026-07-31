@@ -393,7 +393,7 @@ class IntelligenceController extends ApiController
                 'signals' => $payload['signals'] ?? [],
                 'confidence_score' => $payload['confidence_score'] ?? 75,
                 'status' => 'open',
-                'source' => 'structra_ai',
+                'source' => 'navkwabuild_ai',
                 'detected_at' => now(),
                 'created_by' => $this->user($request)->id,
             ],

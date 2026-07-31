@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
-class StructraPhaseOneApiTest extends TestCase
+class NavkwaBuildPhaseOneApiTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -30,7 +30,7 @@ class StructraPhaseOneApiTest extends TestCase
             'currency' => 'GHS',
             'name' => 'Adjoa Admin',
             'email' => 'adjoa@example.com',
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         $response
@@ -106,7 +106,7 @@ class StructraPhaseOneApiTest extends TestCase
         $managedUserId = $this->postJson('/api/v1/organization/users', [
             'name' => 'Managed User',
             'email' => 'managed.user@example.com',
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
             'branch_id' => $branch->id,
             'role_id' => $role->id,
             'permissions' => ['payroll.manage'],
@@ -126,7 +126,7 @@ class StructraPhaseOneApiTest extends TestCase
         $this->patchJson("/api/v1/organization/users/{$managedUserId}", [
             'name' => 'Edited User',
             'email' => 'edited.user@example.com',
-            'password' => 'Structra2027',
+            'password' => 'NavkwaBuild2027',
             'branch_id' => $branch->id,
             'role_id' => $user->role_id,
             'permissions' => ['projects.manage', 'reports.view'],
@@ -138,7 +138,7 @@ class StructraPhaseOneApiTest extends TestCase
             ->assertJsonPath('user.status', 'inactive');
 
         $managedUser = User::query()->findOrFail($managedUserId);
-        $this->assertTrue(Hash::check('Structra2027', $managedUser->password));
+        $this->assertTrue(Hash::check('NavkwaBuild2027', $managedUser->password));
         $this->assertSame(['projects.manage', 'reports.view'], $managedUser->permissions);
 
         $this->deleteJson("/api/v1/organization/users/{$managedUserId}")
@@ -174,7 +174,7 @@ class StructraPhaseOneApiTest extends TestCase
             'role_id' => $tenderRole->id,
             'name' => 'Tender User',
             'email' => 'tender@example.com',
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         $safetyUser = User::query()->create([
@@ -183,7 +183,7 @@ class StructraPhaseOneApiTest extends TestCase
             'role_id' => $safetyRole->id,
             'name' => 'Safety User',
             'email' => 'safety@example.com',
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         Sanctum::actingAs($tenderUser);
@@ -232,7 +232,7 @@ class StructraPhaseOneApiTest extends TestCase
             'role_id' => $managerRole->id,
             'name' => 'Operations User',
             'email' => 'operations@example.com',
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         Sanctum::actingAs($manager);
@@ -614,7 +614,7 @@ class StructraPhaseOneApiTest extends TestCase
             'role_id' => $role->id,
             'name' => 'Owner User',
             'email' => fake()->unique()->safeEmail(),
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         return [$user, $branch, $company];

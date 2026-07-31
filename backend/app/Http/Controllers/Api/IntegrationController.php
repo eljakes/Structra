@@ -132,7 +132,7 @@ class IntegrationController extends ApiController
             'event_type' => $subscription->event_type,
             'company_id' => $subscription->company_id,
             'dispatched_at' => now()->toISOString(),
-            'data' => ['message' => 'Structra webhook test event'],
+            'data' => ['message' => 'Navkwa Build webhook test event'],
         ];
         $encoded = json_encode($payload, JSON_THROW_ON_ERROR);
         $signature = hash_hmac('sha256', $encoded, $subscription->secret);
@@ -151,8 +151,8 @@ class IntegrationController extends ApiController
             try {
                 $response = Http::timeout(5)
                     ->withHeaders([
-                        'X-Structra-Event' => $subscription->event_type,
-                        'X-Structra-Signature' => $signature,
+                        'X-Navkwa-Build-Event' => $subscription->event_type,
+                        'X-Navkwa-Build-Signature' => $signature,
                     ])
                     ->post($subscription->target_url, $payload);
 
@@ -190,7 +190,7 @@ class IntegrationController extends ApiController
         return response()->json([
             'openapi' => '3.1.0',
             'info' => [
-                'title' => 'Structra API',
+                'title' => 'Navkwa Build API',
                 'version' => 'v1',
                 'description' => 'Tenant-aware construction ERP API covering phases 1-4.',
             ],

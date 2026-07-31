@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
-class StructraPhaseFourApiTest extends TestCase
+class NavkwaBuildPhaseFourApiTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -73,7 +73,7 @@ class StructraPhaseFourApiTest extends TestCase
         $this->getJson('/api/v1/bi')
             ->assertOk()
             ->assertJsonPath('metrics.active_projects', 1)
-            ->assertJsonPath('meta.module_name', 'Structra Intelligence')
+            ->assertJsonPath('meta.module_name', 'Navkwa Build Intelligence')
             ->assertJsonPath('dashboards.0.id', $dashboardId)
             ->assertJsonCount(1, 'datasets.cost_by_category')
             ->assertJsonStructure([
@@ -108,7 +108,7 @@ class StructraPhaseFourApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('rule.rule_type', 'low_stock')
             ->assertJsonPath('rule.version', 1)
-            ->assertJsonPath('rule.workflow_definition.schema', 'structra.workflow.v1')
+            ->assertJsonPath('rule.workflow_definition.schema', 'navkwabuild.workflow.v1')
             ->json('rule.id');
 
         $this->getJson('/api/v1/automation/catalog')
@@ -293,7 +293,7 @@ class StructraPhaseFourApiTest extends TestCase
             'role_id' => $role->id,
             'name' => 'Owner User',
             'email' => fake()->unique()->safeEmail(),
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         $client = Client::query()->create([

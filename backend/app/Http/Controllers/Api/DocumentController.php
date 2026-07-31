@@ -144,7 +144,7 @@ class DocumentController extends ApiController
         }
 
         $file = $request->file($field);
-        $path = $file->store("structra/companies/{$companyId}/branches/".($branchId ?: 'company').'/projects/'.($projectId ?: 'shared'), 'local');
+        $path = $file->store("navkwabuild/companies/{$companyId}/branches/".($branchId ?: 'company').'/projects/'.($projectId ?: 'shared'), 'local');
 
         return [
             'file_path' => $path,

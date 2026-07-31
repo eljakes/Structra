@@ -21,7 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
-class StructraPhaseThreeApiTest extends TestCase
+class NavkwaBuildPhaseThreeApiTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -274,7 +274,7 @@ class StructraPhaseThreeApiTest extends TestCase
             'role_id' => $financeRole->id,
             'name' => 'Finance User',
             'email' => fake()->unique()->safeEmail(),
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         Sanctum::actingAs($financeUser);
@@ -311,7 +311,7 @@ class StructraPhaseThreeApiTest extends TestCase
             'role_id' => $user->role_id,
             'name' => 'Payroll Worker',
             'email' => fake()->unique()->safeEmail(),
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         $employeeId = $this->postJson('/api/v1/people/employees', [
@@ -700,7 +700,7 @@ class StructraPhaseThreeApiTest extends TestCase
             'role_id' => $hrRole->id,
             'name' => 'HR User',
             'email' => fake()->unique()->safeEmail(),
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         Sanctum::actingAs($hrUser);
@@ -1124,7 +1124,7 @@ class StructraPhaseThreeApiTest extends TestCase
             'role_id' => $role->id,
             'name' => 'Owner User',
             'email' => fake()->unique()->safeEmail(),
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
         ]);
 
         return [$user, $branch, $company];

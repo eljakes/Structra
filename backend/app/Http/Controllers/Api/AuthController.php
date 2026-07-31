@@ -394,7 +394,7 @@ class AuthController extends ApiController
 
     private function issueWebToken(User $user): string
     {
-        return $user->createToken('structra-web', ['*'], $this->tokenExpiresAt())->plainTextToken;
+        return $user->createToken('navkwabuild-web', ['*'], $this->tokenExpiresAt())->plainTextToken;
     }
 
     private function mfaIsEnabled(User $user): bool

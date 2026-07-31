@@ -71,7 +71,7 @@ class PlatformAdminApiTest extends TestCase
         [$platformUser] = $this->userWithPermissions(['platform.manage']);
         $middleware = app(CheckPermission::class);
 
-        $webToken = $platformUser->createToken('structra-web', ['*'])->accessToken;
+        $webToken = $platformUser->createToken('navkwabuild-web', ['*'])->accessToken;
         $webRequest = Request::create('/api/v1/platform-admin', 'GET');
         $webRequest->setUserResolver(fn (): User => $platformUser->withAccessToken($webToken));
 
@@ -85,10 +85,10 @@ class PlatformAdminApiTest extends TestCase
 
         try {
             $middleware->handle($impersonationRequest, fn () => response()->json(['ok' => true]), 'platform.manage');
-            $this->fail('Impersonation tokens must not access Structra Cloud Console administration.');
+            $this->fail('Impersonation tokens must not access Navkwa Build Cloud Console administration.');
         } catch (HttpException $exception) {
             $this->assertSame(403, $exception->getStatusCode());
-            $this->assertSame('Impersonation sessions cannot access Structra Cloud Console administration.', $exception->getMessage());
+            $this->assertSame('Impersonation sessions cannot access Navkwa Build Cloud Console administration.', $exception->getMessage());
         }
     }
 
@@ -204,7 +204,7 @@ class PlatformAdminApiTest extends TestCase
 
         $this->patchJson('/api/v1/platform-admin/profile', [
             'email' => 'ceo@navkwa.test',
-            'current_password' => 'Structra2026',
+            'current_password' => 'NavkwaBuild2026',
             'password' => 'NewCeoPass2026',
             'password_confirmation' => 'NewCeoPass2026',
         ])
@@ -228,7 +228,7 @@ class PlatformAdminApiTest extends TestCase
 
     public function test_platform_admin_can_be_bootstrapped_from_artisan(): void
     {
-        $this->artisan('structra:platform-admin bootstrap@navkwa.test --create --password=Structra2026AA1')
+        $this->artisan('navkwabuild:platform-admin bootstrap@navkwa.test --create --password=NavkwaBuild2026AA1')
             ->assertSuccessful();
 
         $user = User::query()->where('email', 'bootstrap@navkwa.test')->firstOrFail();
@@ -844,7 +844,7 @@ class PlatformAdminApiTest extends TestCase
             'role_id' => $role->id,
             'name' => 'Platform Test User',
             'email' => fake()->unique()->safeEmail(),
-            'password' => 'Structra2026',
+            'password' => 'NavkwaBuild2026',
             'status' => 'active',
         ]);
 

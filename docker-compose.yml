@@ -1,30 +1,30 @@
 services:
   postgres:
     image: postgres:18-alpine
-    container_name: structra-postgres
+    container_name: navkwabuild-postgres
     environment:
-      POSTGRES_DB: structra
-      POSTGRES_USER: structra
-      POSTGRES_PASSWORD: structra_secret
+      POSTGRES_DB: navkwabuild
+      POSTGRES_USER: navkwabuild
+      POSTGRES_PASSWORD: navkwabuild_secret
     ports:
       - "5432:5432"
     volumes:
-      - structra-postgres:/var/lib/postgresql/data
+      - navkwabuild-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U structra -d structra"]
+      test: ["CMD-SHELL", "pg_isready -U navkwabuild -d navkwabuild"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:8-alpine
-    container_name: structra-redis
+    container_name: navkwabuild-redis
     ports:
       - "6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - structra-redis:/data
+      - navkwabuild-redis:/data
 
 volumes:
-  structra-postgres:
-  structra-redis:
+  navkwabuild-postgres:
+  navkwabuild-redis:

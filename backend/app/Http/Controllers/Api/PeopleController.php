@@ -328,7 +328,7 @@ class PeopleController extends ApiController
 
         Branch::query()->forCompany($application->company_id)->whereKey($branchId)->firstOrFail();
 
-        $email = $candidate->email ?: 'candidate-'.$candidate->id.'-'.$application->company_id.'@structra.local';
+        $email = $candidate->email ?: 'candidate-'.$candidate->id.'-'.$application->company_id.'@navkwabuild.local';
         $user = User::query()->firstOrCreate(
             ['company_id' => $application->company_id, 'email' => $email],
             [

@@ -707,7 +707,7 @@ class SalesController extends ApiController
 
         if ($request->hasFile('file')) {
             $file = $request->file('file');
-            $path = $file->store("structra/companies/{$tender->company_id}/tenders/{$tender->id}", 'local');
+            $path = $file->store("navkwabuild/companies/{$tender->company_id}/tenders/{$tender->id}", 'local');
             $filePayload = [
                 'file_path' => $path,
                 'original_filename' => $file->getClientOriginalName(),

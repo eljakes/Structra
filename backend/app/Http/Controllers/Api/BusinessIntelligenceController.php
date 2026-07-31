@@ -68,7 +68,7 @@ class BusinessIntelligenceController extends ApiController
             'metrics' => $metrics,
             'filters' => $this->filters($companyId, $projects),
             'meta' => [
-                'module_name' => 'Structra Intelligence',
+                'module_name' => 'Navkwa Build Intelligence',
                 'data_freshness_at' => now()->toIso8601String(),
                 'currency' => $this->user($request)->company?->default_currency ?? 'GHS',
                 'safety_rate_exposure_basis' => 'Incidents per 200,000 recorded labour hours',

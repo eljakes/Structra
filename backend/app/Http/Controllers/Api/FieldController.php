@@ -133,7 +133,7 @@ class FieldController extends ApiController
         $photoPath = null;
 
         if ($request->hasFile('photo')) {
-            $photoPath = $request->file('photo')->store("structra/companies/{$projectModel->company_id}/field/issues", 'local');
+            $photoPath = $request->file('photo')->store("navkwabuild/companies/{$projectModel->company_id}/field/issues", 'local');
         }
 
         $issue = FieldIssue::query()->create([
@@ -207,7 +207,7 @@ class FieldController extends ApiController
 
         $facePath = null;
         if ($request->hasFile('face')) {
-            $facePath = $request->file('face')->store("structra/companies/{$user->company_id}/attendance", 'local');
+            $facePath = $request->file('face')->store("navkwabuild/companies/{$user->company_id}/attendance", 'local');
         }
 
         $record = AttendanceRecord::query()->create([
@@ -239,7 +239,7 @@ class FieldController extends ApiController
 
         $facePath = null;
         if ($request->hasFile('face')) {
-            $facePath = $request->file('face')->store("structra/companies/{$attendance->company_id}/attendance", 'local');
+            $facePath = $request->file('face')->store("navkwabuild/companies/{$attendance->company_id}/attendance", 'local');
         }
 
         $clockOut = now();

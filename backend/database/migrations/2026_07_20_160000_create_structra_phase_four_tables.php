@@ -21,7 +21,7 @@ return new class extends Migration
             $table->json('signals')->nullable();
             $table->unsignedTinyInteger('confidence_score')->default(70);
             $table->string('status')->default('open');
-            $table->string('source')->default('structra_ai');
+            $table->string('source')->default('navkwabuild_ai');
             $table->timestampTz('detected_at');
             $table->timestampTz('resolved_at')->nullable();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();

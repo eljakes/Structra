@@ -23,7 +23,7 @@ class CheckPermission
         );
 
         if ($isImpersonationToken && $requiresPlatformAccess) {
-            abort(403, 'Impersonation sessions cannot access Structra Cloud Console administration.');
+            abort(403, 'Impersonation sessions cannot access Navkwa Build Cloud Console administration.');
         }
 
         $matchedPermissions = collect($permissions)

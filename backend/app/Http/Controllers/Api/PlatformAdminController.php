@@ -280,7 +280,7 @@ class PlatformAdminController extends ApiController
                 'sidebar_color' => $brandingData['sidebar_color'] ?? '#102033',
                 'button_color' => $brandingData['button_color'] ?? '#2364d8',
                 'typography' => $brandingData['typography'] ?? 'Inter',
-                'login_welcome_message' => $brandingData['login_welcome_message'] ?? 'Welcome to Structra.',
+                'login_welcome_message' => $brandingData['login_welcome_message'] ?? 'Welcome to Navkwa Build.',
                 'company_motto' => $brandingData['company_motto'] ?? null,
                 'updated_by' => $this->user($request)->id,
             ]);
@@ -311,7 +311,7 @@ class PlatformAdminController extends ApiController
 
     public function updateCompanyAccount(Request $request, Company $company): JsonResponse
     {
-        abort_if($company->is($this->platformCompany($request)), 422, 'The Navkwa Cloud Console tenant cannot be edited from customer account management.');
+        abort_if($company->is($this->platformCompany($request)), 422, 'The Navkwa Build Cloud Console tenant cannot be edited from customer account management.');
         $before = $company->toArray();
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
@@ -384,7 +384,7 @@ class PlatformAdminController extends ApiController
 
     public function archiveCompany(Request $request, Company $company): JsonResponse
     {
-        abort_if($company->is($this->platformCompany($request)), 422, 'The Navkwa Cloud Console tenant cannot be archived.');
+        abort_if($company->is($this->platformCompany($request)), 422, 'The Navkwa Build Cloud Console tenant cannot be archived.');
         $before = $company->toArray();
 
         DB::transaction(function () use ($company): void {
@@ -409,7 +409,7 @@ class PlatformAdminController extends ApiController
     public function restoreCompany(Request $request, int $companyId): JsonResponse
     {
         $company = Company::withTrashed()->whereKey($companyId)->firstOrFail();
-        abort_if($company->is($this->platformCompany($request)), 422, 'The Navkwa Cloud Console tenant cannot be restored from customer account management.');
+        abort_if($company->is($this->platformCompany($request)), 422, 'The Navkwa Build Cloud Console tenant cannot be restored from customer account management.');
         $before = $company->toArray();
         $settings = $company->settings ?? [];
         $restoredStatus = data_get($settings, 'archived_from_status', 'active');
@@ -2354,7 +2354,7 @@ class PlatformAdminController extends ApiController
     private function platformPermissionCatalog(): array
     {
         return [
-            ['key' => 'platform.manage', 'label' => 'Cloud Console Access', 'description' => 'Can sign in to Structra Cloud Console and operate platform administration tools.'],
+            ['key' => 'platform.manage', 'label' => 'Cloud Console Access', 'description' => 'Can sign in to Navkwa Build Cloud Console and operate platform administration tools.'],
             ['key' => 'platform.*', 'label' => 'Super Admin Access', 'description' => 'Full unrestricted Cloud Console authority for executive platform administrators.'],
         ];
     }
@@ -2437,13 +2437,13 @@ class PlatformAdminController extends ApiController
         try {
             Mail::raw(
                 implode("\n\n", [
-                    "Welcome to Structra, {$admin->name}.",
+                    "Welcome to Navkwa Build, {$admin->name}.",
                     "Your company workspace {$company->name} has been provisioned.",
                     'Login URL: '.rtrim((string) config('app.url'), '/').'/login?tenant='.$company->tenant_key,
                     "Temporary password: {$password}",
                     'Please change this password after your first login.',
                 ]),
-                fn ($mail) => $mail->to($admin->email, $admin->name)->subject('Your Structra workspace is ready'),
+                fn ($mail) => $mail->to($admin->email, $admin->name)->subject('Your Navkwa Build workspace is ready'),
             );
 
             return ['status' => 'sent', 'sent_at' => now()->toISOString()];
@@ -2486,7 +2486,7 @@ class PlatformAdminController extends ApiController
 
     private function temporaryPassword(): string
     {
-        return 'Structra'.now()->format('ymd').Str::upper(Str::random(6)).'1';
+        return 'NavkwaBuild'.now()->format('ymd').Str::upper(Str::random(6)).'1';
     }
 
     private function nextGlobalNumber(string $prefix, string $modelClass, string $column): string

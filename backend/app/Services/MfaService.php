@@ -17,8 +17,8 @@ class MfaService
 
     public function otpauthUri(User $user, string $secret): string
     {
-        $issuer = rawurlencode((string) config('app.name', 'Structra'));
-        $label = rawurlencode(config('app.name', 'Structra').':'.$user->email);
+        $issuer = rawurlencode((string) config('app.name', 'Navkwa Build'));
+        $label = rawurlencode(config('app.name', 'Navkwa Build').':'.$user->email);
 
         return "otpauth://totp/{$label}?secret={$secret}&issuer={$issuer}&algorithm=SHA1&digits=6&period=30";
     }

@@ -1,6 +1,6 @@
-# Structra Frontend
+# Navkwa Build Frontend
 
-React/Vite workspace for the Structra ERP.
+React/Vite workspace for the Navkwa Build ERP and Navkwa Build Cloud Console.
 
 ## Environment
 

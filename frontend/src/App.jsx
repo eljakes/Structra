@@ -724,7 +724,7 @@ function automationPayloadFromForm(form) {
     notification_config: { channels: ['in_app'] },
     settings: { condition_mode: form.condition_mode || 'all', retry_policy: { max_retries: 2, on_failure: 'notify_admin' } },
     workflow_definition: {
-      schema: 'structra.workflow.v1',
+      schema: 'navkwabuild.workflow.v1',
       nodes,
       edges: nodes.slice(0, -1).map((node, index) => ({ from: node.id, to: nodes[index + 1].id })),
     },
@@ -754,7 +754,7 @@ function normalizeThemePreference(theme) {
   return theme === 'dark' || theme === 'light' ? theme : null
 }
 
-const THEME_PREFERENCE_KEY = 'structra.theme.preference'
+const THEME_PREFERENCE_KEY = 'navkwabuild.theme.preference'
 
 function userThemePreferenceKey(userId) {
   return userId ? `${THEME_PREFERENCE_KEY}.${userId}` : THEME_PREFERENCE_KEY
@@ -1027,7 +1027,7 @@ function App() {
         setToken(null)
         setTokenReady(false)
         setUser(null)
-        setError(cloudConsolePortal ? 'Use a Structra Cloud Console administrator account.' : 'Use your company Structra account on this login page.')
+        setError(cloudConsolePortal ? 'Use a Navkwa Build Cloud Console administrator account.' : 'Use your company Navkwa Build account on this login page.')
 
         return null
       }
@@ -1054,7 +1054,7 @@ function App() {
           }
 
           moduleLoadFailures.push(label)
-          console.warn(`Structra could not load ${label}.`, err)
+          console.warn(`Navkwa Build could not load ${label}.`, err)
 
           return fallback
         }
@@ -1276,7 +1276,7 @@ function App() {
         setAccountSecurity(emptyAccountSecurity)
         setMfaSetup(null)
         setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
-        setError(cloudConsolePortal ? 'Use a Structra Cloud Console administrator account.' : 'Use your company Structra account on this login page.')
+        setError(cloudConsolePortal ? 'Use a Navkwa Build Cloud Console administrator account.' : 'Use your company Navkwa Build account on this login page.')
 
         return
       }
@@ -2467,7 +2467,7 @@ function App() {
   }
 
   async function deletePlatformStaffUser(item) {
-    if (!window.confirm(`Delete ${item.name}? This removes their Structra Cloud Console access.`)) {
+    if (!window.confirm(`Delete ${item.name}? This removes their Navkwa Build Cloud Console access.`)) {
       return
     }
 
@@ -2763,7 +2763,7 @@ function App() {
   if (!tokenReady) {
     return (
       <AuthScreen
-        brandName={cloudConsolePortal ? 'Structra Cloud Console' : 'Structra'}
+        brandName={cloudConsolePortal ? 'Navkwa Build Cloud Console' : 'Navkwa Build'}
         authForm={authForm}
         setAuthForm={setAuthForm}
         handleAuth={handleAuth}
@@ -2780,16 +2780,16 @@ function App() {
     : activeView === 'crm'
       ? 'Customer Relation Management(CRM)'
       : activeView === 'platform'
-        ? 'Structra Cloud Console'
+        ? 'Navkwa Build Cloud Console'
         : navItems.find((item) => item.id === activeView)?.label || 'Workspace'
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-mark">S</div>
+          <div className="brand-mark">N</div>
           <div>
-            <strong>Structra</strong>
+            <strong>Navkwa Build</strong>
           </div>
         </div>
 
@@ -3165,7 +3165,7 @@ function AuthScreen({ brandName, authForm, setAuthForm, handleAuth, mfaChallenge
       <section className="auth-panel">
         <div className="auth-showcase">
           <div className="auth-brand-lockup">
-            <div className="brand-mark auth-logo-mark">S</div>
+            <div className="brand-mark auth-logo-mark">N</div>
             <div className="auth-brand-copy">
               <strong>{brandName}</strong>
               <small>Powered by Navkwa Group Ltd.</small>
@@ -3391,7 +3391,7 @@ function PlatformAdminView({
   const catalog = platform.catalog || {}
   const platformPermissions = catalog.platform_permissions?.length
     ? catalog.platform_permissions
-    : [{ key: 'platform.manage', label: 'Cloud Console Access', description: 'Can sign in to Structra Cloud Console.' }]
+    : [{ key: 'platform.manage', label: 'Cloud Console Access', description: 'Can sign in to Navkwa Build Cloud Console.' }]
   const layerIconMap = { platform: BarChart3, customers: Building2, product: Layers3, security: ShieldCheck, engineering: Workflow, executive: BarChart3, operations: Building2, intelligence: ActivityIcon }
   const tabIconMap = {
     executive: BarChart3,
@@ -4016,7 +4016,7 @@ function PlatformAdminView({
       <section className="view-stack cloud-command-center">
         <div className={`cloud-status-hero cloud-command-hero ${commandCenter.status || 'unavailable'}`}>
           <div>
-            <span>Structra Cloud Console</span>
+            <span>Navkwa Build Cloud Console</span>
             <h2>{commandCenter.status_label || 'Platform status unavailable'}</h2>
             <p>{revenueTrend === null ? 'Platform operations are ready for review.' : `Revenue is ${revenueTrend >= 0 ? 'up' : 'down'} ${Math.abs(revenueTrend)}% against the previous revenue period.`}</p>
           </div>
@@ -5268,7 +5268,7 @@ function PlatformAdminView({
         </section>
 
         <section className="panel span-2">
-          <PanelTitle icon={Users} title="Navkwa Cloud Console Users" />
+          <PanelTitle icon={Users} title="Navkwa Build Cloud Console Users" />
           <DataTable
             columns={['Name', 'Email', 'Job Title', 'Access', 'Status', 'Last Login', 'Actions']}
             rows={platformStaff.map((item) => [
@@ -5523,7 +5523,7 @@ function PlatformAdminView({
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `structra-platform-reports.${format === 'json' ? 'json' : 'csv'}`
+      link.download = `navkwabuild-cloud-console-reports.${format === 'json' ? 'json' : 'csv'}`
       document.body.append(link)
       link.click()
       link.remove()
@@ -10581,7 +10581,7 @@ function PeopleView({ branches, projects, suppliers, users, roles, currentUser, 
   }
 
   function deleteHrUser(item) {
-    if (!window.confirm(`Delete ${item.name}? This removes their Structra access.`)) {
+    if (!window.confirm(`Delete ${item.name}? This removes their Navkwa Build access.`)) {
       return
     }
 
@@ -13074,7 +13074,7 @@ function PortalsView({
           </button>
         )}
         {!['approved', 'completed', 'closed', 'paid', 'signed_off', 'rejected'].includes(item.status) && (
-          <button type="button" className="table-action" onClick={() => runAction(() => api.reviewPortalWorkItem(item.id, { status: completionStatus(item.item_type), response: 'Completed in Structra.' }), 'Portal item completed.')}>
+          <button type="button" className="table-action" onClick={() => runAction(() => api.reviewPortalWorkItem(item.id, { status: completionStatus(item.item_type), response: 'Completed in Navkwa Build.' }), 'Portal item completed.')}>
             Complete
           </button>
         )}
@@ -13201,7 +13201,7 @@ function PortalsView({
               approval.document?.document_number || '',
               <Badge key="status" value={approval.status} />,
               approval.status === 'submitted' ? (
-                <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.reviewClientApproval(approval.id, { status: 'approved', decision_notes: 'Approved in Structra.' }), 'Client approval completed.')}>
+                <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.reviewClientApproval(approval.id, { status: 'approved', decision_notes: 'Approved in Navkwa Build.' }), 'Client approval completed.')}>
                   Approve
                 </button>
               ) : (
@@ -13248,7 +13248,7 @@ function PortalsView({
               submittal.drawing?.drawing_number || '',
               <Badge key="status" value={submittal.status} />,
               ['submitted', 'in_review'].includes(submittal.status) ? (
-                <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.reviewConsultantSubmittal(submittal.id, { status: 'approved', comments: 'Approved in Structra.' }), 'Submittal approved.')}>
+                <button key="approve" type="button" className="table-action" onClick={() => runAction(() => api.reviewConsultantSubmittal(submittal.id, { status: 'approved', comments: 'Approved in Navkwa Build.' }), 'Submittal approved.')}>
                   Approve
                 </button>
               ) : (
@@ -15735,7 +15735,7 @@ function AutomationView({ automation = emptyAutomationData, forms, setPhaseFourF
                     <input type="checkbox" checked={settingsForm.default_channels.includes(channel)} onChange={() => toggleNotificationChannel(channel)} />
                     <span>
                       <strong>{labelize(channel)}</strong>
-                      <small>{channel === 'email' ? 'Uses the configured Laravel mailer.' : 'Creates a saved Structra alert.'}</small>
+                      <small>{channel === 'email' ? 'Uses the configured Laravel mailer.' : 'Creates a saved Navkwa Build alert.'}</small>
                     </span>
                   </label>
                 ))}
@@ -16078,7 +16078,7 @@ function AdminView({
   }
 
   function deleteUser(item) {
-    if (!window.confirm(`Delete ${item.name}? This removes their Structra access.`)) {
+    if (!window.confirm(`Delete ${item.name}? This removes their Navkwa Build access.`)) {
       return
     }
 

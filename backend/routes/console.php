@@ -13,10 +13,10 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Artisan::command('structra:platform-admin {email} {--name=Platform Administrator} {--password=} {--create}', function (): int {
+$platformAdminCommand = function (): int {
     $email = strtolower((string) $this->argument('email'));
     $name = (string) $this->option('name');
-    $password = (string) ($this->option('password') ?: 'Structra'.now()->format('ymd').Str::upper(Str::random(6)).'1');
+    $password = (string) ($this->option('password') ?: 'NavkwaBuild'.now()->format('ymd').Str::upper(Str::random(6)).'1');
 
     $company = Company::query()->firstOrCreate(
         ['tenant_key' => 'navkwa-group'],
@@ -75,9 +75,12 @@ Artisan::command('structra:platform-admin {email} {--name=Platform Administrator
     $this->info("Platform access granted to {$email}.");
 
     return self::SUCCESS;
-})->purpose('Grant or create a Structra Platform Administration user.');
+};
 
-Artisan::command('structra:production-check {--strict : Fail unless the loaded environment is production-ready}', function (): int {
+Artisan::command('navkwabuild:platform-admin {email} {--name=Platform Administrator} {--password=} {--create}', $platformAdminCommand)
+    ->purpose('Grant or create a Navkwa Build Cloud Console administrator.');
+
+$productionCheckCommand = function (): int {
     $failures = [];
     $warnings = [];
     $strict = (bool) $this->option('strict');
@@ -131,8 +134,8 @@ Artisan::command('structra:production-check {--strict : Fail unless the loaded e
             }
         }
 
-        if ($envFlag('STRUCTRA_SEED_DEVELOPMENT')) {
-            $failures[] = 'STRUCTRA_SEED_DEVELOPMENT must be false in production.';
+        if ($envFlag('NAVKWA_BUILD_SEED_DEVELOPMENT')) {
+            $failures[] = 'NAVKWA_BUILD_SEED_DEVELOPMENT must be false in production.';
         }
 
         if (config('database.default') !== 'pgsql') {
@@ -141,7 +144,7 @@ Artisan::command('structra:production-check {--strict : Fail unless the loaded e
         if ($envValue('DB_DATABASE') === '' || $envValue('DB_USERNAME') === '' || $envValue('DB_PASSWORD') === '') {
             $failures[] = 'DB_DATABASE, DB_USERNAME, and DB_PASSWORD must be set.';
         }
-        if ($envValue('DB_PASSWORD') === 'structra_secret') {
+        if ($envValue('DB_PASSWORD') === 'navkwabuild_secret') {
             $failures[] = 'DB_PASSWORD must not use the local development password.';
         }
         if (! in_array($envValue('DB_SSLMODE', 'prefer'), ['require', 'verify-ca', 'verify-full'], true)) {
@@ -183,7 +186,7 @@ Artisan::command('structra:production-check {--strict : Fail unless the loaded e
     }
 
     if ($failures !== []) {
-        $this->error('Structra production readiness check failed.');
+        $this->error('Navkwa Build production readiness check failed.');
         foreach ($failures as $failure) {
             $this->line(" - {$failure}");
         }
@@ -191,7 +194,10 @@ Artisan::command('structra:production-check {--strict : Fail unless the loaded e
         return self::FAILURE;
     }
 
-    $this->info('Structra production readiness check passed.');
+    $this->info('Navkwa Build production readiness check passed.');
 
     return self::SUCCESS;
-})->purpose('Validate production environment and deployment safety settings.');
+};
+
+Artisan::command('navkwabuild:production-check {--strict : Fail unless the loaded environment is production-ready}', $productionCheckCommand)
+    ->purpose('Validate production environment and deployment safety settings.');
