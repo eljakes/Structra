@@ -1,4 +1,4 @@
-# Navkwa Build Hetzner Go-Live Runbook
+# Navkwa Build Hostinger Go-Live Runbook
 
 This runbook deploys Navkwa Build ERP and Navkwa Build Cloud Console on a
 single domain:
@@ -10,20 +10,25 @@ single domain:
 The frontend should keep `VITE_API_URL=` blank in production so browser calls
 use the same origin through `/api/v1`.
 
-## 1. Hetzner Server
+## 1. Hostinger VPS
 
-Create an Ubuntu 24.04 Hetzner Cloud server with backups enabled. For launch,
-start with at least 2 vCPU and 4 GB RAM. Add a Hetzner firewall that allows:
+Use **Hostinger VPS**, not Hostinger shared/web hosting. Navkwa Build needs
+PostgreSQL, Nginx/PHP-FPM control, Supervisor queue workers, cron, and server
+environment variables.
+
+Create an Ubuntu 24.04 Hostinger VPS with weekly backups/snapshots enabled. For
+launch, start with at least 2 vCPU and 4 GB RAM. Configure the VPS firewall to
+allow:
 
 - SSH: port `22` from your trusted IPs
 - HTTP: port `80` from anywhere
 - HTTPS: port `443` from anywhere
 
-Point DNS after the server is created:
+Point DNS after the VPS is created:
 
 ```text
-A     app     <HETZNER_SERVER_IPV4>
-AAAA  app     <HETZNER_SERVER_IPV6>   # optional, only if IPv6 is enabled
+A     app     <HOSTINGER_VPS_IPV4>
+AAAA  app     <HOSTINGER_VPS_IPV6>   # optional, only if IPv6 is enabled
 ```
 
 ## 2. Server Packages
@@ -35,7 +40,7 @@ sudo apt update
 sudo apt upgrade -y
 sudo apt install -y \
   nginx supervisor cron git unzip curl ca-certificates \
-  postgresql-client redis-tools \
+  postgresql postgresql-contrib postgresql-client redis-tools \
   php8.3-cli php8.3-fpm php8.3-pgsql php8.3-mbstring php8.3-xml \
   php8.3-bcmath php8.3-curl php8.3-zip php8.3-gd php8.3-intl
 ```
@@ -60,7 +65,44 @@ php -v
 composer --version
 ```
 
-## 3. Application Files
+## 3. PostgreSQL Database
+
+Generate a strong production database password on the VPS:
+
+```bash
+openssl rand -base64 32
+```
+
+Create a clean production database and application user. Replace
+`PASTE_STRONG_PASSWORD_HERE` with the generated password:
+
+```bash
+sudo -u postgres psql
+```
+
+Inside `psql`:
+
+```sql
+CREATE USER navkwabuild_app WITH PASSWORD 'PASTE_STRONG_PASSWORD_HERE';
+CREATE DATABASE navkwabuild OWNER navkwabuild_app;
+GRANT CONNECT ON DATABASE navkwabuild TO navkwabuild_app;
+\c navkwabuild
+GRANT USAGE, CREATE ON SCHEMA public TO navkwabuild_app;
+\q
+```
+
+Confirm the app user can connect:
+
+```bash
+PGPASSWORD='PASTE_STRONG_PASSWORD_HERE' psql \
+  -h 127.0.0.1 \
+  -p 5432 \
+  -U navkwabuild_app \
+  -d navkwabuild \
+  -c 'select current_database(), current_user;'
+```
+
+## 4. Application Files
 
 Clone the repository:
 
@@ -89,11 +131,11 @@ CORS_ALLOWED_ORIGINS=https://app.navkwabuild.com
 APP_VERSION=2026.07.31-1
 NAVKWA_BUILD_SEED_DEVELOPMENT=false
 DB_CONNECTION=pgsql
-DB_HOST=<production-postgres-host>
+DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_DATABASE=navkwabuild
-DB_USERNAME=<production-db-user>
-DB_PASSWORD=<production-db-password>
+DB_USERNAME=navkwabuild_app
+DB_PASSWORD=<the-password-you-generated>
 DB_SSLMODE=require
 MAIL_MAILER=smtp
 MAIL_HOST=<smtp-host>
@@ -115,25 +157,31 @@ php artisan key:generate --show
 
 Do not copy local `.env` values to production.
 
-## 4. Build And Deploy
+If you later move PostgreSQL to a managed external database, keep the same
+Laravel keys but replace `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD`, and any TLS
+certificate settings required by that provider.
+
+## 5. Build And Deploy
 
 Run the deployment script:
 
 ```bash
 cd /var/www/navkwabuild/current
-./deploy/hetzner/scripts/deploy-production.sh
+./deploy/hostinger/scripts/deploy-production.sh
 ```
 
 This installs dependencies, builds the frontend, checks production safety,
 runs migrations with `--force`, caches Laravel config/routes/views, and
 restarts workers when Supervisor is already configured.
 
-## 5. Nginx
+## 6. Nginx
 
-Install the Nginx site:
+The generic Laravel Nginx config is not enough for this project because Navkwa
+Build serves a React frontend and a Laravel API from one domain. Install this
+repo's Nginx site:
 
 ```bash
-sudo cp deploy/hetzner/nginx/navkwabuild.conf /etc/nginx/sites-available/navkwabuild
+sudo cp deploy/hostinger/nginx/navkwabuild.conf /etc/nginx/sites-available/navkwabuild
 sudo ln -s /etc/nginx/sites-available/navkwabuild /etc/nginx/sites-enabled/navkwabuild
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
@@ -146,7 +194,7 @@ If your PHP-FPM socket is not `/run/php/php8.3-fpm.sock`, edit the Nginx file:
 ls /run/php/php*-fpm.sock
 ```
 
-## 6. HTTPS
+## 7. HTTPS
 
 After DNS resolves to the server, issue TLS:
 
@@ -156,12 +204,12 @@ sudo certbot --nginx -d app.navkwabuild.com
 sudo certbot renew --dry-run
 ```
 
-## 7. Queue Worker And Scheduler
+## 8. Queue Worker And Scheduler
 
 Install Supervisor worker config:
 
 ```bash
-sudo cp deploy/hetzner/supervisor/navkwabuild-worker.conf /etc/supervisor/conf.d/navkwabuild-worker.conf
+sudo cp deploy/hostinger/supervisor/navkwabuild-worker.conf /etc/supervisor/conf.d/navkwabuild-worker.conf
 sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl status
@@ -170,11 +218,11 @@ sudo supervisorctl status
 Install Laravel scheduler:
 
 ```bash
-sudo cp deploy/hetzner/cron/navkwabuild-scheduler /etc/cron.d/navkwabuild-scheduler
+sudo cp deploy/hostinger/cron/navkwabuild-scheduler /etc/cron.d/navkwabuild-scheduler
 sudo chmod 0644 /etc/cron.d/navkwabuild-scheduler
 ```
 
-## 8. First Cloud Console Admin
+## 9. First Cloud Console Admin
 
 Create the first production Cloud Console administrator:
 
@@ -186,13 +234,13 @@ php artisan navkwabuild:platform-admin admin@navkwabuild.com --create
 Sign in at `https://app.navkwabuild.com/cloud-console`, change the temporary
 password immediately, and enable MFA.
 
-## 9. Health Checks
+## 10. Health Checks
 
 Run:
 
 ```bash
 cd /var/www/navkwabuild/current
-./deploy/hetzner/scripts/healthcheck.sh
+./deploy/hostinger/scripts/healthcheck.sh
 ```
 
 Expected:
@@ -202,16 +250,16 @@ Expected:
 - `php artisan navkwabuild:production-check --strict` passes
 - Supervisor shows the worker running
 
-## 10. Backups
+## 11. Backups
 
-Hetzner server backups/snapshots protect the VM disk, but database and uploaded
+Hostinger VPS backups/snapshots protect the VM disk, but database and uploaded
 file backups should also be exported off-server.
 
 Create a backup env file:
 
 ```bash
 sudo mkdir -p /etc/navkwabuild
-sudo cp deploy/hetzner/backup.env.example /etc/navkwabuild/backup.env
+sudo cp deploy/hostinger/backup.env.example /etc/navkwabuild/backup.env
 sudo chmod 0600 /etc/navkwabuild/backup.env
 sudo nano /etc/navkwabuild/backup.env
 ```
@@ -219,7 +267,7 @@ sudo nano /etc/navkwabuild/backup.env
 Run the backup script manually first:
 
 ```bash
-sudo ./deploy/hetzner/scripts/backup-postgres-and-storage.sh
+sudo ./deploy/hostinger/scripts/backup-postgres-and-storage.sh
 ```
 
 Then schedule it with cron after confirming the backup files are valid.

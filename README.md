@@ -113,11 +113,11 @@ DB_PASSWORD=navkwabuild_secret
 ## Production Notes
 
 - Start from `backend/.env.production.example` and `frontend/.env.production.example`; do not deploy the local `.env.example` values.
-- Hetzner deployment configs and scripts live in `deploy/hetzner/`.
-- For the initial Hetzner launch, use `https://app.navkwabuild.com` for the ERP, `https://app.navkwabuild.com/cloud-console` for Navkwa Build Cloud Console, and `/api/v1` for the Laravel API.
+- Hostinger deployment configs and scripts live in `deploy/hostinger/`.
+- For the initial Hostinger launch, use `https://app.navkwabuild.com` for the ERP, `https://app.navkwabuild.com/cloud-console` for Navkwa Build Cloud Console, and `/api/v1` for the Laravel API.
 - Set `APP_URL=https://app.navkwabuild.com`, `FRONTEND_URL=https://app.navkwabuild.com`, and `CORS_ALLOWED_ORIGINS=https://app.navkwabuild.com`.
 - Keep `VITE_API_URL` blank when the frontend and API are served from the same domain behind `/api/v1`; set it only for separate frontend/API domains.
-- Set `APP_ENV=production`, `APP_DEBUG=false`, a real `APP_KEY`, `APP_VERSION`, secure mail/storage credentials, and a managed PostgreSQL database with TLS.
+- Set `APP_ENV=production`, `APP_DEBUG=false`, a real `APP_KEY`, `APP_VERSION`, secure mail/storage credentials, and a production PostgreSQL database with TLS.
 - Keep `NAVKWA_BUILD_SEED_DEVELOPMENT=false` in production. Run `php artisan migrate --force`, not `migrate:fresh --seed`, on production data.
 - Before release, run `composer release-check` from `backend/` with production environment variables loaded, and `npm run release-check` from `frontend/`.
 - Run `composer install --no-dev --optimize-autoloader`, `php artisan migrate --force`, `php artisan config:cache`, `php artisan route:cache`, and `php artisan view:cache` during release.
