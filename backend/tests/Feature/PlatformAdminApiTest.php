@@ -2,8 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Branch;
+use App\Http\Middleware\CheckPermission;
 use App\Models\AuditLog;
+use App\Models\Branch;
 use App\Models\Company;
 use App\Models\CompanyFeatureFlag;
 use App\Models\CompanySubscription;
@@ -16,9 +17,11 @@ use App\Models\PlatformSupportTicket;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class PlatformAdminApiTest extends TestCase
@@ -61,6 +64,32 @@ class PlatformAdminApiTest extends TestCase
         $this->assertDatabaseHas('platform_feature_flags', ['key' => 'module.projects']);
         $this->assertDatabaseHas('platform_subscription_plans', ['code' => 'professional']);
         $this->assertDatabaseHas('platform_settings', ['setting_key' => 'monitoring']);
+    }
+
+    public function test_platform_admin_web_tokens_are_not_misclassified_as_impersonation_sessions(): void
+    {
+        [$platformUser] = $this->userWithPermissions(['platform.manage']);
+        $middleware = app(CheckPermission::class);
+
+        $webToken = $platformUser->createToken('structra-web', ['*'])->accessToken;
+        $webRequest = Request::create('/api/v1/platform-admin', 'GET');
+        $webRequest->setUserResolver(fn (): User => $platformUser->withAccessToken($webToken));
+
+        $response = $middleware->handle($webRequest, fn () => response()->json(['ok' => true]), 'platform.manage');
+
+        $this->assertSame(200, $response->getStatusCode());
+
+        $impersonationToken = $platformUser->createToken('platform-impersonation', ['impersonation'])->accessToken;
+        $impersonationRequest = Request::create('/api/v1/platform-admin', 'GET');
+        $impersonationRequest->setUserResolver(fn (): User => $platformUser->withAccessToken($impersonationToken));
+
+        try {
+            $middleware->handle($impersonationRequest, fn () => response()->json(['ok' => true]), 'platform.manage');
+            $this->fail('Impersonation tokens must not access Structra Cloud Console administration.');
+        } catch (HttpException $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+            $this->assertSame('Impersonation sessions cannot access Structra Cloud Console administration.', $exception->getMessage());
+        }
     }
 
     public function test_platform_admin_can_manage_navkwa_cloud_console_users_and_own_login_details(): void

@@ -16,7 +16,8 @@ class CheckPermission
         $permissions = array_filter(explode('|', $permission));
 
         $token = $user?->currentAccessToken();
-        $isImpersonationToken = $token instanceof PersonalAccessToken && $token->can('impersonation');
+        $tokenAbilities = $token instanceof PersonalAccessToken ? ($token->abilities ?? []) : [];
+        $isImpersonationToken = in_array('impersonation', $tokenAbilities, true) && ! in_array('*', $tokenAbilities, true);
         $requiresPlatformAccess = collect($permissions)->contains(
             fn (string $required): bool => str_starts_with($required, 'platform.'),
         );
