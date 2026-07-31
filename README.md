@@ -113,6 +113,7 @@ DB_PASSWORD=navkwabuild_secret
 ## Production Notes
 
 - Start from `backend/.env.production.example` and `frontend/.env.production.example`; do not deploy the local `.env.example` values.
+- Hetzner deployment configs and scripts live in `deploy/hetzner/`.
 - For the initial Hetzner launch, use `https://app.navkwabuild.com` for the ERP, `https://app.navkwabuild.com/cloud-console` for Navkwa Build Cloud Console, and `/api/v1` for the Laravel API.
 - Set `APP_URL=https://app.navkwabuild.com`, `FRONTEND_URL=https://app.navkwabuild.com`, and `CORS_ALLOWED_ORIGINS=https://app.navkwabuild.com`.
 - Keep `VITE_API_URL` blank when the frontend and API are served from the same domain behind `/api/v1`; set it only for separate frontend/API domains.
