@@ -750,6 +750,42 @@ function normalizeTheme(theme) {
   return theme === 'dark' ? 'dark' : 'light'
 }
 
+function normalizeThemePreference(theme) {
+  return theme === 'dark' || theme === 'light' ? theme : null
+}
+
+const THEME_PREFERENCE_KEY = 'structra.theme.preference'
+
+function userThemePreferenceKey(userId) {
+  return userId ? `${THEME_PREFERENCE_KEY}.${userId}` : THEME_PREFERENCE_KEY
+}
+
+function readThemePreference(userId = null, fallbackToGlobal = true) {
+  try {
+    const scopedTheme = userId ? normalizeThemePreference(localStorage.getItem(userThemePreferenceKey(userId))) : null
+    if (scopedTheme) return scopedTheme
+
+    return fallbackToGlobal ? normalizeThemePreference(localStorage.getItem(THEME_PREFERENCE_KEY)) : null
+  } catch {
+    return null
+  }
+}
+
+function writeThemePreference(theme, userId = null) {
+  const nextTheme = normalizeTheme(theme)
+
+  try {
+    localStorage.setItem(THEME_PREFERENCE_KEY, nextTheme)
+    if (userId) {
+      localStorage.setItem(userThemePreferenceKey(userId), nextTheme)
+    }
+  } catch {
+    // Theme changes should still work for the current session if storage is unavailable.
+  }
+
+  return nextTheme
+}
+
 function App() {
   const cloudConsolePortal = isCloudConsolePath()
   const [tokenReady, setTokenReady] = useState(Boolean(getToken()))
@@ -792,6 +828,7 @@ function App() {
   const [reports, setReports] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [themePreference, setThemePreference] = useState(() => readThemePreference())
 
   const [projectForm, setProjectForm] = useState(emptyProjectForm)
   const [taskForm, setTaskForm] = useState(emptyTaskForm)
@@ -838,7 +875,8 @@ function App() {
   const allowedNavItems = useMemo(() => accessibleNavItems(user, { cloudConsole: cloudConsolePortal }), [cloudConsolePortal, user])
   const persistedCompanyTheme = normalizeTheme(organization?.company?.settings?.appearance?.theme)
   const adminSelectedTheme = canAdministerRecords(user) ? adminForms.company?.appearance_theme : null
-  const activeTheme = tokenReady ? normalizeTheme(adminSelectedTheme || persistedCompanyTheme) : 'light'
+  const userThemePreference = normalizeThemePreference(themePreference)
+  const activeTheme = tokenReady ? normalizeTheme(userThemePreference || adminSelectedTheme || persistedCompanyTheme) : normalizeTheme(userThemePreference || 'light')
 
   useEffect(() => {
     refreshWorkspaceRef.current = refreshWorkspace
@@ -849,6 +887,11 @@ function App() {
     document.documentElement.dataset.theme = activeTheme
     document.documentElement.style.colorScheme = activeTheme
   }, [activeTheme])
+
+  useEffect(() => {
+    if (!currentUserId) return
+    setThemePreference(readThemePreference(currentUserId, false))
+  }, [currentUserId])
 
   useEffect(() => {
     if (tokenReady) {
@@ -1279,39 +1322,8 @@ function App() {
     }
   }
 
-  function setCompanyThemeForm(theme) {
-    const nextTheme = normalizeTheme(theme)
-
-    setAdminForms((current) => {
-      const settings = current.company.settings || organization?.company?.settings || {}
-
-      return {
-        ...current,
-        company: {
-          ...current.company,
-          appearance_theme: nextTheme,
-          settings: {
-            ...settings,
-            appearance: {
-              ...(settings.appearance || {}),
-              theme: nextTheme,
-            },
-          },
-        },
-      }
-    })
-  }
-
-  async function toggleCompanyTheme() {
-    const previousTheme = activeTheme
-    const nextTheme = activeTheme === 'dark' ? 'light' : 'dark'
-
-    setCompanyThemeForm(nextTheme)
-    const result = await runAction(() => api.updateCompany({ settings: { appearance: { theme: nextTheme } } }), 'Company theme updated.')
-
-    if (!result) {
-      setCompanyThemeForm(previousTheme)
-    }
+  function toggleThemePreference() {
+    setThemePreference(writeThemePreference(activeTheme === 'dark' ? 'light' : 'dark', currentUserId))
   }
 
   async function createProject(event) {
@@ -2770,7 +2782,6 @@ function App() {
       : activeView === 'platform'
         ? 'Structra Cloud Console'
         : navItems.find((item) => item.id === activeView)?.label || 'Workspace'
-  const showAdminThemeToggle = activeView === 'admin' && canAdministerRecords(user)
 
   return (
     <div className="app-shell">
@@ -2816,11 +2827,9 @@ function App() {
         <header className={`topbar ${activeView === 'platform' ? 'cloud-app-topbar' : ''}`}>
           <div className="topbar-title">
             <h1>{activeTitle}</h1>
-            {showAdminThemeToggle && (
-              <ThemeToggle theme={activeTheme} onToggle={toggleCompanyTheme} disabled={loading} />
-            )}
           </div>
           <div className="topbar-actions">
+            <ThemeToggle theme={activeTheme} onToggle={toggleThemePreference} disabled={loading} />
             <button type="button" className="icon-button" onClick={refreshWorkspace} title="Refresh">
               <RefreshCcw size={17} />
             </button>
@@ -4229,7 +4238,7 @@ function PlatformAdminView({
 
     return (
       <section className="panel">
-        <PanelTitle icon={Building2} title="Company Account" />
+        <PanelTitle icon={Building2} title="Edit Company Account" />
         <form className="form-grid two" onSubmit={saveCompanyAccount}>
           <Field label="Company Name" name="name" value={forms.company_account.name} onChange={setPlatformForm('company_account')} required />
           <Field label="Registration Number" name="registration_number" value={forms.company_account.registration_number} onChange={setPlatformForm('company_account')} />
@@ -4262,8 +4271,8 @@ function PlatformAdminView({
           <Field label="Project Limit" type="number" name="project_limit" value={forms.company_account.project_limit} onChange={setPlatformForm('company_account')} />
           <Field label="Branch Limit" type="number" name="branch_limit" value={forms.company_account.branch_limit} onChange={setPlatformForm('company_account')} />
           <div className="row-actions span-2">
-            <button type="submit" className="primary-action"><CheckCircle2 size={17} />Save account</button>
-            <button type="button" className="table-action danger" onClick={() => archiveCompany(company)}><Archive size={14} />Archive account</button>
+            <button type="submit" className="primary-action"><CheckCircle2 size={17} />Update account</button>
+            <button type="button" className="table-action danger" onClick={() => archiveCompany(company)}><Archive size={14} />Archive / Delete account</button>
           </div>
         </form>
       </section>
@@ -4397,13 +4406,16 @@ function PlatformAdminView({
   }
 
   function renderCompanyWorkspace() {
-    const workspaceTabs = ['overview', 'subscription', 'modules', 'users', 'branches', 'projects', 'revenue', 'usage', 'storage', 'automation', 'security', 'integrations', 'audit', 'backups', 'settings', 'branding', 'support', 'timeline', 'analytics']
+    const workspaceTabs = ['overview', 'account', 'subscription', 'modules', 'users', 'branches', 'projects', 'revenue', 'usage', 'storage', 'automation', 'security', 'integrations', 'audit', 'backups', 'settings', 'branding', 'support', 'timeline', 'analytics']
 
     return (
       <section className="cloud-company-workspace">
         <aside className="cloud-company-list">
           <div className="cloud-list-head">
-            <strong>Companies</strong>
+            <div>
+              <strong>Companies</strong>
+              <span>{companies.length} active</span>
+            </div>
             <button type="button" className="table-action" onClick={() => setWizardOpen(true)}><Plus size={14} />Provision</button>
           </div>
           {companies.map((company) => (
@@ -4417,29 +4429,38 @@ function PlatformAdminView({
               <Badge value={Number(company.health_score || 0) >= 80 ? 'healthy' : Number(company.health_score || 0) >= 60 ? 'warning' : 'critical'} />
             </button>
           ))}
-          {archivedCompanies.length > 0 && (
-            <div className="cloud-archived-list">
-              <strong>Archived Companies</strong>
-              {archivedCompanies.map((company) => (
+          <div className="cloud-archived-list">
+            <div className="cloud-archive-head">
+              <strong>Archived Accounts</strong>
+              <span>{archivedCompanies.length}</span>
+            </div>
+            {archivedCompanies.length > 0 ? (
+              archivedCompanies.map((company) => (
                 <article key={company.id}>
                   <div>
                     <span>{company.name}</span>
                     <small>{company.tenant_key} | {shortDate(company.deleted_at)}</small>
                   </div>
-                  <button type="button" className="table-action" onClick={() => restoreCompany(company)}><RefreshCcw size={14} />Restore</button>
+                  <button type="button" className="table-action" onClick={() => restoreCompany(company)}><RefreshCcw size={14} />Reinstate</button>
                 </article>
-              ))}
-            </div>
-          )}
+              ))
+            ) : (
+              <p className="cloud-archive-empty">No archived company accounts.</p>
+            )}
+          </div>
         </aside>
         <main className="cloud-company-main">
           {selectedCompany ? (
             <>
               <header className="cloud-company-header">
-                <div>
+                <div className="cloud-company-heading">
                   <span>{selectedCompany.tenant_key}</span>
                   <h2>{selectedCompany.name}</h2>
                   <small>{selectedCompany.country} | {selectedCompany.default_currency} | {selectedCompany.subscription?.plan?.name || 'No subscription'}</small>
+                  <div className="cloud-company-actions">
+                    <button type="button" className="table-action" onClick={() => setCompanyWorkspaceTab('account')}><Settings size={14} />Edit account</button>
+                    <button type="button" className="table-action danger" onClick={() => archiveCompany(selectedCompany)}><Archive size={14} />Archive / Delete</button>
+                  </div>
                 </div>
                 <div className="cloud-status-meta">
                   <Metric label="Health" value={`${selectedCompany.health_score || 0}%`} />

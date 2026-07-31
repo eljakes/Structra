@@ -333,6 +333,18 @@ textarea:focus-visible {
     0 10px 22px rgba(7, 18, 28, 0.18);
 }
 
+.cloud-app-topbar .theme-toggle {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.cloud-app-topbar .theme-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .theme-toggle {
   min-height: 36px;
   border: 1px solid var(--line);
@@ -1762,6 +1774,17 @@ textarea:focus-visible {
   flex-wrap: wrap;
 }
 
+.cloud-list-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.cloud-list-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+}
+
 .cloud-company-list button {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto;
@@ -1808,6 +1831,41 @@ textarea:focus-visible {
   color: var(--muted);
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.cloud-archive-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cloud-archive-head strong {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.cloud-archive-head span {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.cloud-archive-empty {
+  margin: 0;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 12px;
 }
 
 .cloud-archived-list article {
@@ -1869,6 +1927,35 @@ textarea:focus-visible {
   margin: 4px 0;
   font-size: 22px;
   overflow-wrap: anywhere;
+}
+
+.cloud-company-heading {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.cloud-company-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cloud-company-actions .table-action {
+  background: rgba(255, 255, 255, 0.13);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.cloud-company-actions .table-action:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.cloud-company-actions .table-action.danger {
+  background: rgba(255, 255, 255, 0.13);
+  color: #ffe5e2;
+  box-shadow: inset 0 0 0 1px rgba(255, 151, 141, 0.36);
 }
 
 .cloud-workspace-tabs {
