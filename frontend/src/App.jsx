@@ -661,7 +661,7 @@ const emptyPlatformForms = {
   support_update: { id: '', status: 'open', priority: 'medium', assigned_to: '', resolution_notes: '' },
   deployment: { title: '', release_version: '', target_scope: 'all_customers', scheduled_at: '', notes: '' },
   backup: { company_id: '', backup_type: 'tenant', storage_path: '' },
-  settings: { database_warning_ms: 250, database_critical_ms: 1000, queue_pending_warning: 50, failed_jobs_critical: 1, storage_warning_percent: 85, storage_critical_percent: 95, security_alert_critical: 1, ai_enabled: 'false', ai_usage_percent: '', ai_monthly_token_limit: '', ai_monthly_budget: '', ai_cost_month_to_date: '' },
+  settings: { database_warning_ms: 250, database_critical_ms: 1000, queue_pending_warning: 50, failed_jobs_critical: 1, storage_warning_percent: 85, storage_critical_percent: 95, security_alert_critical: 1, server_count: '', servers_online: '', ai_enabled: 'false', ai_usage_percent: '', ai_monthly_token_limit: '', ai_monthly_budget: '', ai_cost_month_to_date: '' },
   impersonation: { company_id: '', user_id: '', reason: '', authorization_reference: '', expires_minutes: 30 },
   success: { company_id: '', success_manager: '', last_meeting_at: '', next_meeting_at: '', training_completed_percent: '', adoption_percent: '', risk_percent: '', expansion_opportunity: '', notes: '' },
   staff: { id: '', name: '', email: '', password: '', phone: '', job_title: '', status: 'active', permissions: ['platform.manage'] },
@@ -2652,7 +2652,7 @@ function App() {
 
   async function updatePlatformSettings(event) {
     event.preventDefault()
-    const monitoringKeys = ['database_warning_ms', 'database_critical_ms', 'queue_pending_warning', 'failed_jobs_critical', 'storage_warning_percent', 'storage_critical_percent', 'security_alert_critical']
+    const monitoringKeys = ['database_warning_ms', 'database_critical_ms', 'queue_pending_warning', 'failed_jobs_critical', 'storage_warning_percent', 'storage_critical_percent', 'security_alert_critical', 'server_count', 'servers_online']
     const monitoring = monitoringKeys.reduce((payload, key) => ({
       ...payload,
       [key]: platformForms.settings[key] === '' ? null : Number(platformForms.settings[key]),
@@ -3637,7 +3637,7 @@ function PlatformAdminView({
   }, [companies, effectiveSelectedCompanyId, forms.company_account.company_id, hydrateCompanyAccountForm])
 
   useEffect(() => {
-    const keys = ['database_warning_ms', 'database_critical_ms', 'queue_pending_warning', 'failed_jobs_critical', 'storage_warning_percent', 'storage_critical_percent', 'security_alert_critical']
+    const keys = ['database_warning_ms', 'database_critical_ms', 'queue_pending_warning', 'failed_jobs_critical', 'storage_warning_percent', 'storage_critical_percent', 'security_alert_critical', 'server_count', 'servers_online']
     if (!monitoringThresholds || !keys.some((key) => monitoringThresholds[key] !== undefined)) return
 
     setPlatformForms((current) => ({
@@ -5103,6 +5103,8 @@ function PlatformAdminView({
             <Field label="Storage Warning %" type="number" name="storage_warning_percent" value={forms.settings.storage_warning_percent} onChange={setPlatformForm('settings')} />
             <Field label="Storage Critical %" type="number" name="storage_critical_percent" value={forms.settings.storage_critical_percent} onChange={setPlatformForm('settings')} />
             <Field label="Security Alert Critical" type="number" name="security_alert_critical" value={forms.settings.security_alert_critical} onChange={setPlatformForm('settings')} />
+            <Field label="Server Count" type="number" name="server_count" value={forms.settings.server_count} onChange={setPlatformForm('settings')} />
+            <Field label="Servers Online" type="number" name="servers_online" value={forms.settings.servers_online} onChange={setPlatformForm('settings')} />
             <Select label="AI Services" name="ai_enabled" value={forms.settings.ai_enabled} onChange={setPlatformForm('settings')}>
               <option value="true">Enabled</option>
               <option value="false">Disabled</option>

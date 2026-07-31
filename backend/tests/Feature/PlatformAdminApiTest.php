@@ -92,6 +92,59 @@ class PlatformAdminApiTest extends TestCase
         }
     }
 
+    public function test_platform_monitoring_uses_real_ops_configuration_for_local_preview(): void
+    {
+        Storage::fake('local');
+        config([
+            'app.url' => 'http://127.0.0.1:8010',
+            'app.version' => 'test-version',
+        ]);
+
+        [$platformUser] = $this->userWithPermissions(['platform.manage']);
+        Sanctum::actingAs($platformUser);
+
+        $this->getJson('/api/v1/platform-admin')
+            ->assertOk()
+            ->assertJsonPath('monitoring.checks.ssl.status', 'neutral')
+            ->assertJsonPath('monitoring.checks.ssl.value', 'Local HTTP preview')
+            ->assertJsonPath('monitoring.thresholds.server_count', null)
+            ->assertJsonPath('monitoring.servers_online_label', null)
+            ->assertJsonPath('monitoring.app_version', 'test-version');
+
+        $this->patchJson('/api/v1/platform-admin/settings', [
+            'settings' => [
+                'monitoring' => [
+                    'database_warning_ms' => 250,
+                    'database_critical_ms' => 1000,
+                    'queue_pending_warning' => 50,
+                    'failed_jobs_critical' => 1,
+                    'storage_warning_percent' => 85,
+                    'storage_critical_percent' => 95,
+                    'security_alert_critical' => 1,
+                    'server_count' => 2,
+                    'servers_online' => 2,
+                ],
+            ],
+        ])->assertOk();
+
+        $backup = $this->postJson('/api/v1/platform-admin/backups', [
+            'backup_type' => 'platform',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('backup.status', 'completed')
+            ->json('backup');
+
+        Storage::disk('local')->assertExists($backup['storage_path']);
+
+        $this->getJson('/api/v1/platform-admin')
+            ->assertOk()
+            ->assertJsonPath('monitoring.status', 'operational')
+            ->assertJsonPath('monitoring.servers_online_label', '2 / 2')
+            ->assertJsonPath('monitoring.checks.backups.status', 'healthy')
+            ->assertJsonPath('monitoring.checks.backups.value', 'Completed '.$backup['backup_number'])
+            ->assertJsonPath('command_center.status', 'healthy');
+    }
+
     public function test_platform_admin_can_manage_navkwa_cloud_console_users_and_own_login_details(): void
     {
         [$platformUser] = $this->userWithPermissions(['platform.manage']);

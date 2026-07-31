@@ -1442,6 +1442,14 @@ class PlatformAdminController extends ApiController
     private function sslHealth(): array
     {
         $url = (string) config('app.url');
+        $host = parse_url($url, PHP_URL_HOST);
+        $isLocalHttp = app()->environment(['local', 'testing'])
+            && Str::startsWith($url, 'http://')
+            && in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+
+        if ($isLocalHttp) {
+            return ['label' => 'SSL', 'status' => 'neutral', 'value' => 'Local HTTP preview'];
+        }
 
         return Str::startsWith($url, 'https://')
             ? ['label' => 'SSL', 'status' => 'healthy', 'value' => 'HTTPS configured']
@@ -1619,6 +1627,11 @@ class PlatformAdminController extends ApiController
         foreach (['database_warning_ms', 'database_critical_ms', 'queue_pending_warning', 'failed_jobs_critical', 'storage_warning_percent', 'storage_critical_percent', 'security_alert_critical'] as $key) {
             $settings[$key] = (float) $settings[$key];
         }
+        foreach (['server_count', 'servers_online'] as $key) {
+            $settings[$key] = $settings[$key] === null || $settings[$key] === ''
+                ? null
+                : max(0, (int) $settings[$key]);
+        }
         $settings['enabled'] = (bool) $settings['enabled'];
 
         return $settings;
@@ -1635,6 +1648,8 @@ class PlatformAdminController extends ApiController
             'storage_warning_percent' => 85,
             'storage_critical_percent' => 95,
             'security_alert_critical' => 1,
+            'server_count' => null,
+            'servers_online' => null,
         ];
     }
 
