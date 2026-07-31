@@ -310,6 +310,29 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.cloud-app-topbar {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(135deg, #102033, #17485a);
+  color: #ffffff;
+}
+
+.cloud-app-topbar h1 {
+  color: #ffffff;
+}
+
+.cloud-app-topbar .icon-button {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.cloud-app-topbar .icon-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 10px 22px rgba(7, 18, 28, 0.18);
+}
+
 .theme-toggle {
   min-height: 36px;
   border: 1px solid var(--line);
@@ -558,6 +581,278 @@ textarea:focus-visible {
   min-height: 356px;
 }
 
+.crm-page {
+  --crm-accent: #2364d8;
+}
+
+.crm-hero {
+  border: 1px solid rgba(201, 213, 226, 0.78);
+  border-radius: 8px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background:
+    linear-gradient(135deg, #132033 0%, #173c52 48%, #176656 100%);
+  color: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.crm-hero span {
+  display: block;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 12px;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.crm-hero h2 {
+  max-width: 760px;
+  margin: 6px 0 0;
+  font-size: 24px;
+  line-height: 1.18;
+}
+
+.crm-hero-metrics {
+  min-width: min(100%, 460px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.crm-hero .metric {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.crm-hero .metric span,
+.crm-hero .metric strong {
+  color: #ffffff;
+}
+
+.crm-dashboard-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.crm-lifecycle {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+}
+
+.crm-stage {
+  min-height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  display: grid;
+  align-content: space-between;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.crm-stage span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 740;
+  line-height: 1.25;
+}
+
+.crm-stage strong {
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.crm-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 220px;
+}
+
+.crm-chip {
+  min-height: 22px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--muted);
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.crm-mini-metrics {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.crm-timeline {
+  display: grid;
+  gap: 9px;
+}
+
+.crm-timeline-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 112px 160px minmax(160px, 1fr) minmax(120px, 0.8fr) auto;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.crm-timeline-item span,
+.crm-timeline-item small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.crm-timeline-item strong,
+.crm-timeline-item p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.crm-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+  gap: 8px;
+}
+
+.crm-menu-grid span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--ink-soft);
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 730;
+}
+
+.tender-page {
+  --tender-accent: #11835b;
+}
+
+.tender-hero {
+  border: 1px solid rgba(201, 213, 226, 0.78);
+  border-radius: 8px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background:
+    linear-gradient(135deg, #162130 0%, #1c4b4d 48%, #526016 100%);
+  color: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.tender-hero span {
+  display: block;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 12px;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.tender-hero h2 {
+  max-width: 760px;
+  margin: 6px 0 0;
+  font-size: 24px;
+  line-height: 1.18;
+}
+
+.tender-hero-metrics {
+  min-width: min(100%, 460px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tender-hero .metric {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.tender-hero .metric span,
+.tender-hero .metric strong {
+  color: #ffffff;
+}
+
+.tender-dashboard-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tender-create-form {
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  align-items: end;
+}
+
+.tender-workflow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.tender-workflow-step {
+  min-height: 86px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  display: grid;
+  align-content: space-between;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.tender-workflow-step span {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 830;
+}
+
+.tender-workflow-step strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.tender-menu-grid,
+.tender-tab-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+  gap: 8px;
+}
+
+.tender-menu-grid span,
+.tender-tab-grid span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--ink-soft);
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 730;
+}
+
+.tender-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.tender-workspace-head {
+  margin-bottom: 0;
+}
+
 .analytics-chart-empty {
   min-height: 280px;
   display: grid;
@@ -699,6 +994,27 @@ textarea:focus-visible {
 .form-grid.automation-form {
   grid-template-columns: repeat(4, minmax(140px, 1fr));
   align-items: end;
+}
+
+.form-grid.automation-settings-form {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  align-items: end;
+}
+
+.automation-settings-submit {
+  align-self: end;
+}
+
+.automation-channel-selector {
+  align-self: stretch;
+}
+
+.compact-access-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-access-grid .access-option {
+  min-height: 82px;
 }
 
 .automation-toolbar {
@@ -909,6 +1225,894 @@ textarea:focus-visible {
 
 .module-tabs button.active {
   box-shadow: 0 12px 24px rgba(35, 100, 216, 0.12);
+}
+
+.platform-admin-page {
+  gap: 18px;
+}
+
+.platform-tabs {
+  flex-wrap: wrap;
+  overflow: visible;
+  padding-bottom: 2px;
+}
+
+.platform-tabs button {
+  flex: 0 1 auto;
+}
+
+.platform-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.form-grid.platform-company-form {
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  align-items: end;
+}
+
+.form-grid.platform-plan-form,
+.form-grid.platform-branding-form {
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  align-items: end;
+}
+
+.platform-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.feature-toggle {
+  min-height: 104px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 12px;
+  text-align: left;
+  box-shadow: var(--shadow-soft);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.feature-toggle:hover {
+  border-color: rgba(35, 100, 216, 0.42);
+  transform: translateY(-1px);
+}
+
+.feature-toggle.enabled {
+  background: rgba(24, 138, 90, 0.1);
+  border-color: rgba(24, 138, 90, 0.38);
+}
+
+.feature-toggle span,
+.feature-toggle small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feature-toggle strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.cloud-console-page {
+  gap: 16px;
+}
+
+.cloud-console-page,
+.cloud-console-page * {
+  min-width: 0;
+}
+
+.cloud-console-page .panel,
+.cloud-console-page .kpi,
+.cloud-console-page .metric,
+.cloud-console-page .feature-toggle {
+  overflow: hidden;
+}
+
+.cloud-console-page .grid-main {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+}
+
+.cloud-console-page .panel-title {
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.cloud-console-page .panel-title svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.cloud-console-page .panel-title h2,
+.cloud-console-page .kpi span,
+.cloud-console-page .kpi strong,
+.cloud-console-page .kpi small,
+.cloud-console-page .metric span,
+.cloud-console-page .metric strong,
+.cloud-console-page .feature-toggle span,
+.cloud-console-page .feature-toggle strong,
+.cloud-console-page .feature-toggle small {
+  overflow-wrap: anywhere;
+}
+
+.cloud-console-page .kpi-grid,
+.cloud-console-page .platform-kpi-grid,
+.cloud-console-page .cloud-status-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  align-items: stretch;
+}
+
+.cloud-console-page .kpi {
+  min-height: 126px;
+  display: grid;
+  align-content: start;
+}
+
+.cloud-console-page .kpi > div {
+  align-items: flex-start;
+}
+
+.cloud-console-page .kpi > div svg {
+  flex: 0 0 auto;
+}
+
+.cloud-console-page .metric {
+  min-height: 74px;
+  display: grid;
+  align-content: start;
+}
+
+.cloud-console-page .form-grid,
+.cloud-console-page .form-grid.two,
+.cloud-console-page .form-grid.platform-company-form,
+.cloud-console-page .form-grid.platform-plan-form,
+.cloud-console-page .form-grid.platform-branding-form {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+
+.cloud-console-page .span-2 {
+  grid-column: 1 / -1;
+}
+
+.cloud-console-page .primary-action,
+.cloud-console-page .table-action {
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+}
+
+.cloud-console-top {
+  min-height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: linear-gradient(135deg, #102033, #17485a);
+  color: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.cloud-console-top span,
+.cloud-status-hero span,
+.cloud-wizard-card header span {
+  display: block;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.cloud-console-top h2,
+.cloud-status-hero h2,
+.cloud-wizard-card header h2 {
+  margin: 4px 0 0;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.cloud-console-top h2 {
+  margin: 0;
+}
+
+.cloud-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.cloud-search-results {
+  border-left: 4px solid var(--blue);
+}
+
+.cloud-console-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 260px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.cloud-console-sidebar {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 8px;
+  align-self: start;
+}
+
+.cloud-console-sidebar > button,
+.cloud-context-nav button,
+.cloud-company-list button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  text-align: left;
+  box-shadow: 0 8px 18px rgba(27, 39, 55, 0.04);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.cloud-console-sidebar > button,
+.cloud-context-nav button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: start;
+}
+
+.cloud-console-sidebar > button svg,
+.cloud-context-nav button svg,
+.cloud-company-list button svg {
+  flex: 0 0 auto;
+}
+
+.cloud-console-sidebar > button span,
+.cloud-context-nav button span {
+  min-width: 0;
+}
+
+.cloud-console-sidebar > button.active,
+.cloud-context-nav button.active,
+.cloud-company-list button.active {
+  border-color: rgba(35, 100, 216, 0.42);
+  background: rgba(35, 100, 216, 0.09);
+  color: var(--blue-ink);
+}
+
+.cloud-context-nav {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: grid;
+  gap: 7px;
+}
+
+.cloud-context-nav strong {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.cloud-console-main,
+.cloud-command-center {
+  min-width: 0;
+}
+
+.cloud-status-hero {
+  min-height: 128px;
+  border-radius: 8px;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(min(100%, 320px), 420px);
+  align-items: stretch;
+  gap: 16px;
+  background: linear-gradient(135deg, #102033, #15664f);
+  color: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.cloud-status-hero.attention {
+  background: linear-gradient(135deg, #2c1920, #8a4d12);
+}
+
+.cloud-status-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 106px), 1fr));
+  gap: 8px;
+}
+
+.cloud-status-hero .metric,
+.cloud-company-header .metric {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cloud-status-hero .metric span,
+.cloud-status-hero .metric strong,
+.cloud-company-header .metric span,
+.cloud-company-header .metric strong {
+  color: #ffffff;
+}
+
+.cloud-command-hero p {
+  max-width: 680px;
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.45;
+}
+
+.cloud-status-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.cloud-ai-summary {
+  border-left: 4px solid var(--green);
+}
+
+.cloud-summary-grid,
+.cloud-success-scorecard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+}
+
+.cloud-summary-grid > div {
+  min-height: 116px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  background: var(--surface-soft);
+}
+
+.cloud-summary-grid strong,
+.cloud-marketplace-grid strong,
+.cloud-workflow-step strong {
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.cloud-summary-grid span,
+.cloud-marketplace-grid span,
+.cloud-marketplace-grid small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.cloud-health-matrix,
+.cloud-telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 10px;
+}
+
+.cloud-health-cell {
+  min-height: 104px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.cloud-health-cell.compact {
+  min-height: 96px;
+}
+
+.cloud-health-cell span,
+.cloud-workflow-step span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.cloud-health-cell strong {
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.cloud-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 142px), 1fr));
+  gap: 8px;
+}
+
+.cloud-metric-strip .metric {
+  min-height: 86px;
+}
+
+.cloud-activity-feed {
+  display: grid;
+  gap: 10px;
+}
+
+.cloud-activity-feed article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  background: var(--surface-soft);
+}
+
+.cloud-activity-feed svg,
+.cloud-timeline svg {
+  color: var(--blue);
+  margin-top: 2px;
+}
+
+.cloud-activity-feed article div {
+  display: grid;
+  gap: 2px;
+}
+
+.cloud-activity-feed span,
+.cloud-activity-feed small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cloud-activity-feed strong {
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.security-mfa-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.security-status-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.security-mfa-actions {
+  display: grid;
+  gap: 14px;
+}
+
+.mfa-recovery-block {
+  display: grid;
+  gap: 8px;
+}
+
+.mfa-recovery-block > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.recovery-code-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.recovery-code-grid code {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.cloud-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+
+.cloud-company-workspace {
+  display: grid;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.cloud-company-list {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.cloud-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 8px;
+  flex-wrap: wrap;
+}
+
+.cloud-company-list button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+  justify-items: start;
+  align-items: start;
+}
+
+.cloud-company-list button span,
+.cloud-company-list button small,
+.cloud-company-header small,
+.cloud-timeline small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cloud-company-list button > div:not(.cloud-company-logo) {
+  display: grid;
+  gap: 3px;
+}
+
+.cloud-company-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #d8ece6;
+  color: #0f5f4c;
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.cloud-archived-list {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.cloud-archived-list > strong {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.cloud-archived-list article {
+  border: 1px solid rgba(195, 56, 47, 0.22);
+  border-radius: 8px;
+  background: rgba(195, 56, 47, 0.06);
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+}
+
+.cloud-archived-list article div {
+  display: grid;
+  gap: 2px;
+}
+
+.cloud-archived-list article span {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.cloud-archived-list article small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cloud-archived-list .table-action {
+  justify-content: center;
+  width: 100%;
+}
+
+.cloud-company-main {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.cloud-company-header {
+  border-radius: 8px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(min(100%, 280px), 420px);
+  align-items: stretch;
+  gap: 14px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #152336, #245b63);
+  box-shadow: var(--shadow-soft);
+}
+
+.cloud-company-header span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.cloud-company-header h2 {
+  margin: 4px 0;
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+
+.cloud-workspace-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr));
+  overflow: visible;
+  padding: 0;
+}
+
+.cloud-workspace-tabs button {
+  width: 100%;
+  min-height: 40px;
+  justify-content: flex-start;
+  white-space: normal;
+  line-height: 1.2;
+  padding: 8px 10px;
+}
+
+.cloud-health-band,
+.cloud-review {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cloud-health-band {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+}
+
+.cloud-reason-list {
+  margin: 12px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cloud-reason {
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 12px;
+  font-weight: 720;
+  overflow-wrap: anywhere;
+}
+
+.cloud-console-page .platform-feature-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+}
+
+.cloud-feature-groups {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.cloud-feature-groups > section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface-soft);
+}
+
+.cloud-feature-group-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+  color: var(--ink);
+}
+
+.cloud-feature-group-head svg {
+  color: var(--blue);
+}
+
+.cloud-feature-group-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cloud-workflow-board {
+  display: grid;
+  gap: 10px;
+}
+
+.cloud-workflow-lane {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.cloud-workflow-step {
+  min-height: 74px;
+  border: 1px solid rgba(35, 100, 216, 0.18);
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  background: rgba(35, 100, 216, 0.06);
+}
+
+.cloud-marketplace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 10px;
+}
+
+.cloud-marketplace-grid article {
+  min-height: 108px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.cloud-marketplace-grid svg {
+  color: var(--amber);
+}
+
+.cloud-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cloud-console-page .table-wrap {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+}
+
+.cloud-console-page table {
+  min-width: 720px;
+}
+
+.cloud-console-page th,
+.cloud-console-page td {
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+.cloud-console-page .table-primary {
+  min-width: 0;
+}
+
+.cloud-reason.good {
+  color: var(--green);
+  background: rgba(24, 138, 90, 0.1);
+}
+
+.cloud-reason.warn {
+  color: var(--amber);
+  background: rgba(182, 106, 5, 0.12);
+}
+
+.cloud-reason.bad {
+  color: var(--red);
+  background: rgba(195, 56, 47, 0.1);
+}
+
+.cloud-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.cloud-timeline article {
+  border-left: 3px solid var(--blue);
+  padding-left: 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px;
+  align-items: start;
+}
+
+.cloud-timeline article span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cloud-wizard {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(8, 13, 19, 0.48);
+}
+
+.cloud-wizard-card {
+  width: min(980px, 100%);
+  max-height: min(760px, calc(100svh - 36px));
+  overflow: auto;
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-hover);
+}
+
+.cloud-wizard-card header {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink);
+}
+
+.cloud-wizard-card header span {
+  color: var(--muted);
+}
+
+.cloud-wizard-steps {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.cloud-wizard-steps button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-weight: 780;
+}
+
+.cloud-wizard-steps button.active {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #ffffff;
 }
 
 .procurement-request {
@@ -2175,6 +3379,17 @@ tbody tr:last-child td {
   backdrop-filter: blur(18px) saturate(1.12);
 }
 
+.auth-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auth-action-row .primary-action {
+  flex: 1 1 180px;
+}
+
 @keyframes authScenePan {
   0% {
     background-position:
@@ -2397,6 +3612,13 @@ tbody tr:last-child td {
 
 :root[data-theme="dark"] .metric,
 :root[data-theme="dark"] .analytics-chart-empty,
+:root[data-theme="dark"] .crm-stage,
+:root[data-theme="dark"] .crm-chip,
+:root[data-theme="dark"] .crm-timeline-item,
+:root[data-theme="dark"] .crm-menu-grid span,
+:root[data-theme="dark"] .tender-workflow-step,
+:root[data-theme="dark"] .tender-menu-grid span,
+:root[data-theme="dark"] .tender-tab-grid span,
 :root[data-theme="dark"] .procurement-totals,
 :root[data-theme="dark"] .mini-card,
 :root[data-theme="dark"] .supplier-card,
@@ -2416,6 +3638,28 @@ tbody tr:last-child td {
 :root[data-theme="dark"] .workflow-step > span {
   border-color: rgba(93, 116, 140, 0.28);
   background: var(--surface-soft);
+}
+
+:root[data-theme="dark"] .crm-hero {
+  border-color: rgba(93, 116, 140, 0.34);
+  background:
+    linear-gradient(135deg, #0d141d 0%, #162b3a 52%, #144c42 100%);
+}
+
+:root[data-theme="dark"] .crm-hero .metric {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+:root[data-theme="dark"] .tender-hero {
+  border-color: rgba(93, 116, 140, 0.34);
+  background:
+    linear-gradient(135deg, #0d141d 0%, #193037 52%, #334014 100%);
+}
+
+:root[data-theme="dark"] .tender-hero .metric {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 :root[data-theme="dark"] .module-tabs button:hover,
@@ -2589,11 +3833,57 @@ tbody tr:last-child td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .crm-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tender-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .form-grid.procurement-form,
   .form-grid.automation-form,
+  .form-grid.automation-settings-form,
   .form-grid.user-form,
+  .form-grid.platform-company-form,
+  .form-grid.platform-plan-form,
+  .form-grid.platform-branding-form,
+  .tender-create-form,
   .inline-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .platform-kpi-grid,
+  .platform-feature-grid,
+  .cloud-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cloud-console-layout,
+  .cloud-company-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-console-sidebar {
+    position: static;
+  }
+
+  .cloud-console-sidebar,
+  .cloud-context-nav {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .cloud-console-sidebar > button,
+  .cloud-context-nav button {
+    width: auto;
+    flex: 1 1 168px;
+  }
+
+  .cloud-context-nav {
+    flex: 1 1 100%;
   }
 
   .workflow-builder-grid {
@@ -2724,20 +4014,59 @@ tbody tr:last-child td {
   .form-grid.two,
   .form-grid.procurement-form,
   .form-grid.automation-form,
+  .form-grid.automation-settings-form,
   .form-grid.user-form,
   .automation-toolbar,
+    .crm-hero-metrics,
+    .crm-mini-metrics,
+    .tender-hero-metrics,
+    .platform-kpi-grid,
+    .platform-feature-grid,
+    .cloud-status-grid,
+    .cloud-status-meta,
+    .cloud-health-band,
+    .cloud-review,
+    .cloud-search,
+    .form-grid.platform-company-form,
+    .form-grid.platform-plan-form,
+    .form-grid.platform-branding-form,
+    .tender-create-form,
     .inline-form,
     .intelligence-hero,
-    .intelligence-filter-grid,
-    .file-grid,
+  .intelligence-filter-grid,
+  .file-grid,
   .procurement-totals,
-    .check-list,
-    .access-grid,
-    .portal-role-grid,
-    .procurement-cards,
+  .check-list,
+  .access-grid,
+  .portal-role-grid,
+  .procurement-cards,
   .supplier-card-grid,
   .supplier-metrics,
   .project-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-status-hero {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-console-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cloud-company-header {
+    grid-template-columns: 1fr;
+  }
+
+  .cloud-console-sidebar > button,
+  .cloud-context-nav button {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .crm-timeline-item {
     grid-template-columns: 1fr;
   }
 

@@ -4,14 +4,21 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Branch;
 use App\Models\Company;
+use App\Models\PlatformSecurityEvent;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\MfaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends ApiController
 {
@@ -24,10 +31,10 @@ class AuthController extends ApiController
             'currency' => ['nullable', 'string', 'size:3'],
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', Password::min(10)->letters()->numbers()],
+            'password' => ['required', $this->passwordRule()],
         ]);
 
-        $payload = DB::transaction(function () use ($data) {
+        $payload = DB::transaction(function () use ($data, $request) {
             $company = Company::query()->create([
                 'name' => $data['company_name'],
                 'country' => strtoupper($data['country'] ?? 'GH'),
@@ -65,6 +72,8 @@ class AuthController extends ApiController
                 'job_title' => 'Managing Director',
                 'password' => $data['password'],
                 'last_login_at' => now(),
+                'last_login_ip' => $request->ip(),
+                'password_changed_at' => now(),
             ]);
 
             return [$company, $branch, $user];
@@ -73,7 +82,7 @@ class AuthController extends ApiController
         [, , $user] = $payload;
 
         return response()->json([
-            'token' => $user->createToken('structra-web')->plainTextToken,
+            'token' => $this->issueWebToken($user),
             'user' => $this->userPayload($user),
         ], 201);
     }
@@ -84,13 +93,23 @@ class AuthController extends ApiController
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
         ]);
+        $email = strtolower($data['email']);
 
         $user = User::query()
             ->with(['company', 'branch', 'role'])
-            ->where('email', $data['email'])
+            ->where('email', $email)
             ->first();
 
+        if ($user && $this->userIsLocked($user)) {
+            $this->recordSecurityEvent($request, $user, 'login_blocked_account_locked', 'high', 'open', 'A login attempt was blocked because the account is temporarily locked.');
+            abort(423, 'This user account is temporarily locked. Try again after '.$user->locked_until?->toDayDateTimeString().'.');
+        }
+
         if (! $user || ! Hash::check($data['password'], $user->password)) {
+            if ($user) {
+                $this->recordFailedLogin($request, $user, 'invalid_password');
+            }
+
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
@@ -102,10 +121,85 @@ class AuthController extends ApiController
             ]);
         }
 
-        $user->forceFill(['last_login_at' => now()])->save();
+        if (! $user->company || in_array($user->company->status, ['inactive', 'suspended', 'cancelled', 'archived'], true)) {
+            throw ValidationException::withMessages([
+                'email' => ['This company account is not active.'],
+            ]);
+        }
+
+        if ($this->mfaIsEnabled($user)) {
+            $user->forceFill([
+                'failed_login_attempts' => 0,
+                'locked_until' => null,
+            ])->save();
+
+            $challenge = $this->createMfaChallenge($user, $request);
+            $this->recordSecurityEvent($request, $user, 'mfa_challenge_issued', 'medium', 'resolved', 'A multi-factor authentication challenge was issued.');
+
+            return response()->json([
+                'mfa_required' => true,
+                'challenge_token' => $challenge['token'],
+                'expires_at' => $challenge['expires_at']->toISOString(),
+                'user' => [
+                    'email' => $user->email,
+                    'mfa_enabled' => true,
+                ],
+            ]);
+        }
+
+        $this->recordSuccessfulLogin($request, $user);
 
         return response()->json([
-            'token' => $user->createToken('structra-web')->plainTextToken,
+            'token' => $this->issueWebToken($user),
+            'user' => $this->userPayload($user->fresh(['company', 'branch', 'role'])),
+        ]);
+    }
+
+    public function mfaChallenge(Request $request, MfaService $mfaService): JsonResponse
+    {
+        $data = $request->validate([
+            'challenge_token' => ['required', 'string', 'size:64'],
+            'mfa_code' => ['nullable', 'string', 'max:20'],
+            'recovery_code' => ['nullable', 'string', 'max:40'],
+        ]);
+
+        if (blank($data['mfa_code'] ?? null) && blank($data['recovery_code'] ?? null)) {
+            throw ValidationException::withMessages([
+                'mfa_code' => ['Enter an authenticator code or recovery code.'],
+            ]);
+        }
+
+        $cacheKey = $this->mfaChallengeCacheKey($data['challenge_token']);
+        $challenge = Cache::get($cacheKey);
+        if (! is_array($challenge) || empty($challenge['user_id'])) {
+            throw ValidationException::withMessages([
+                'mfa_code' => ['This multi-factor challenge has expired. Sign in again.'],
+            ]);
+        }
+
+        $user = User::query()->with(['company', 'branch', 'role'])->findOrFail($challenge['user_id']);
+        if ($this->userIsLocked($user)) {
+            abort(423, 'This user account is temporarily locked. Try again after '.$user->locked_until?->toDayDateTimeString().'.');
+        }
+        $this->ensureUserCanSignIn($user);
+
+        $valid = filled($data['mfa_code'] ?? null)
+            ? $mfaService->verifyCode($user->mfa_secret, $data['mfa_code'])
+            : $mfaService->consumeRecoveryCode($user, $data['recovery_code'] ?? null);
+
+        if (! $valid) {
+            $this->recordFailedLogin($request, $user, 'invalid_mfa');
+
+            throw ValidationException::withMessages([
+                'mfa_code' => ['The multi-factor authentication code is incorrect.'],
+            ]);
+        }
+
+        Cache::forget($cacheKey);
+        $this->recordSuccessfulLogin($request, $user, true);
+
+        return response()->json([
+            'token' => $this->issueWebToken($user),
             'user' => $this->userPayload($user->fresh(['company', 'branch', 'role'])),
         ]);
     }
@@ -124,6 +218,146 @@ class AuthController extends ApiController
         return response()->json(['message' => 'Signed out.']);
     }
 
+    public function mfaStatus(Request $request): JsonResponse
+    {
+        return response()->json([
+            'security' => [
+                'mfa' => $this->mfaPayload($this->user($request)),
+            ],
+        ]);
+    }
+
+    public function setupMfa(Request $request, MfaService $mfaService): JsonResponse
+    {
+        $user = $this->user($request);
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+        ]);
+
+        $this->assertCurrentPassword($user, $data['current_password']);
+        abort_if($this->mfaIsEnabled($user), 422, 'Multi-factor authentication is already enabled.');
+
+        $secret = $mfaService->generateSecret();
+        $recoveryCodes = $mfaService->generateRecoveryCodes();
+
+        $user->forceFill([
+            'mfa_secret' => $secret,
+            'mfa_enabled_at' => null,
+            'mfa_recovery_codes' => $mfaService->hashRecoveryCodes($recoveryCodes),
+            'mfa_last_used_at' => null,
+        ])->save();
+
+        $this->recordSecurityEvent($request, $user, 'mfa_setup_started', 'medium', 'resolved', 'Multi-factor authentication setup was started.');
+
+        return response()->json([
+            'security' => [
+                'mfa' => $this->mfaPayload($user->fresh()),
+            ],
+            'setup' => [
+                'secret' => $secret,
+                'otpauth_uri' => $mfaService->otpauthUri($user, $secret),
+                'recovery_codes' => $recoveryCodes,
+            ],
+        ]);
+    }
+
+    public function enableMfa(Request $request, MfaService $mfaService): JsonResponse
+    {
+        $user = $this->user($request);
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'mfa_code' => ['required', 'string', 'max:20'],
+        ]);
+
+        $this->assertCurrentPassword($user, $data['current_password']);
+        if (! $mfaService->verifyCode($user->mfa_secret, $data['mfa_code'])) {
+            throw ValidationException::withMessages([
+                'mfa_code' => ['The authenticator code is incorrect.'],
+            ]);
+        }
+
+        $user->forceFill([
+            'mfa_enabled_at' => now(),
+            'mfa_last_used_at' => now(),
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+        ])->save();
+        $this->revokeOtherTokens($request, $user);
+        $this->recordSecurityEvent($request, $user, 'mfa_enabled', 'medium', 'resolved', 'Multi-factor authentication was enabled.');
+
+        return response()->json([
+            'security' => [
+                'mfa' => $this->mfaPayload($user->fresh()),
+            ],
+        ]);
+    }
+
+    public function disableMfa(Request $request, MfaService $mfaService): JsonResponse
+    {
+        $user = $this->user($request);
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'mfa_code' => ['nullable', 'string', 'max:20'],
+            'recovery_code' => ['nullable', 'string', 'max:40'],
+        ]);
+
+        $this->assertCurrentPassword($user, $data['current_password']);
+        $valid = filled($data['mfa_code'] ?? null)
+            ? $mfaService->verifyCode($user->mfa_secret, $data['mfa_code'])
+            : $mfaService->consumeRecoveryCode($user, $data['recovery_code'] ?? null);
+
+        if (! $valid) {
+            throw ValidationException::withMessages([
+                'mfa_code' => ['Enter a valid authenticator code or recovery code.'],
+            ]);
+        }
+
+        $user->forceFill([
+            'mfa_secret' => null,
+            'mfa_enabled_at' => null,
+            'mfa_recovery_codes' => null,
+            'mfa_last_used_at' => null,
+        ])->save();
+        $this->revokeOtherTokens($request, $user);
+        $this->recordSecurityEvent($request, $user, 'mfa_disabled', 'high', 'open', 'Multi-factor authentication was disabled.');
+
+        return response()->json([
+            'security' => [
+                'mfa' => $this->mfaPayload($user->fresh()),
+            ],
+        ]);
+    }
+
+    public function regenerateMfaRecoveryCodes(Request $request, MfaService $mfaService): JsonResponse
+    {
+        $user = $this->user($request);
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'mfa_code' => ['required', 'string', 'max:20'],
+        ]);
+
+        $this->assertCurrentPassword($user, $data['current_password']);
+        if (! $this->mfaIsEnabled($user) || ! $mfaService->verifyCode($user->mfa_secret, $data['mfa_code'])) {
+            throw ValidationException::withMessages([
+                'mfa_code' => ['The authenticator code is incorrect.'],
+            ]);
+        }
+
+        $recoveryCodes = $mfaService->generateRecoveryCodes();
+        $user->forceFill([
+            'mfa_recovery_codes' => $mfaService->hashRecoveryCodes($recoveryCodes),
+            'mfa_last_used_at' => now(),
+        ])->save();
+        $this->recordSecurityEvent($request, $user, 'mfa_recovery_codes_regenerated', 'medium', 'resolved', 'Multi-factor recovery codes were regenerated.');
+
+        return response()->json([
+            'security' => [
+                'mfa' => $this->mfaPayload($user->fresh()),
+            ],
+            'recovery_codes' => $recoveryCodes,
+        ]);
+    }
+
     private function userPayload(User $user): array
     {
         $user->loadMissing(['company.branches', 'branch', 'role']);
@@ -140,7 +374,168 @@ class AuthController extends ApiController
             'role' => $user->role,
             'permissions' => $user->accessPermissions(),
             'effective_permissions' => $user->accessPermissions(),
+            'mfa_enabled' => $this->mfaIsEnabled($user),
+            'mfa_enabled_at' => $user->mfa_enabled_at?->toISOString(),
+            'locked_until' => $user->locked_until?->toISOString(),
         ];
+    }
+
+    private function passwordRule(): Password
+    {
+        return Password::min(12)->letters()->mixedCase()->numbers();
+    }
+
+    private function tokenExpiresAt(): ?Carbon
+    {
+        $minutes = (int) config('security.tokens.web_token_lifetime_minutes', 720);
+
+        return $minutes > 0 ? now()->addMinutes($minutes) : null;
+    }
+
+    private function issueWebToken(User $user): string
+    {
+        return $user->createToken('structra-web', ['*'], $this->tokenExpiresAt())->plainTextToken;
+    }
+
+    private function mfaIsEnabled(User $user): bool
+    {
+        return filled($user->mfa_secret) && filled($user->mfa_enabled_at);
+    }
+
+    private function createMfaChallenge(User $user, Request $request): array
+    {
+        $token = Str::random(64);
+        $expiresAt = now()->addMinutes((int) config('security.auth.mfa_challenge_minutes', 5));
+        Cache::put($this->mfaChallengeCacheKey($token), [
+            'user_id' => $user->id,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ], $expiresAt);
+
+        return [
+            'token' => $token,
+            'expires_at' => $expiresAt,
+        ];
+    }
+
+    private function mfaChallengeCacheKey(string $token): string
+    {
+        return 'auth:mfa-challenge:'.hash('sha256', $token);
+    }
+
+    private function userIsLocked(User $user): bool
+    {
+        return $user->locked_until !== null && $user->locked_until->isFuture();
+    }
+
+    private function recordFailedLogin(Request $request, User $user, string $reason): void
+    {
+        $attempts = (int) $user->failed_login_attempts + 1;
+        $lockThreshold = max(1, (int) config('security.auth.max_failed_login_attempts', 5));
+        $lockedUntil = $attempts >= $lockThreshold
+            ? now()->addMinutes((int) config('security.auth.lockout_minutes', 15))
+            : null;
+
+        $user->forceFill([
+            'failed_login_attempts' => $attempts,
+            'locked_until' => $lockedUntil,
+        ])->save();
+
+        $this->recordSecurityEvent(
+            $request,
+            $user,
+            $lockedUntil ? 'account_locked_after_failed_login' : 'login_failed',
+            $lockedUntil ? 'critical' : 'medium',
+            $lockedUntil ? 'open' : 'resolved',
+            $lockedUntil ? 'Account locked after repeated failed login attempts.' : 'A sign-in attempt failed.',
+            ['reason' => $reason, 'attempts' => $attempts],
+        );
+    }
+
+    private function recordSuccessfulLogin(Request $request, User $user, bool $usedMfa = false): void
+    {
+        $user->forceFill([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+            'mfa_last_used_at' => $usedMfa ? now() : $user->mfa_last_used_at,
+        ])->save();
+
+        $this->recordSecurityEvent(
+            $request,
+            $user,
+            $usedMfa ? 'login_succeeded_with_mfa' : 'login_succeeded',
+            'low',
+            'resolved',
+            'A user signed in successfully.',
+        );
+    }
+
+    private function assertCurrentPassword(User $user, string $password): void
+    {
+        if (! Hash::check($password, $user->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['Your current password is incorrect.'],
+            ]);
+        }
+    }
+
+    private function ensureUserCanSignIn(User $user): void
+    {
+        if ($user->status !== 'active') {
+            throw ValidationException::withMessages([
+                'email' => ['This user account is not active.'],
+            ]);
+        }
+
+        if (! $user->company || in_array($user->company->status, ['inactive', 'suspended', 'cancelled', 'archived'], true)) {
+            throw ValidationException::withMessages([
+                'email' => ['This company account is not active.'],
+            ]);
+        }
+    }
+
+    private function revokeOtherTokens(Request $request, User $user): void
+    {
+        $currentToken = $request->user()?->currentAccessToken();
+        $currentTokenId = $currentToken instanceof PersonalAccessToken ? $currentToken->id : null;
+
+        $query = $user->tokens();
+        if ($currentTokenId) {
+            $query->where('id', '!=', $currentTokenId);
+        }
+
+        $query->delete();
+    }
+
+    private function mfaPayload(User $user): array
+    {
+        return [
+            'enabled' => $this->mfaIsEnabled($user),
+            'enabled_at' => $user->mfa_enabled_at?->toISOString(),
+            'last_used_at' => $user->mfa_last_used_at?->toISOString(),
+            'recovery_codes_remaining' => count($user->mfa_recovery_codes ?? []),
+        ];
+    }
+
+    private function recordSecurityEvent(Request $request, User $user, string $eventType, string $severity, string $status, string $description, array $metadata = []): void
+    {
+        if (! Schema::hasTable('platform_security_events')) {
+            return;
+        }
+
+        PlatformSecurityEvent::query()->create([
+            'company_id' => $user->company_id,
+            'user_id' => $user->id,
+            'event_type' => $eventType,
+            'severity' => $severity,
+            'status' => $status,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'description' => $description,
+            'metadata' => $metadata,
+        ]);
     }
 
     private function defaultRoles(): array

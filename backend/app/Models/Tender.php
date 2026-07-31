@@ -15,8 +15,12 @@ class Tender extends Model
 
     protected $fillable = [
         'company_id', 'branch_id', 'client_id', 'opportunity_id', 'project_id', 'tender_number',
-        'title', 'status', 'deadline_at', 'submitted_at', 'won_at', 'lost_reason',
-        'value', 'currency', 'checklist', 'created_by', 'updated_by',
+        'tender_manager_id', 'business_development_officer_id', 'title', 'tender_type',
+        'procurement_method', 'project_sector', 'project_category', 'project_location',
+        'status', 'deadline_at', 'submitted_at', 'won_at', 'expected_award_at', 'lost_reason',
+        'value', 'tender_fee', 'currency', 'description', 'scope_summary', 'funding_source',
+        'tender_authority', 'priority', 'confidentiality_level', 'bid_decision',
+        'bid_decision_score', 'checklist', 'deadline_schedule', 'settings', 'created_by', 'updated_by',
     ];
 
     protected function casts(): array
@@ -25,8 +29,13 @@ class Tender extends Model
             'deadline_at' => 'datetime',
             'submitted_at' => 'datetime',
             'won_at' => 'datetime',
+            'expected_award_at' => 'datetime',
             'value' => 'decimal:2',
+            'tender_fee' => 'decimal:2',
+            'bid_decision_score' => 'integer',
             'checklist' => 'array',
+            'deadline_schedule' => 'array',
+            'settings' => 'array',
         ];
     }
 
@@ -58,5 +67,10 @@ class Tender extends Model
     public function estimates(): HasMany
     {
         return $this->hasMany(Estimate::class);
+    }
+
+    public function records(): HasMany
+    {
+        return $this->hasMany(TenderRecord::class);
     }
 }

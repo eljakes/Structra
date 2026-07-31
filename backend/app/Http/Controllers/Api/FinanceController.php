@@ -128,6 +128,31 @@ class FinanceController extends ApiController
             'overdue' => (float) Invoice::query()->forCompany($companyId)->whereNotIn('payment_status', ['paid'])->whereDate('due_date', '<', now()->toDateString())->sum('balance_due'),
             'approved_expenses' => (float) Expense::query()->forCompany($companyId)->whereIn('status', ['approved', 'paid'])->sum(DB::raw('amount + tax_amount')),
         ];
+        $financeAutomationTriggers = ['expense_submitted', 'supplier_invoice_submitted', 'invoice_generated', 'payment_received'];
+        $financeTriggerStatuses = collect($financeAutomationTriggers)->map(function (string $trigger) use ($companyId): array {
+            $activeWorkflows = DB::table('automation_rules')
+                ->where('company_id', $companyId)
+                ->where('status', 'active')
+                ->where('module', 'finance')
+                ->where('trigger_event', $trigger)
+                ->count();
+
+            return [
+                'trigger' => $trigger,
+                'active_workflows' => $activeWorkflows,
+                'status' => $activeWorkflows > 0 ? 'connected' : 'not_configured',
+            ];
+        })->values();
+        $company = $this->user($request)->company;
+        $financeSettings = [
+            ...[
+                'default_currency' => $company->default_currency,
+                'multi_currency_enabled' => true,
+                'audit_trail_enabled' => true,
+                'ledger_posting' => 'automatic',
+            ],
+            ...($company->settings['finance'] ?? []),
+        ];
 
         return response()->json([
             'summary' => $summary,
@@ -157,15 +182,10 @@ class FinanceController extends ApiController
             'approvals' => $this->financeApprovals($companyId),
             'audit_trail' => $this->auditTrail($companyId),
             'automation' => [
-                'approval_triggers' => ['expense_submitted', 'supplier_invoice_submitted', 'invoice_generated', 'payment_received'],
+                'approval_triggers' => $financeTriggerStatuses,
                 'connected_workflows' => DB::table('automation_rules')->where('company_id', $companyId)->where('status', 'active')->where('module', 'finance')->count(),
             ],
-            'finance_settings' => [
-                'default_currency' => $this->user($request)->company->default_currency,
-                'multi_currency_enabled' => true,
-                'audit_trail_enabled' => true,
-                'ledger_posting' => 'automatic',
-            ],
+            'finance_settings' => $financeSettings,
         ]);
     }
 

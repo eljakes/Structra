@@ -13,8 +13,18 @@ class TenderDocument extends Model
 
     protected $fillable = [
         'company_id', 'tender_id', 'document_id', 'uploaded_by', 'title', 'document_type',
-        'file_path', 'original_filename', 'mime_type', 'size_bytes',
+        'version', 'status', 'is_mandatory', 'is_confidential', 'expires_at',
+        'file_path', 'original_filename', 'mime_type', 'size_bytes', 'comments',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_mandatory' => 'boolean',
+            'is_confidential' => 'boolean',
+            'expires_at' => 'date',
+        ];
+    }
 
     public function tender(): BelongsTo
     {

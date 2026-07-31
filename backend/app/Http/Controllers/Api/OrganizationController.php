@@ -97,7 +97,7 @@ class OrganizationController extends ApiController
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', Password::min(10)->letters()->numbers()],
+            'password' => ['required', $this->passwordRule()],
             'branch_id' => ['required', 'integer'],
             'role_id' => ['required', 'integer'],
             'permissions' => ['nullable', 'array'],
@@ -111,6 +111,7 @@ class OrganizationController extends ApiController
         $user = User::query()->create([
             'company_id' => $companyId,
             ...$data,
+            'password_changed_at' => now(),
             'permissions' => array_key_exists('permissions', $data) ? $this->normalizePermissions($data['permissions']) : null,
         ]);
 
@@ -181,7 +182,7 @@ class OrganizationController extends ApiController
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'password' => ['nullable', Password::min(10)->letters()->numbers()],
+            'password' => ['nullable', $this->passwordRule()],
             'branch_id' => ['sometimes', 'integer'],
             'role_id' => ['sometimes', 'integer'],
             'permissions' => ['nullable', 'array'],
@@ -198,6 +199,7 @@ class OrganizationController extends ApiController
             Role::query()->forCompany($companyId)->whereKey($data['role_id'])->firstOrFail();
         }
 
+        $passwordChanged = filled($data['password'] ?? null);
         if (blank($data['password'] ?? null)) {
             unset($data['password']);
         }
@@ -208,7 +210,21 @@ class OrganizationController extends ApiController
 
         $user->update($data);
 
+        if ($passwordChanged) {
+            $user->forceFill(['password_changed_at' => now()])->save();
+            $user->tokens()->delete();
+        }
+
+        if (in_array($user->status, ['inactive', 'suspended'], true)) {
+            $user->tokens()->delete();
+        }
+
         return response()->json(['user' => $user->fresh(['branch', 'role'])]);
+    }
+
+    private function passwordRule(): Password
+    {
+        return Password::min(12)->letters()->mixedCase()->numbers();
     }
 
     private function normalizePermissions(?array $permissions): ?array

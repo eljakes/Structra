@@ -39,6 +39,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -82,6 +83,21 @@ class PeopleController extends ApiController
         $ppeIssues = WorkforcePpeIssue::query()->forCompany($companyId)->with(['employeeProfile.user:id,name,email', 'project:id,code,name'])->latest('issued_on')->limit(120)->get();
         $contractors = WorkforceContractor::query()->forCompany($companyId)->with('supplier:id,name')->latest()->limit(100)->get();
         $exitRecords = WorkforceExitRecord::query()->forCompany($companyId)->with('employeeProfile.user:id,name,email')->latest('exit_date')->limit(100)->get();
+        $workforceAutomationTriggers = ['employee_birthday', 'contract_expiring', 'certification_expiring', 'employee_absent', 'leave_approved', 'payroll_completed'];
+        $workforceTriggerStatuses = collect($workforceAutomationTriggers)->map(function (string $trigger) use ($companyId): array {
+            $activeWorkflows = DB::table('automation_rules')
+                ->where('company_id', $companyId)
+                ->whereIn('module', ['hr', 'people', 'staff'])
+                ->where('status', 'active')
+                ->where('trigger_event', $trigger)
+                ->count();
+
+            return [
+                'trigger' => $trigger,
+                'active_workflows' => $activeWorkflows,
+                'status' => $activeWorkflows > 0 ? 'connected' : 'not_configured',
+            ];
+        })->values();
 
         return response()->json([
             'summary' => $this->summary($companyId, $employees, $attendance, $timesheets, $certifications, $contractors, $vacancies),
@@ -124,7 +140,7 @@ class PeopleController extends ApiController
             'reports' => $this->reports($employees, $timesheets, $allocations, $trainingRecords, $certifications, $exitRecords),
             'analytics' => $this->analytics($employees, $timesheets, $allocations, $applications, $certifications, $trainingRecords, $exitRecords),
             'automation' => [
-                'available_triggers' => ['employee_birthday', 'contract_expiring', 'certification_expiring', 'employee_absent', 'leave_approved', 'payroll_completed'],
+                'available_triggers' => $workforceTriggerStatuses,
                 'connected_workflows' => DB::table('automation_rules')->where('company_id', $companyId)->whereIn('module', ['hr', 'people', 'staff'])->where('status', 'active')->count(),
             ],
             'settings' => WorkforceSetting::query()->forCompany($companyId)->pluck('setting_value', 'setting_key'),
@@ -322,7 +338,7 @@ class PeopleController extends ApiController
                 'phone' => $candidate->phone,
                 'job_title' => $vacancy->title,
                 'status' => 'active',
-                'password' => 'Structra2026',
+                'password' => Str::random(32),
                 'permissions' => ['payroll.manage'],
             ]
         );
@@ -721,12 +737,14 @@ class PeopleController extends ApiController
                 $overtimeHours = (float) WorkforceTimesheet::query()
                     ->where('employee_profile_id', $employee->id)
                     ->where('status', 'approved')
-                    ->whereBetween('work_date', [$periodStart, $periodEnd])
+                    ->whereDate('work_date', '>=', $periodStart)
+                    ->whereDate('work_date', '<=', $periodEnd)
                     ->sum('overtime_hours');
                 $approvedOvertime = (float) WorkforceOvertimeRequest::query()
                     ->where('employee_profile_id', $employee->id)
                     ->where('status', 'approved')
-                    ->whereBetween('work_date', [$periodStart, $periodEnd])
+                    ->whereDate('work_date', '>=', $periodStart)
+                    ->whereDate('work_date', '<=', $periodEnd)
                     ->sum('hours');
                 $overtimePay = round(($overtimeHours + $approvedOvertime) * (float) $employee->hourly_rate * 1.5, 2);
 

@@ -11,7 +11,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -29,6 +29,14 @@ class User extends Authenticatable
         'status',
         'password',
         'last_login_at',
+        'last_login_ip',
+        'failed_login_attempts',
+        'locked_until',
+        'password_changed_at',
+        'mfa_secret',
+        'mfa_enabled_at',
+        'mfa_recovery_codes',
+        'mfa_last_used_at',
     ];
 
     /**
@@ -41,6 +49,12 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'locked_until' => 'datetime',
+            'password_changed_at' => 'datetime',
+            'mfa_secret' => 'encrypted',
+            'mfa_enabled_at' => 'datetime',
+            'mfa_recovery_codes' => 'encrypted:array',
+            'mfa_last_used_at' => 'datetime',
             'permissions' => 'array',
             'password' => 'hashed',
         ];
@@ -68,6 +82,10 @@ class User extends Authenticatable
     public function hasPermission(string $permission): bool
     {
         $permissions = $this->accessPermissions();
+
+        if (str_starts_with($permission, 'platform.')) {
+            return in_array('platform.*', $permissions, true) || in_array($permission, $permissions, true);
+        }
 
         return in_array('*', $permissions, true) || in_array($permission, $permissions, true);
     }

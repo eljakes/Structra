@@ -58,15 +58,50 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  register: (payload) =>
-    request('/auth/register', {
+  completeMfaChallenge: (payload) =>
+    request('/auth/mfa-challenge', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me: () => request('/auth/me'),
+  mfaStatus: () => request('/security/mfa'),
+  setupMfa: (payload) =>
+    request('/security/mfa/setup', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  enableMfa: (payload) =>
+    request('/security/mfa/enable', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  disableMfa: (payload) =>
+    request('/security/mfa/disable', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  regenerateMfaRecoveryCodes: (payload) =>
+    request('/security/mfa/recovery-codes', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   dashboard: () => request('/dashboard'),
   reports: () => request('/reports'),
+  notifications: () => request('/notifications'),
+  updateNotificationSettings: (payload) =>
+    request('/notifications/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  markNotificationRead: (notificationId) =>
+    request(`/notifications/${notificationId}/read`, {
+      method: 'POST',
+    }),
+  acknowledgeNotification: (notificationId) =>
+    request(`/notifications/${notificationId}/acknowledge`, {
+      method: 'POST',
+    }),
   procurement: () => request('/procurement'),
   sales: () => request('/sales'),
   createLead: (payload) =>
@@ -98,6 +133,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  createTender: (payload) =>
+    request('/sales/tenders', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateTender: (tenderId, payload) =>
+    request(`/sales/tenders/${tenderId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
   submitTender: (tenderId) =>
     request(`/sales/tenders/${tenderId}/submit`, {
       method: 'POST',
@@ -121,6 +166,21 @@ export const api = {
     request(`/sales/tender-rfis/${rfiId}/respond`, {
       method: 'POST',
       body: JSON.stringify({ response }),
+    }),
+  uploadTenderDocument: (tenderId, payload) =>
+    request(`/sales/tenders/${tenderId}/documents`, {
+      method: 'POST',
+      body: payload,
+    }),
+  createTenderRecord: (tenderId, payload) =>
+    request(`/sales/tenders/${tenderId}/records`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateTenderRecord: (recordId, payload) =>
+    request(`/sales/tender-records/${recordId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
     }),
   createPricingItem: (payload) =>
     request('/sales/pricing-items', {
@@ -851,6 +911,134 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   automation: () => request('/automation'),
+  platformAdmin: (params = {}) => {
+    const query = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, value)
+    })
+
+    return request(`/platform-admin${query.toString() ? `?${query}` : ''}`)
+  },
+  createPlatformCompany: (payload) =>
+    request('/platform-admin/companies', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updatePlatformCompany: (companyId, payload) =>
+    request(`/platform-admin/companies/${companyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  archivePlatformCompany: (companyId) =>
+    request(`/platform-admin/companies/${companyId}`, {
+      method: 'DELETE',
+    }),
+  restorePlatformCompany: (companyId) =>
+    request(`/platform-admin/companies/${companyId}/restore`, {
+      method: 'POST',
+    }),
+  updatePlatformCompanyFeature: (companyId, flagId, payload) =>
+    request(`/platform-admin/companies/${companyId}/features/${flagId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  updatePlatformFeature: (flagId, payload) =>
+    request(`/platform-admin/features/${flagId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  updatePlatformBranding: (companyId, payload) =>
+    request(`/platform-admin/companies/${companyId}/branding`, {
+      method: 'POST',
+      body: payload,
+    }),
+  updatePlatformCompanySuccess: (companyId, payload) =>
+    request(`/platform-admin/companies/${companyId}/success`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  createPlatformStaffUser: (payload) =>
+    request('/platform-admin/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updatePlatformStaffUser: (userId, payload) =>
+    request(`/platform-admin/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  deletePlatformStaffUser: (userId) =>
+    request(`/platform-admin/users/${userId}`, {
+      method: 'DELETE',
+    }),
+  updatePlatformProfile: (payload) =>
+    request('/platform-admin/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  startPlatformImpersonation: (companyId, payload) =>
+    request(`/platform-admin/companies/${companyId}/impersonate`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createPlatformPlan: (payload) =>
+    request('/platform-admin/plans', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updatePlatformPlan: (planId, payload) =>
+    request(`/platform-admin/plans/${planId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  deletePlatformPlan: (planId) =>
+    request(`/platform-admin/plans/${planId}`, {
+      method: 'DELETE',
+    }),
+  updatePlatformSubscription: (subscriptionId, payload) =>
+    request(`/platform-admin/subscriptions/${subscriptionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  upgradePlatformSubscription: (subscriptionId, payload) =>
+    request(`/platform-admin/subscriptions/${subscriptionId}/upgrade`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  deletePlatformSubscription: (subscriptionId) =>
+    request(`/platform-admin/subscriptions/${subscriptionId}`, {
+      method: 'DELETE',
+    }),
+  createPlatformBillingRecord: (payload) =>
+    request('/platform-admin/billing-records', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createPlatformSupportTicket: (payload) =>
+    request('/platform-admin/support-tickets', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updatePlatformSupportTicket: (ticketId, payload) =>
+    request(`/platform-admin/support-tickets/${ticketId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  createPlatformDeployment: (payload) =>
+    request('/platform-admin/deployments', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createPlatformBackup: (payload) =>
+    request('/platform-admin/backups', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updatePlatformSettings: (payload) =>
+    request('/platform-admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
   automationCatalog: () => request('/automation/catalog'),
   createAutomationRule: (payload) =>
     request('/automation/rules', {

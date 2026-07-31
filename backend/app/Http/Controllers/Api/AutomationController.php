@@ -13,12 +13,14 @@ use App\Models\InventoryItem;
 use App\Models\Invoice;
 use App\Models\LeaveRequest;
 use App\Models\NonConformanceReport;
+use App\Models\NotificationEvent;
 use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\PurchaseRequisition;
 use App\Models\SafetyIncident;
 use App\Models\SupplierInvoice;
 use App\Models\WorkPermit;
+use App\Services\NotificationService;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -44,10 +46,19 @@ class AutomationController extends ApiController
             ->latest('started_at')
             ->limit(150)
             ->get();
+        $notificationSettings = app(NotificationService::class)->settingsForCompany($companyId);
+        $notifications = NotificationEvent::query()
+            ->forCompany($companyId)
+            ->with(['user:id,name,email', 'automationRule:id,name,module,trigger_event'])
+            ->latest()
+            ->limit(80)
+            ->get();
 
         return response()->json([
             'rules' => $rules,
             'runs' => $runs,
+            'notifications' => $notifications,
+            'notification_settings' => $notificationSettings,
             'templates' => $this->templates($companyId)->values(),
             'catalog' => $this->catalog(),
             'analytics' => $this->analytics($rules, $runs),
@@ -61,6 +72,8 @@ class AutomationController extends ApiController
                 'scheduled_jobs' => $rules->filter(fn (AutomationRule $rule): bool => ($rule->schedule_config['frequency'] ?? 'manual') !== 'manual')->count(),
                 'approval_workflows' => $rules->filter(fn (AutomationRule $rule): bool => filled($rule->approval_config['steps'] ?? []))->count(),
                 'average_execution_time_ms' => round((float) $runs->avg('duration_ms'), 1),
+                'unread_notifications' => $notifications->where('status', 'unread')->count(),
+                'email_failures' => $notifications->filter(fn (NotificationEvent $event): bool => ($event->delivery_status['email'] ?? null) === 'failed')->count(),
             ],
         ]);
     }
@@ -535,12 +548,8 @@ class AutomationController extends ApiController
         return match ($actionType) {
             'create_insight', 'run_ai_analysis', 'run_cost_prediction', 'run_delay_prediction', 'run_risk_analysis' => $this->createInsightAction($request, $rule, $record, $action),
             'create_task' => $this->createTaskAction($request, $rule, $record, $action),
-            'send_in_app_notification', 'send_email', 'send_sms', 'send_whatsapp', 'teams_notification', 'slack_notification' => [
-                'type' => $actionType,
-                'status' => 'executed',
-                'message' => $action['message'] ?? $rule->name,
-                'record' => $record,
-            ],
+            'send_in_app_notification', 'send_email' => app(NotificationService::class)->sendAutomationNotification($this->user($request), $rule, $record, $action),
+            'send_sms', 'send_whatsapp', 'teams_notification', 'slack_notification' => app(NotificationService::class)->queueConnectorNotification($this->user($request), $rule, $record, $action),
             'call_webhook' => [
                 'type' => 'call_webhook',
                 'status' => filled($action['url'] ?? null) ? 'queued' : 'skipped',

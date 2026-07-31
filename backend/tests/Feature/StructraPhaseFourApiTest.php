@@ -14,6 +14,7 @@ use App\Models\Role;
 use App\Models\SafetyIncident;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -195,6 +196,73 @@ class StructraPhaseFourApiTest extends TestCase
             ->assertJsonPath('message', 'Automation rule archived.');
         $this->assertSoftDeleted('automation_rules', ['id' => $ruleId]);
         $this->assertDatabaseHas('automation_rules', ['id' => $templateRuleId, 'status' => 'draft']);
+    }
+
+    public function test_automation_email_actions_create_notification_events(): void
+    {
+        config(['mail.default' => 'array']);
+        Mail::purge('array');
+
+        [$user] = $this->tenantScenario();
+        Sanctum::actingAs($user);
+
+        $this->patchJson('/api/v1/notifications/settings', [
+            'in_app_enabled' => true,
+            'email_enabled' => true,
+            'minimum_email_severity' => 'low',
+            'default_channels' => ['in_app', 'email'],
+            'retry_policy' => ['max_retries' => 3, 'on_failure' => 'notify_admin'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('settings.email_enabled', true)
+            ->assertJsonPath('settings.retry_policy.max_retries', 3);
+
+        $ruleId = $this->postJson('/api/v1/automation/rules', [
+            'name' => 'Low stock email alert',
+            'rule_type' => 'low_stock',
+            'trigger_event' => 'manual',
+            'module' => 'inventory',
+            'severity' => 'high',
+            'notification_config' => ['channels' => ['in_app', 'email']],
+            'actions' => [
+                'type' => 'send_email',
+                'subject' => 'Low stock requires action',
+                'message' => 'Stock is below reorder level.',
+                'recipient_email' => $user->email,
+            ],
+        ])
+            ->assertCreated()
+            ->json('rule.id');
+
+        $this->postJson("/api/v1/automation/rules/{$ruleId}/run")
+            ->assertOk()
+            ->assertJsonPath('run.status', 'completed')
+            ->assertJsonPath('run.actions_executed', 1)
+            ->assertJsonPath('run.action_results.0.type', 'send_email')
+            ->assertJsonPath('run.action_results.0.delivery_status.email', 'sent');
+
+        $notificationId = $this->getJson('/api/v1/notifications')
+            ->assertOk()
+            ->assertJsonPath('summary.unread', 1)
+            ->assertJsonPath('events.0.event_type', 'send_email')
+            ->assertJsonPath('events.0.delivery_status.email', 'sent')
+            ->json('events.0.id');
+
+        $this->assertDatabaseHas('notification_events', [
+            'company_id' => $user->company_id,
+            'automation_rule_id' => $ruleId,
+            'event_type' => 'send_email',
+            'recipient_email' => $user->email,
+            'status' => 'unread',
+        ]);
+
+        $this->postJson("/api/v1/notifications/{$notificationId}/read")
+            ->assertOk()
+            ->assertJsonPath('notification.status', 'read');
+
+        $this->postJson("/api/v1/notifications/{$notificationId}/acknowledge")
+            ->assertOk()
+            ->assertJsonPath('notification.status', 'acknowledged');
     }
 
     private function tenantScenario(): array

@@ -17,6 +17,10 @@ class IntegrationConnector extends Model
         'created_by',
     ];
 
+    protected $hidden = [
+        'encrypted_credentials',
+    ];
+
     protected function casts(): array
     {
         return [

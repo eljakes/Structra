@@ -43,8 +43,8 @@ class AuditableObserver
             'auditable_type' => $model::class,
             'auditable_id' => $model->getKey(),
             'action' => $action,
-            'before' => $before,
-            'after' => $after,
+            'before' => AuditLog::sanitizePayload($before),
+            'after' => AuditLog::sanitizePayload($after),
             'ip_address' => request()?->ip(),
             'user_agent' => request()?->userAgent(),
         ]);

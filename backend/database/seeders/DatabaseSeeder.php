@@ -87,8 +87,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        if (! (bool) env('STRUCTRA_SEED_DEMO', false)) {
-            $this->command?->warn('Structra demo seed data skipped. Set STRUCTRA_SEED_DEMO=true only in disposable development databases.');
+        if (! (bool) env('STRUCTRA_SEED_DEVELOPMENT', false)) {
+            $this->command?->warn('Structra development seed data skipped. Set STRUCTRA_SEED_DEVELOPMENT=true only in disposable development databases.');
 
             return;
         }
@@ -1531,14 +1531,12 @@ class DatabaseSeeder extends Seeder
         }
 
         IntegrationConnector::query()->firstOrCreate(
-            ['company_id' => $company->id, 'provider' => 'xero', 'name' => 'Xero Finance Sandbox'],
+            ['company_id' => $company->id, 'provider' => 'xero', 'name' => 'Xero Finance Connector'],
             [
                 'category' => 'accounting',
-                'status' => 'connected',
+                'status' => 'configured',
                 'settings' => ['sync_invoices' => true, 'sync_payments' => true],
-                'encrypted_credentials' => ['tenant_id' => 'xero-demo-tenant', 'client_id' => 'demo-client'],
-                'last_tested_at' => now()->subDay(),
-                'connected_at' => now()->subDay(),
+                'encrypted_credentials' => [],
                 'created_by' => $financeUser->id,
             ],
         );

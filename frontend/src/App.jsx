@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  Archive,
   BarChart3,
   Building2,
   Calculator,
@@ -49,6 +50,7 @@ import { api, getToken, setToken, validationSummary } from './lib/api'
 import './App.css'
 
 const navItems = [
+  { id: 'platform', label: 'Cloud Console', icon: ShieldCheck, permissions: ['platform.manage'] },
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3, permissions: ['reports.view'] },
   { id: 'crm', label: 'CRM', icon: Handshake, permissions: ['crm.manage'] },
   { id: 'tendering', label: 'Tendering', icon: ClipboardList, permissions: ['tenders.manage'] },
@@ -176,9 +178,52 @@ const emptyPortalData = {
   activity: [],
 }
 const emptyBiData = { dashboards: [], snapshots: [], datasets: {}, metrics: {}, filters: {}, meta: {}, executive: {}, portfolio: {}, project_controls: {}, financial: {}, commercial: {}, procurement: {}, inventory: {}, schedule: {}, workforce: {}, equipment: {}, quality: {}, hse: {}, risk: {}, sustainability: {}, client_reporting: {}, alerts: {} }
-const emptyAutomationData = { summary: {}, rules: [], runs: [], templates: [], catalog: {}, analytics: {} }
+const emptyAutomationData = { summary: {}, rules: [], runs: [], templates: [], catalog: {}, analytics: {}, notifications: [], notification_settings: {} }
+const emptyPlatformAdminData = {
+  summary: {},
+  command_center: { status: 'healthy', status_label: '', cards: [], alerts: [], recent_signups: [], companies_needing_attention: [] },
+  companies: [],
+  archived_companies: [],
+  plans: [],
+  subscriptions: [],
+  feature_flags: [],
+  billing_records: [],
+  support_tickets: [],
+  deployments: [],
+  security_events: [],
+  backups: [],
+  settings: [],
+  integrations: [],
+  notifications: [],
+  audit_logs: [],
+  automation_workflows: { summary: {}, rules: [], recent_runs: [] },
+  support_metrics: {},
+  platform_staff: [],
+  search_results: [],
+  analytics: {},
+  monitoring: {},
+  catalog: {
+    console_layers: [],
+    modules: [],
+    countries: [],
+    currencies: [],
+    plans: [],
+    statuses: [],
+    plan_statuses: [],
+    subscription_statuses: [],
+    billing_intervals: [],
+    support_levels: [],
+    support_priorities: [],
+    support_ticket_statuses: [],
+    billing_record_types: [],
+    billing_statuses: [],
+    backup_types: [],
+    deployment_scopes: [],
+  },
+}
 const emptyAdminApprovalData = { summary: {}, items: [] }
 const emptyOrganizationData = { company: { branches: [], roles: [], users: [], settings: {} }, clients: [], suppliers: [] }
+const emptyAccountSecurity = { mfa: { enabled: false, enabled_at: null, last_used_at: null, recovery_codes_remaining: 0 } }
 const emptyList = []
 
 const currencyFormatter = new Intl.NumberFormat('en-GH', {
@@ -200,10 +245,20 @@ const healthColors = {
   critical: '#c24132',
 }
 
+const cloudConsolePaths = ['/cloud-console', '/platform-admin', '/super-admin']
+
+function isCloudConsolePath(pathname = window.location.pathname) {
+  return cloudConsolePaths.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+}
+
 const statusColor = {
   active: 'good',
+  healthy: 'good',
+  operational: 'good',
   inactive: 'neutral',
   suspended: 'bad',
+  degraded: 'warn',
+  attention: 'warn',
   approved: 'good',
   approved_for_construction: 'good',
   on_track: 'good',
@@ -220,7 +275,23 @@ const statusColor = {
   planning: 'neutral',
   qualified: 'neutral',
   new: 'neutral',
+  under_review: 'warn',
+  bid_decision_pending: 'warn',
+  no_bid: 'bad',
+  bid_approved: 'good',
+  estimating: 'warn',
+  proposal_preparation: 'warn',
+  internal_review: 'warn',
+  awaiting_approval: 'warn',
+  ready_for_submission: 'good',
+  under_evaluation: 'warn',
+  clarification_requested: 'warn',
+  negotiation: 'warn',
+  preferred_bidder: 'good',
+  withdrawn: 'bad',
+  archived: 'neutral',
   open: 'warn',
+  waiting_customer: 'warn',
   closed: 'good',
   resolved: 'good',
   paid: 'good',
@@ -234,7 +305,6 @@ const statusColor = {
   pass: 'good',
   fail: 'bad',
   na: 'neutral',
-  under_review: 'warn',
   configured: 'neutral',
   queued: 'warn',
   current: 'good',
@@ -269,6 +339,11 @@ const statusColor = {
   changes_required: 'warn',
   revise_and_resubmit: 'warn',
   failed: 'bad',
+  valid: 'good',
+  online: 'good',
+  enabled: 'good',
+  disabled: 'neutral',
+  warning: 'warn',
 }
 
 const emptyProjectForm = {
@@ -318,6 +393,34 @@ const emptyLeadForm = {
   source: 'direct',
   estimated_value: '',
   next_follow_up_at: '',
+}
+
+const emptyTenderForm = {
+  opportunity_id: '',
+  branch_id: '',
+  client_id: '',
+  client_name: '',
+  title: '',
+  tender_manager_id: '',
+  business_development_officer_id: '',
+  tender_type: '',
+  procurement_method: '',
+  project_sector: '',
+  project_category: '',
+  project_location: '',
+  priority: '',
+  confidentiality_level: '',
+  deadline_at: '',
+  expected_award_at: '',
+  value: '',
+  tender_fee: '',
+  currency: 'GHS',
+  description: '',
+  scope_summary: '',
+  funding_source: '',
+  tender_authority: '',
+  bid_decision: '',
+  bid_decision_score: '',
 }
 
 const emptyEstimateForm = {
@@ -518,6 +621,54 @@ const emptyPhaseFourForms = {
   },
 }
 
+const emptyPlatformForms = {
+  company: {
+    name: '',
+    registration_number: '',
+    industry: 'construction',
+    country: 'GH',
+    city: '',
+    address: '',
+    phone: '',
+    email: '',
+    website: '',
+    tax_id: '',
+    currency: 'GHS',
+    timezone: 'Africa/Accra',
+    language: 'en',
+    date_format: 'Y-m-d',
+    fiscal_year_start: '01-01',
+    primary_contact_name: '',
+    primary_contact_email: '',
+    primary_contact_phone: '',
+    admin_password: '',
+    subscription_plan_id: '',
+    status: 'trial',
+    trial_days: 14,
+    storage_limit_mb: '',
+    employee_limit: '',
+    project_limit: '',
+    branch_limit: 1,
+    enabled_feature_keys: [],
+  },
+  plan: { id: '', code: '', name: '', status: 'active', currency: 'GHS', monthly_price: 0, yearly_price: 0, maximum_users: '', maximum_projects: '', maximum_storage_mb: '', support_level: 'standard', api_access: 'false', custom_branding: 'true', sso_available: 'false' },
+  subscription: { id: '', platform_subscription_plan_id: '', status: 'active', billing_interval: 'monthly', amount: '', currency: 'GHS', seats: '', renewal_at: '' },
+  feature: { id: '', name: '', module: '', category: 'feature', description: '', rollout_status: 'active', rollout_percentage: 100, default_enabled: 'false', requires_subscription: 'true', pricing_tier: '' },
+  feature_company: { company_id: '' },
+  branding: { company_id: '', primary_color: '#2364d8', secondary_color: '#188a5a', accent_color: '#b66a05', sidebar_color: '#102033', button_color: '#2364d8', typography: 'Inter', login_welcome_message: '', company_motto: '' },
+  billing: { company_id: '', company_subscription_id: '', record_type: 'invoice', status: 'issued', amount: 0, currency: 'GHS', issued_on: '', due_on: '', paid_at: '' },
+  support: { company_id: '', title: '', category: 'support', priority: 'medium', assigned_to: '', description: '', sla_due_at: '' },
+  support_update: { id: '', status: 'open', priority: 'medium', assigned_to: '', resolution_notes: '' },
+  deployment: { title: '', release_version: '', target_scope: 'all_customers', scheduled_at: '', notes: '' },
+  backup: { company_id: '', backup_type: 'tenant', storage_path: '' },
+  settings: { database_warning_ms: 250, database_critical_ms: 1000, queue_pending_warning: 50, failed_jobs_critical: 1, storage_warning_percent: 85, storage_critical_percent: 95, security_alert_critical: 1, ai_enabled: 'false', ai_usage_percent: '', ai_monthly_token_limit: '', ai_monthly_budget: '', ai_cost_month_to_date: '' },
+  impersonation: { company_id: '', user_id: '', reason: '', authorization_reference: '', expires_minutes: 30 },
+  success: { company_id: '', success_manager: '', last_meeting_at: '', next_meeting_at: '', training_completed_percent: '', adoption_percent: '', risk_percent: '', expansion_opportunity: '', notes: '' },
+  staff: { id: '', name: '', email: '', password: '', phone: '', job_title: '', status: 'active', permissions: ['platform.manage'] },
+  profile: { user_id: '', name: '', email: '', phone: '', job_title: '', current_password: '', password: '', password_confirmation: '' },
+  company_account: { company_id: '', name: '', registration_number: '', industry: '', country: 'GH', city: '', address: '', phone: '', email: '', website: '', tax_id: '', currency: 'GHS', timezone: 'Africa/Accra', language: 'en', date_format: 'Y-m-d', fiscal_year_start: '01-01', status: 'active', storage_limit_mb: '', employee_limit: '', project_limit: '', branch_limit: '', subscription_plan_id: '' },
+}
+
 function coerceAutomationValue(value) {
   if (value === undefined || value === null || value === '') return null
 
@@ -580,26 +731,39 @@ function automationPayloadFromForm(form) {
   }
 }
 
+function notificationSettingsForm(settings = {}) {
+  return {
+    in_app_enabled: settings.in_app_enabled === false ? 'false' : 'true',
+    email_enabled: settings.email_enabled === false ? 'false' : 'true',
+    email_from_name: settings.email_from_name || '',
+    email_from_address: settings.email_from_address || '',
+    reply_to_email: settings.reply_to_email || '',
+    minimum_email_severity: settings.minimum_email_severity || 'medium',
+    digest_frequency: settings.digest_frequency || 'immediate',
+    default_channels: Array.isArray(settings.default_channels) && settings.default_channels.length ? settings.default_channels : ['in_app', 'email'],
+    max_retries: settings.retry_policy?.max_retries ?? 2,
+    on_failure: settings.retry_policy?.on_failure || 'notify_admin',
+  }
+}
+
 function normalizeTheme(theme) {
   return theme === 'dark' ? 'dark' : 'light'
 }
 
 function App() {
+  const cloudConsolePortal = isCloudConsolePath()
   const [tokenReady, setTokenReady] = useState(Boolean(getToken()))
   const refreshInFlight = useRef(false)
   const refreshWorkspaceRef = useRef(null)
   const refreshProjectRef = useRef(null)
-  const [authMode, setAuthMode] = useState('login')
   const [authForm, setAuthForm] = useState({
-    company_name: '',
-    branch_name: 'Head Office',
-    country: 'GH',
-    currency: 'GHS',
-    name: '',
     email: '',
     password: '',
+    mfa_code: '',
+    recovery_code: '',
   })
-  const [activeView, setActiveView] = useState('dashboard')
+  const [mfaChallenge, setMfaChallenge] = useState(null)
+  const [activeView, setActiveView] = useState(cloudConsolePortal ? 'platform' : 'dashboard')
   const [user, setUser] = useState(null)
   const [dashboard, setDashboard] = useState(null)
   const [organization, setOrganization] = useState(null)
@@ -621,6 +785,9 @@ function App() {
   const [portals, setPortals] = useState(emptyPortalData)
   const [businessIntelligence, setBusinessIntelligence] = useState(emptyBiData)
   const [automation, setAutomation] = useState(emptyAutomationData)
+  const [platformAdmin, setPlatformAdmin] = useState(emptyPlatformAdminData)
+  const [accountSecurity, setAccountSecurity] = useState(emptyAccountSecurity)
+  const [mfaSetup, setMfaSetup] = useState(null)
   const [adminApprovals, setAdminApprovals] = useState(emptyAdminApprovalData)
   const [reports, setReports] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -636,6 +803,7 @@ function App() {
   const [markupForm, setMarkupForm] = useState({ drawing_id: '', comment: '', x: 0.5, y: 0.5 })
   const [reviewForm, setReviewForm] = useState({ drawing_id: '', decision: 'approved', comments: '' })
   const [leadForm, setLeadForm] = useState(emptyLeadForm)
+  const [tenderForm, setTenderForm] = useState(emptyTenderForm)
   const [estimateForm, setEstimateForm] = useState(emptyEstimateForm)
   const [inventoryForms, setInventoryForms] = useState(emptyInventoryForms)
   const [fieldForms, setFieldForms] = useState(emptyFieldForms)
@@ -645,6 +813,12 @@ function App() {
   const [complianceForms, setComplianceForms] = useState(emptyComplianceForms)
   const [portalForms, setPortalForms] = useState(emptyPortalForms)
   const [phaseFourForms, setPhaseFourForms] = useState(emptyPhaseFourForms)
+  const [platformForms, setPlatformForms] = useState(emptyPlatformForms)
+  const [securityForms, setSecurityForms] = useState({
+    current_password: '',
+    mfa_code: '',
+    recovery_code: '',
+  })
   const [adminForms, setAdminForms] = useState({
     company: {},
     branch: { code: '', name: '', city: '', country: 'GH' },
@@ -661,7 +835,7 @@ function App() {
   const currentUserId = user?.id || null
   const firstBranchId = branches[0]?.id || ''
   const firstRoleId = roles[0]?.id || ''
-  const allowedNavItems = useMemo(() => accessibleNavItems(user), [user])
+  const allowedNavItems = useMemo(() => accessibleNavItems(user, { cloudConsole: cloudConsolePortal }), [cloudConsolePortal, user])
   const persistedCompanyTheme = normalizeTheme(organization?.company?.settings?.appearance?.theme)
   const adminSelectedTheme = canAdministerRecords(user) ? adminForms.company?.appearance_theme : null
   const activeTheme = tokenReady ? normalizeTheme(adminSelectedTheme || persistedCompanyTheme) : 'light'
@@ -804,6 +978,17 @@ function App() {
       const me = await api.me()
       const currentUser = me.user
       const can = (permissions) => hasAnyPermission(currentUser, permissions)
+      const nextNavItems = accessibleNavItems(currentUser, { cloudConsole: cloudConsolePortal })
+
+      if (nextNavItems.length === 0) {
+        setToken(null)
+        setTokenReady(false)
+        setUser(null)
+        setError(cloudConsolePortal ? 'Use a Structra Cloud Console administrator account.' : 'Use your company Structra account on this login page.')
+
+        return null
+      }
+
       const moduleLoadFailures = []
       const organizationFallback = {
         ...emptyOrganizationData,
@@ -863,29 +1048,32 @@ function App() {
         reportData,
         biData,
         automationData,
+        platformAdminData,
+        securityData,
         adminApprovalData,
       ] = await Promise.all([
-        loadIf('Dashboard', can(['reports.view']), api.dashboard, null),
-        loadIf('Organization', true, api.organization, organizationFallback),
-        loadIf('Projects', needsProjects, api.projects, { data: [] }),
-        loadIf('Procurement', can(['procurement.manage']), api.procurement, emptyProcurementData),
-        loadIf('Documents', needsDocuments, api.documents, { data: [] }),
-        loadIf('Drawings', needsDocuments, api.drawings, { data: [] }),
-        loadIf('CRM, Tendering, and Estimating', can(['crm.manage', 'tenders.manage', 'estimating.manage']), api.sales, emptySalesData),
-        loadIf('Inventory', can(['inventory.manage']), api.inventory, emptyInventoryData),
-        loadIf('Field and Attendance', can(['field.manage', 'attendance.manage']), api.field, emptyFieldData),
-        loadIf('Finance', can(['finance.manage']), api.finance, emptyFinanceData),
-        loadIf('HR and Workforce', can(['payroll.manage']), api.people, emptyPeopleData),
-        loadIf('Equipment', can(['equipment.manage']), api.equipment, emptyEquipmentData),
-        loadIf('QA/HSE', can(['quality.manage', 'safety.manage']), api.compliance, emptyComplianceData),
-        loadIf('Portals', can(['portals.manage']), api.portals, emptyPortalData),
-        loadIf('Reports', can(['reports.view']), api.reports, null),
-        loadIf('Intelligence', can(['bi.manage']), api.businessIntelligence, emptyBiData),
-        loadIf('Automation', can(['automation.manage']), api.automation, emptyAutomationData),
-        loadIf('Admin approvals', can(['settings.manage']), api.adminApprovals, emptyAdminApprovalData),
+        loadIf('Dashboard', !cloudConsolePortal && can(['reports.view']), api.dashboard, null),
+        loadIf('Organization', !cloudConsolePortal, api.organization, organizationFallback),
+        loadIf('Projects', !cloudConsolePortal && needsProjects, api.projects, { data: [] }),
+        loadIf('Procurement', !cloudConsolePortal && can(['procurement.manage']), api.procurement, emptyProcurementData),
+        loadIf('Documents', !cloudConsolePortal && needsDocuments, api.documents, { data: [] }),
+        loadIf('Drawings', !cloudConsolePortal && needsDocuments, api.drawings, { data: [] }),
+        loadIf('CRM, Tendering, and Estimating', !cloudConsolePortal && can(['crm.manage', 'tenders.manage', 'estimating.manage']), api.sales, emptySalesData),
+        loadIf('Inventory', !cloudConsolePortal && can(['inventory.manage']), api.inventory, emptyInventoryData),
+        loadIf('Field and Attendance', !cloudConsolePortal && can(['field.manage', 'attendance.manage']), api.field, emptyFieldData),
+        loadIf('Finance', !cloudConsolePortal && can(['finance.manage']), api.finance, emptyFinanceData),
+        loadIf('HR and Workforce', !cloudConsolePortal && can(['payroll.manage']), api.people, emptyPeopleData),
+        loadIf('Equipment', !cloudConsolePortal && can(['equipment.manage']), api.equipment, emptyEquipmentData),
+        loadIf('QA/HSE', !cloudConsolePortal && can(['quality.manage', 'safety.manage']), api.compliance, emptyComplianceData),
+        loadIf('Portals', !cloudConsolePortal && can(['portals.manage']), api.portals, emptyPortalData),
+        loadIf('Reports', !cloudConsolePortal && can(['reports.view']), api.reports, null),
+        loadIf('Intelligence', !cloudConsolePortal && can(['bi.manage']), api.businessIntelligence, emptyBiData),
+        loadIf('Automation', !cloudConsolePortal && can(['automation.manage']), api.automation, emptyAutomationData),
+        loadIf('Platform Administration', cloudConsolePortal && can(['platform.manage']), api.platformAdmin, emptyPlatformAdminData),
+        loadIf('Account security', true, api.mfaStatus, { security: emptyAccountSecurity }),
+        loadIf('Admin approvals', !cloudConsolePortal && can(['settings.manage']), api.adminApprovals, emptyAdminApprovalData),
       ])
 
-      const nextNavItems = accessibleNavItems(currentUser)
       setUser(me.user)
       setDashboard(dashboardData)
       setOrganization(orgData)
@@ -906,6 +1094,8 @@ function App() {
       setReports(reportData)
       setBusinessIntelligence(biData)
       setAutomation(automationData)
+      setPlatformAdmin(platformAdminData)
+      setAccountSecurity(securityData?.security || emptyAccountSecurity)
       setAdminApprovals(adminApprovalData)
       if (nextNavItems.length > 0 && !nextNavItems.some((item) => item.id === activeView)) {
         setActiveView(nextNavItems[0].id)
@@ -930,6 +1120,9 @@ function App() {
       if (err.status === 401) {
         setToken(null)
         setTokenReady(false)
+        setAccountSecurity(emptyAccountSecurity)
+        setMfaSetup(null)
+        setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
       }
 
       if (!silent) {
@@ -990,6 +1183,9 @@ function App() {
       setOrganization(null)
       setSelectedProject(null)
       setSelectedProjectId(null)
+      setAccountSecurity(emptyAccountSecurity)
+      setMfaSetup(null)
+      setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
     }
   }
 
@@ -999,14 +1195,54 @@ function App() {
     setLoading(true)
 
     try {
-      const payload =
-        authMode === 'login'
-          ? await api.login({ email: authForm.email, password: authForm.password })
-          : await api.register(authForm)
+      const payload = mfaChallenge?.challenge_token
+        ? await api.completeMfaChallenge({
+            challenge_token: mfaChallenge.challenge_token,
+            mfa_code: authForm.mfa_code || null,
+            recovery_code: authForm.recovery_code || null,
+          })
+        : await api.login({ email: authForm.email, password: authForm.password })
+
+      if (payload.mfa_required) {
+        setMfaChallenge({
+          challenge_token: payload.challenge_token,
+          expires_at: payload.expires_at,
+        })
+        setAuthForm((current) => ({
+          ...current,
+          password: '',
+          mfa_code: '',
+          recovery_code: '',
+        }))
+
+        return
+      }
+
+      const nextNavItems = accessibleNavItems(payload.user, { cloudConsole: cloudConsolePortal })
+
+      if (nextNavItems.length === 0) {
+        setToken(payload.token)
+        try {
+          await api.logout()
+        } finally {
+          setToken(null)
+        }
+        setUser(null)
+        setTokenReady(false)
+        setMfaChallenge(null)
+        setAccountSecurity(emptyAccountSecurity)
+        setMfaSetup(null)
+        setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
+        setError(cloudConsolePortal ? 'Use a Structra Cloud Console administrator account.' : 'Use your company Structra account on this login page.')
+
+        return
+      }
 
       setToken(payload.token)
       setUser(payload.user)
-      setActiveView(accessibleNavItems(payload.user)[0]?.id || 'dashboard')
+      setMfaChallenge(null)
+      setAuthForm((current) => ({ ...current, password: '', mfa_code: '', recovery_code: '' }))
+      setActiveView(nextNavItems[0]?.id || (cloudConsolePortal ? 'platform' : 'dashboard'))
       setTokenReady(true)
     } catch (err) {
       setError(validationSummary(err))
@@ -1015,12 +1251,22 @@ function App() {
     }
   }
 
+  function resetMfaChallenge() {
+    setMfaChallenge(null)
+    setAuthForm((current) => ({ ...current, password: '', mfa_code: '', recovery_code: '' }))
+    setError('')
+  }
+
   async function handleLogout() {
     await runAction(() => api.logout(), 'Signed out.', { skipRefresh: true })
     setToken(null)
     setTokenReady(false)
     setUser(null)
-    setActiveView('dashboard')
+    setMfaChallenge(null)
+    setAccountSecurity(emptyAccountSecurity)
+    setMfaSetup(null)
+    setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
+    setActiveView(cloudConsolePortal ? 'platform' : 'dashboard')
   }
 
   function setAdminFormValue(section) {
@@ -1158,6 +1404,55 @@ function App() {
     setLeadForm({ ...emptyLeadForm, branch_id: leadForm.branch_id })
   }
 
+  async function createTender(event) {
+    event.preventDefault()
+
+    const action = tenderForm.opportunity_id
+      ? () =>
+          api.createTenderFromOpportunity(Number(tenderForm.opportunity_id), {
+            title: tenderForm.title,
+            deadline_at: tenderForm.deadline_at || null,
+            expected_award_at: tenderForm.expected_award_at || null,
+            tender_type: tenderForm.tender_type || null,
+            procurement_method: tenderForm.procurement_method || null,
+            project_sector: tenderForm.project_sector || null,
+            project_category: tenderForm.project_category || null,
+            project_location: tenderForm.project_location || null,
+            priority: tenderForm.priority || null,
+            confidentiality_level: tenderForm.confidentiality_level || null,
+          })
+      : () =>
+          api.createTender({
+            branch_id: Number(tenderForm.branch_id || firstBranchId),
+            client_id: tenderForm.client_id ? Number(tenderForm.client_id) : null,
+            client_name: tenderForm.client_id ? null : tenderForm.client_name,
+            title: tenderForm.title,
+            tender_manager_id: tenderForm.tender_manager_id ? Number(tenderForm.tender_manager_id) : null,
+            business_development_officer_id: tenderForm.business_development_officer_id ? Number(tenderForm.business_development_officer_id) : null,
+            tender_type: tenderForm.tender_type || null,
+            procurement_method: tenderForm.procurement_method || null,
+            project_sector: tenderForm.project_sector || null,
+            project_category: tenderForm.project_category || null,
+            project_location: tenderForm.project_location,
+            deadline_at: tenderForm.deadline_at || null,
+            expected_award_at: tenderForm.expected_award_at || null,
+            value: Number(tenderForm.value || 0),
+            tender_fee: Number(tenderForm.tender_fee || 0),
+            currency: tenderForm.currency || 'GHS',
+            description: tenderForm.description,
+            scope_summary: tenderForm.scope_summary,
+            funding_source: tenderForm.funding_source,
+            tender_authority: tenderForm.tender_authority,
+            priority: tenderForm.priority || null,
+            confidentiality_level: tenderForm.confidentiality_level || null,
+            bid_decision: tenderForm.bid_decision || null,
+            bid_decision_score: tenderForm.bid_decision_score ? Number(tenderForm.bid_decision_score) : null,
+          })
+
+    await runAction(action, tenderForm.opportunity_id ? 'Tender created from opportunity.' : 'Tender created.')
+    setTenderForm({ ...emptyTenderForm, branch_id: tenderForm.branch_id })
+  }
+
   async function createEstimate(event) {
     event.preventDefault()
 
@@ -1259,6 +1554,16 @@ function App() {
     return (event) => {
       const { name, value } = event.target
       setPhaseFourForms((current) => ({
+        ...current,
+        [section]: { ...current[section], [name]: value },
+      }))
+    }
+  }
+
+  function setPlatformForm(section) {
+    return (event) => {
+      const { name, value } = event.target
+      setPlatformForms((current) => ({
         ...current,
         [section]: { ...current[section], [name]: value },
       }))
@@ -1887,6 +2192,506 @@ function App() {
     }))
   }
 
+  async function createPlatformCompany(event) {
+    event.preventDefault()
+    const form = platformForms.company
+    const payload = {
+      ...form,
+      subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
+      trial_days: Number(form.trial_days || 0),
+      storage_limit_mb: form.storage_limit_mb ? Number(form.storage_limit_mb) : null,
+      employee_limit: form.employee_limit ? Number(form.employee_limit) : null,
+      project_limit: form.project_limit ? Number(form.project_limit) : null,
+      branch_limit: form.branch_limit ? Number(form.branch_limit) : null,
+      admin_password: form.admin_password || null,
+      enabled_feature_keys: Array.isArray(form.enabled_feature_keys) ? form.enabled_feature_keys : [],
+      branding: {
+        primary_color: platformForms.branding.primary_color,
+        secondary_color: platformForms.branding.secondary_color,
+        accent_color: platformForms.branding.accent_color,
+        sidebar_color: platformForms.branding.sidebar_color,
+        button_color: platformForms.branding.button_color,
+        typography: platformForms.branding.typography,
+        login_welcome_message: platformForms.branding.login_welcome_message,
+        company_motto: platformForms.branding.company_motto,
+      },
+    }
+
+    await runAction(() => api.createPlatformCompany(payload), 'Company provisioned.')
+    setPlatformForms((current) => ({ ...current, company: emptyPlatformForms.company }))
+  }
+
+  async function savePlatformCompanyAccount(event) {
+    event.preventDefault()
+    const form = platformForms.company_account
+    if (!form.company_id) {
+      setError('Select a company before saving account details.')
+      return
+    }
+
+    await runAction(
+      () =>
+        api.updatePlatformCompany(form.company_id, {
+          name: form.name,
+          registration_number: form.registration_number || null,
+          industry: form.industry || null,
+          country: form.country,
+          city: form.city || null,
+          address: form.address || null,
+          phone: form.phone || null,
+          email: form.email || null,
+          website: form.website || null,
+          tax_id: form.tax_id || null,
+          currency: form.currency,
+          timezone: form.timezone || null,
+          language: form.language || null,
+          date_format: form.date_format || null,
+          fiscal_year_start: form.fiscal_year_start || null,
+          status: form.status,
+          storage_limit_mb: form.storage_limit_mb === '' ? null : Number(form.storage_limit_mb),
+          employee_limit: form.employee_limit === '' ? null : Number(form.employee_limit),
+          project_limit: form.project_limit === '' ? null : Number(form.project_limit),
+          branch_limit: form.branch_limit === '' ? null : Number(form.branch_limit),
+          subscription_plan_id: form.subscription_plan_id ? Number(form.subscription_plan_id) : null,
+        }),
+      'Company account updated.',
+    )
+  }
+
+  async function archivePlatformCompany(company) {
+    if (!window.confirm(`Archive ${company.name}? Their users will be signed out, but the account can be restored later.`)) {
+      return
+    }
+
+    await runAction(() => api.archivePlatformCompany(company.id), 'Company archived.')
+    setPlatformForms((current) => ({ ...current, company_account: emptyPlatformForms.company_account }))
+  }
+
+  async function restorePlatformCompany(company) {
+    await runAction(() => api.restorePlatformCompany(company.id), 'Company restored.')
+  }
+
+  async function searchPlatformAdmin(query) {
+    const data = await api.platformAdmin(query ? { q: query } : {})
+    setPlatformAdmin(data)
+  }
+
+  async function createPlatformPlan(event) {
+    event.preventDefault()
+    const form = platformForms.plan
+    const payload = {
+      ...form,
+      monthly_price: Number(form.monthly_price || 0),
+      yearly_price: Number(form.yearly_price || 0),
+      maximum_users: form.maximum_users ? Number(form.maximum_users) : null,
+      maximum_projects: form.maximum_projects ? Number(form.maximum_projects) : null,
+      maximum_storage_mb: form.maximum_storage_mb ? Number(form.maximum_storage_mb) : null,
+      api_access: form.api_access === 'true',
+      custom_branding: form.custom_branding === 'true',
+      sso_available: form.sso_available === 'true',
+    }
+    delete payload.id
+
+    await runAction(
+      () =>
+        form.id ? api.updatePlatformPlan(form.id, payload) : api.createPlatformPlan(payload),
+      form.id ? 'Plan updated.' : 'Plan created.',
+    )
+    setPlatformForms((current) => ({ ...current, plan: emptyPlatformForms.plan }))
+  }
+
+  async function deletePlatformPlan(plan) {
+    if (!window.confirm(`Delete ${plan.name}? Plans with subscription history will be archived and hidden from new sales.`)) {
+      return
+    }
+
+    await runAction(() => api.deletePlatformPlan(plan.id), 'Plan deleted.')
+    setPlatformForms((current) => ({ ...current, plan: String(current.plan.id) === String(plan.id) ? emptyPlatformForms.plan : current.plan }))
+  }
+
+  async function savePlatformSubscription(event) {
+    event.preventDefault()
+    const form = platformForms.subscription
+    if (!form.id) {
+      setError('Select a subscription before saving.')
+      return
+    }
+
+    await runAction(
+      () =>
+        api.updatePlatformSubscription(form.id, {
+          platform_subscription_plan_id: form.platform_subscription_plan_id ? Number(form.platform_subscription_plan_id) : null,
+          status: form.status,
+          billing_interval: form.billing_interval,
+          amount: form.amount === '' ? null : Number(form.amount),
+          currency: form.currency || null,
+          seats: form.seats === '' ? null : Number(form.seats),
+          renewal_at: form.renewal_at || null,
+        }),
+      'Subscription updated.',
+    )
+  }
+
+  async function upgradePlatformSubscription(event) {
+    event.preventDefault()
+    const form = platformForms.subscription
+    if (!form.id || !form.platform_subscription_plan_id) {
+      setError('Select a subscription and target plan before upgrading.')
+      return
+    }
+
+    await runAction(
+      () =>
+        api.upgradePlatformSubscription(form.id, {
+          platform_subscription_plan_id: Number(form.platform_subscription_plan_id),
+          billing_interval: form.billing_interval === 'yearly' ? 'yearly' : 'monthly',
+          amount: form.amount === '' ? null : Number(form.amount),
+          seats: form.seats === '' ? null : Number(form.seats),
+          renewal_at: form.renewal_at || null,
+        }),
+      'Subscription upgraded.',
+    )
+  }
+
+  async function deletePlatformSubscription(subscription) {
+    if (!window.confirm(`Delete ${subscription.company?.name || 'this company'} subscription? The subscription will be cancelled and removed from the active list.`)) {
+      return
+    }
+
+    await runAction(() => api.deletePlatformSubscription(subscription.id), 'Subscription deleted.')
+    setPlatformForms((current) => ({ ...current, subscription: String(current.subscription.id) === String(subscription.id) ? emptyPlatformForms.subscription : current.subscription }))
+  }
+
+  async function savePlatformFeature(event) {
+    event.preventDefault()
+    const form = platformForms.feature
+    if (!form.id) {
+      setError('Select a feature release before saving.')
+      return
+    }
+
+    await runAction(
+      () =>
+        api.updatePlatformFeature(form.id, {
+          name: form.name,
+          module: form.module,
+          category: form.category,
+          description: form.description || null,
+          rollout_status: form.rollout_status,
+          rollout_percentage: Number(form.rollout_percentage || 0),
+          default_enabled: form.default_enabled === 'true',
+          requires_subscription: form.requires_subscription === 'true',
+          pricing_tier: form.pricing_tier || null,
+        }),
+      'Feature release updated.',
+    )
+  }
+
+  async function savePlatformBranding(event) {
+    event.preventDefault()
+    const form = platformForms.branding
+    if (!form.company_id) {
+      setError('Select a company before saving branding.')
+      return
+    }
+
+    const formData = new FormData()
+    Object.entries(form).forEach(([key, value]) => {
+      if (key !== 'company_id' && value !== undefined && value !== null) {
+        formData.append(key, value)
+      }
+    })
+
+    await runAction(() => api.updatePlatformBranding(form.company_id, formData), 'Branding updated.')
+  }
+
+  async function savePlatformSuccess(event) {
+    event.preventDefault()
+    const form = platformForms.success
+    if (!form.company_id) {
+      setError('Select a company before saving customer success.')
+      return
+    }
+
+    await runAction(
+      () =>
+        api.updatePlatformCompanySuccess(form.company_id, {
+          success_manager: form.success_manager,
+          last_meeting_at: form.last_meeting_at || null,
+          next_meeting_at: form.next_meeting_at || null,
+          training_completed_percent: form.training_completed_percent === '' ? null : Number(form.training_completed_percent),
+          adoption_percent: form.adoption_percent === '' ? null : Number(form.adoption_percent),
+          risk_percent: form.risk_percent === '' ? null : Number(form.risk_percent),
+          expansion_opportunity: form.expansion_opportunity,
+          notes: form.notes,
+        }),
+      'Customer success updated.',
+    )
+  }
+
+  async function savePlatformStaffUser(event) {
+    event.preventDefault()
+    const form = platformForms.staff
+    const permissions = normalizePermissionList(form.permissions).length > 0 ? normalizePermissionList(form.permissions) : ['platform.manage']
+    const payload = {
+      name: form.name,
+      email: form.email,
+      phone: form.phone || null,
+      job_title: form.job_title || null,
+      status: form.status || 'active',
+      permissions,
+    }
+
+    if (form.password) {
+      payload.password = form.password
+    }
+
+    const action = form.id
+      ? () => api.updatePlatformStaffUser(form.id, payload)
+      : () => api.createPlatformStaffUser({ ...payload, password: form.password })
+
+    await runAction(action, form.id ? 'Cloud Console user updated.' : 'Cloud Console user created.')
+    setPlatformForms((current) => ({ ...current, staff: emptyPlatformForms.staff }))
+  }
+
+  async function deletePlatformStaffUser(item) {
+    if (!window.confirm(`Delete ${item.name}? This removes their Structra Cloud Console access.`)) {
+      return
+    }
+
+    await runAction(() => api.deletePlatformStaffUser(item.id), 'Cloud Console user deleted.')
+    setPlatformForms((current) => String(current.staff.id) === String(item.id) ? { ...current, staff: emptyPlatformForms.staff } : current)
+  }
+
+  async function savePlatformProfile(event) {
+    event.preventDefault()
+    const form = platformForms.profile
+    const payload = {
+      name: form.name,
+      email: form.email,
+      phone: form.phone || null,
+      job_title: form.job_title || null,
+    }
+
+    if (form.current_password) {
+      payload.current_password = form.current_password
+    }
+    if (form.password) {
+      payload.password = form.password
+      payload.password_confirmation = form.password_confirmation
+    }
+
+    const result = await runAction(() => api.updatePlatformProfile(payload), 'Login details updated.', { skipRefresh: true })
+    if (result?.user) {
+      setUser(result.user)
+      setPlatformForms((current) => ({
+        ...current,
+        profile: {
+          user_id: String(result.user.id),
+          name: result.user.name || '',
+          email: result.user.email || '',
+          phone: result.user.phone || '',
+          job_title: result.user.job_title || '',
+          current_password: '',
+          password: '',
+          password_confirmation: '',
+        },
+      }))
+      await refreshWorkspace({ force: true })
+    }
+  }
+
+  async function startMfaSetup(event) {
+    event.preventDefault()
+    const result = await runAction(
+      () => api.setupMfa({ current_password: securityForms.current_password }),
+      'Multi-factor setup started.',
+      { skipRefresh: true },
+    )
+
+    if (result?.security) {
+      setAccountSecurity(result.security)
+      setMfaSetup(result.setup || null)
+      setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
+    }
+  }
+
+  async function enableMfa(event) {
+    event.preventDefault()
+    const result = await runAction(
+      () =>
+        api.enableMfa({
+          current_password: securityForms.current_password,
+          mfa_code: securityForms.mfa_code,
+        }),
+      'Multi-factor authentication enabled.',
+      { skipRefresh: true },
+    )
+
+    if (result?.security) {
+      setAccountSecurity(result.security)
+      setMfaSetup((current) => (current ? { ...current, enabled: true } : null))
+      setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
+    }
+  }
+
+  async function disableMfa(event) {
+    event.preventDefault()
+    if (!window.confirm('Disable multi-factor authentication for your account?')) {
+      return
+    }
+
+    const result = await runAction(
+      () =>
+        api.disableMfa({
+          current_password: securityForms.current_password,
+          mfa_code: securityForms.mfa_code || null,
+          recovery_code: securityForms.recovery_code || null,
+        }),
+      'Multi-factor authentication disabled.',
+      { skipRefresh: true },
+    )
+
+    if (result?.security) {
+      setAccountSecurity(result.security)
+      setMfaSetup(null)
+      setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
+    }
+  }
+
+  async function regenerateMfaRecoveryCodes(event) {
+    event.preventDefault()
+    const result = await runAction(
+      () =>
+        api.regenerateMfaRecoveryCodes({
+          current_password: securityForms.current_password,
+          mfa_code: securityForms.mfa_code,
+        }),
+      'Recovery codes regenerated.',
+      { skipRefresh: true },
+    )
+
+    if (result?.security) {
+      setAccountSecurity(result.security)
+      setMfaSetup({ recovery_codes: result.recovery_codes || [] })
+      setSecurityForms({ current_password: '', mfa_code: '', recovery_code: '' })
+    }
+  }
+
+  async function createPlatformBillingRecord(event) {
+    event.preventDefault()
+    const form = platformForms.billing
+    await runAction(
+      () =>
+        api.createPlatformBillingRecord({
+          ...form,
+          company_id: Number(form.company_id),
+          company_subscription_id: form.company_subscription_id ? Number(form.company_subscription_id) : null,
+          amount: Number(form.amount || 0),
+          paid_at: form.paid_at || null,
+        }),
+      'Billing record created.',
+    )
+    setPlatformForms((current) => ({ ...current, billing: { ...emptyPlatformForms.billing, company_id: form.company_id } }))
+  }
+
+  async function createPlatformSupportTicket(event) {
+    event.preventDefault()
+    const form = platformForms.support
+    await runAction(
+      () =>
+        api.createPlatformSupportTicket({
+          ...form,
+          company_id: form.company_id ? Number(form.company_id) : null,
+          assigned_to: form.assigned_to ? Number(form.assigned_to) : null,
+          sla_due_at: form.sla_due_at || null,
+        }),
+      'Support ticket created.',
+    )
+    setPlatformForms((current) => ({ ...current, support: { ...emptyPlatformForms.support, company_id: form.company_id } }))
+  }
+
+  async function updatePlatformSupportTicket(event) {
+    event.preventDefault()
+    const form = platformForms.support_update
+    if (!form.id) {
+      setError('Select a support ticket before saving.')
+      return
+    }
+
+    await runAction(
+      () =>
+        api.updatePlatformSupportTicket(form.id, {
+          status: form.status,
+          priority: form.priority,
+          assigned_to: form.assigned_to ? Number(form.assigned_to) : null,
+          resolution_notes: form.resolution_notes || null,
+        }),
+      'Support ticket updated.',
+    )
+  }
+
+  async function createPlatformDeployment(event) {
+    event.preventDefault()
+    const form = platformForms.deployment
+    await runAction(
+      () => api.createPlatformDeployment({ ...form, scheduled_at: form.scheduled_at || null }),
+      'Deployment created.',
+    )
+    setPlatformForms((current) => ({ ...current, deployment: emptyPlatformForms.deployment }))
+  }
+
+  async function createPlatformBackup(event) {
+    event.preventDefault()
+    const form = platformForms.backup
+    await runAction(
+      () => api.createPlatformBackup({ ...form, company_id: form.company_id ? Number(form.company_id) : null }),
+      'Backup queued.',
+    )
+  }
+
+  async function updatePlatformSettings(event) {
+    event.preventDefault()
+    const monitoringKeys = ['database_warning_ms', 'database_critical_ms', 'queue_pending_warning', 'failed_jobs_critical', 'storage_warning_percent', 'storage_critical_percent', 'security_alert_critical']
+    const monitoring = monitoringKeys.reduce((payload, key) => ({
+      ...payload,
+      [key]: platformForms.settings[key] === '' ? null : Number(platformForms.settings[key]),
+    }), { enabled: true })
+
+    await runAction(
+      () =>
+        api.updatePlatformSettings({
+          settings: {
+            monitoring,
+            ai: {
+              enabled: platformForms.settings.ai_enabled === 'true',
+              usage_percent: platformForms.settings.ai_usage_percent === '' ? null : Number(platformForms.settings.ai_usage_percent),
+              monthly_token_limit: platformForms.settings.ai_monthly_token_limit === '' ? null : Number(platformForms.settings.ai_monthly_token_limit),
+              monthly_budget: platformForms.settings.ai_monthly_budget === '' ? null : Number(platformForms.settings.ai_monthly_budget),
+              cost_month_to_date: platformForms.settings.ai_cost_month_to_date === '' ? null : Number(platformForms.settings.ai_cost_month_to_date),
+            },
+          },
+        }),
+      'Platform settings updated.',
+    )
+  }
+
+  async function startPlatformImpersonation(event) {
+    event.preventDefault()
+    const form = platformForms.impersonation
+    await runAction(
+      () =>
+        api.startPlatformImpersonation(form.company_id, {
+          user_id: Number(form.user_id),
+          reason: form.reason,
+          authorization_reference: form.authorization_reference,
+          expires_minutes: Number(form.expires_minutes || 30),
+        }),
+      'Impersonation token created.',
+    )
+    setPlatformForms((current) => ({ ...current, impersonation: { ...emptyPlatformForms.impersonation, company_id: form.company_id } }))
+  }
+
   async function uploadDocument(event) {
     event.preventDefault()
 
@@ -1946,11 +2751,12 @@ function App() {
   if (!tokenReady) {
     return (
       <AuthScreen
-        authMode={authMode}
-        setAuthMode={setAuthMode}
+        brandName={cloudConsolePortal ? 'Structra Cloud Console' : 'Structra'}
         authForm={authForm}
         setAuthForm={setAuthForm}
         handleAuth={handleAuth}
+        mfaChallenge={mfaChallenge}
+        resetMfaChallenge={resetMfaChallenge}
         loading={loading}
         error={error}
       />
@@ -1959,7 +2765,11 @@ function App() {
 
   const activeTitle = activeView === 'compliance'
     ? 'Quality Assurance and Health, Safety, and Environment'
-    : navItems.find((item) => item.id === activeView)?.label || 'Workspace'
+    : activeView === 'crm'
+      ? 'Customer Relation Management(CRM)'
+      : activeView === 'platform'
+        ? 'Structra Cloud Console'
+        : navItems.find((item) => item.id === activeView)?.label || 'Workspace'
   const showAdminThemeToggle = activeView === 'admin' && canAdministerRecords(user)
 
   return (
@@ -2003,7 +2813,7 @@ function App() {
       </aside>
 
       <main className="workspace">
-        <header className="topbar">
+        <header className={`topbar ${activeView === 'platform' ? 'cloud-app-topbar' : ''}`}>
           <div className="topbar-title">
             <h1>{activeTitle}</h1>
             {showAdminThemeToggle && (
@@ -2020,6 +2830,47 @@ function App() {
           </div>
         </header>
 
+        {activeView === 'platform' && (
+          <PlatformAdminView
+            currentUser={user}
+            platform={platformAdmin}
+            accountSecurity={accountSecurity}
+            mfaSetup={mfaSetup}
+            forms={platformForms}
+            securityForms={securityForms}
+            setPlatformForm={setPlatformForm}
+            setSecurityForm={setForm(setSecurityForms)}
+            setPlatformForms={setPlatformForms}
+            createCompany={createPlatformCompany}
+            saveCompanyAccount={savePlatformCompanyAccount}
+            archiveCompany={archivePlatformCompany}
+            restoreCompany={restorePlatformCompany}
+            createPlan={createPlatformPlan}
+            deletePlan={deletePlatformPlan}
+            saveSubscription={savePlatformSubscription}
+            upgradeSubscription={upgradePlatformSubscription}
+            deleteSubscription={deletePlatformSubscription}
+            saveFeature={savePlatformFeature}
+            saveBranding={savePlatformBranding}
+            saveSuccess={savePlatformSuccess}
+            saveStaffUser={savePlatformStaffUser}
+            deleteStaffUser={deletePlatformStaffUser}
+            saveProfile={savePlatformProfile}
+            startMfaSetup={startMfaSetup}
+            enableMfa={enableMfa}
+            disableMfa={disableMfa}
+            regenerateMfaRecoveryCodes={regenerateMfaRecoveryCodes}
+            createBillingRecord={createPlatformBillingRecord}
+            createSupportTicket={createPlatformSupportTicket}
+            updateSupportTicket={updatePlatformSupportTicket}
+            createDeployment={createPlatformDeployment}
+            createBackup={createPlatformBackup}
+            updateSettings={updatePlatformSettings}
+            startImpersonation={startPlatformImpersonation}
+            searchPlatform={searchPlatformAdmin}
+            runAction={runAction}
+          />
+        )}
         {activeView === 'dashboard' && <DashboardView dashboard={dashboard} projects={projects} />}
         {activeView === 'crm' && (
           <CrmView
@@ -2033,7 +2884,13 @@ function App() {
         )}
         {activeView === 'tendering' && (
           <TenderingView
+            branches={branches}
+            clients={clients}
+            users={users}
             sales={sales}
+            tenderForm={tenderForm}
+            setTenderForm={setTenderForm}
+            createTender={createTender}
             runAction={runAction}
           />
         )}
@@ -2247,10 +3104,18 @@ function App() {
             users={users}
             currentUser={user}
             approvals={adminApprovals}
+            accountSecurity={accountSecurity}
+            mfaSetup={mfaSetup}
             forms={adminForms}
+            securityForms={securityForms}
             setForms={setAdminForms}
             setAdminFormValue={setAdminFormValue}
+            setSecurityForm={setForm(setSecurityForms)}
             archiveCompany={archiveCompany}
+            startMfaSetup={startMfaSetup}
+            enableMfa={enableMfa}
+            disableMfa={disableMfa}
+            regenerateMfaRecoveryCodes={regenerateMfaRecoveryCodes}
             runAction={runAction}
           />
         )}
@@ -2282,9 +3147,9 @@ function ThemeToggle({ theme, onToggle, disabled = false }) {
   )
 }
 
-function AuthScreen({ authMode, setAuthMode, authForm, setAuthForm, handleAuth, loading, error }) {
-  const register = authMode === 'register'
+function AuthScreen({ brandName, authForm, setAuthForm, handleAuth, mfaChallenge, resetMfaChallenge, loading, error }) {
   const [showPassword, setShowPassword] = useState(false)
+  const isMfaStep = Boolean(mfaChallenge?.challenge_token)
 
   return (
     <main className="auth-layout">
@@ -2293,7 +3158,7 @@ function AuthScreen({ authMode, setAuthMode, authForm, setAuthForm, handleAuth, 
           <div className="auth-brand-lockup">
             <div className="brand-mark auth-logo-mark">S</div>
             <div className="auth-brand-copy">
-              <strong>Structra</strong>
+              <strong>{brandName}</strong>
               <small>Powered by Navkwa Group Ltd.</small>
             </div>
           </div>
@@ -2318,54 +3183,2458 @@ function AuthScreen({ authMode, setAuthMode, authForm, setAuthForm, handleAuth, 
         </div>
         <form onSubmit={handleAuth} className="auth-form">
           <div className="form-header">
-            <h1>{register ? 'Create workspace' : 'Sign in'}</h1>
-            <div className="segmented">
-              <button type="button" className={!register ? 'active' : ''} onClick={() => setAuthMode('login')}>
-                Sign in
-              </button>
-              <button type="button" className={register ? 'active' : ''} onClick={() => setAuthMode('register')}>
-                Register
-              </button>
-            </div>
+            <h1>{isMfaStep ? 'Verify sign in' : 'Sign in'}</h1>
           </div>
 
-          {register && (
-            <div className="form-grid two">
-              <Field label="Company" name="company_name" value={authForm.company_name} onChange={setForm(setAuthForm)} required />
-              <Field label="Branch" name="branch_name" value={authForm.branch_name} onChange={setForm(setAuthForm)} />
-              <Field label="Country" name="country" value={authForm.country} onChange={setForm(setAuthForm)} required maxLength={2} />
-              <Field label="Currency" name="currency" value={authForm.currency} onChange={setForm(setAuthForm)} required maxLength={3} />
-              <Field label="Name" name="name" value={authForm.name} onChange={setForm(setAuthForm)} required />
-            </div>
+          <Field label="Email" type="email" name="email" value={authForm.email} onChange={setForm(setAuthForm)} required disabled={isMfaStep} />
+          {isMfaStep ? (
+            <>
+              <Field label="Authenticator Code" name="mfa_code" value={authForm.mfa_code} onChange={setForm(setAuthForm)} inputMode="numeric" autoComplete="one-time-code" required={!authForm.recovery_code} />
+              <Field label="Recovery Code" name="recovery_code" value={authForm.recovery_code} onChange={setForm(setAuthForm)} autoComplete="one-time-code" />
+            </>
+          ) : (
+            <label className="field password-field">
+              <span>Password</span>
+              <div className="password-input-wrap">
+                <input type={showPassword ? 'text' : 'password'} name="password" value={authForm.password} onChange={setForm(setAuthForm)} required />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </label>
           )}
-
-          <Field label="Email" type="email" name="email" value={authForm.email} onChange={setForm(setAuthForm)} required />
-          <label className="field password-field">
-            <span>Password</span>
-            <div className="password-input-wrap">
-              <input type={showPassword ? 'text' : 'password'} name="password" value={authForm.password} onChange={setForm(setAuthForm)} required />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword((current) => !current)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                title={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </label>
 
           {error && <p className="form-error">{error}</p>}
 
-          <button type="submit" className="primary-action" disabled={loading}>
-            <ShieldCheck size={18} />
-            {loading ? 'Working...' : register ? 'Create account' : 'Sign in'}
-          </button>
+          <div className="auth-action-row">
+            <button type="submit" className="primary-action" disabled={loading}>
+              <ShieldCheck size={18} />
+              {loading ? 'Working...' : isMfaStep ? 'Verify' : 'Sign in'}
+            </button>
+            {isMfaStep && (
+              <button type="button" className="table-action" onClick={resetMfaChallenge} disabled={loading}>
+                Back
+              </button>
+            )}
+          </div>
         </form>
       </section>
     </main>
   )
+}
+
+function AccountSecurityPanel({
+  accountSecurity = emptyAccountSecurity,
+  mfaSetup,
+  securityForms = { current_password: '', mfa_code: '', recovery_code: '' },
+  setSecurityForm,
+  startMfaSetup,
+  enableMfa,
+  disableMfa,
+  regenerateMfaRecoveryCodes,
+}) {
+  const mfaStatus = accountSecurity?.mfa || emptyAccountSecurity.mfa
+  const recoveryCodes = mfaSetup?.recovery_codes || []
+
+  return (
+    <section className="panel security-mfa-panel">
+      <PanelTitle icon={ShieldCheck} title="My Account Protection" />
+      <div className="security-status-row">
+        <Metric label="Multi-factor" value={mfaStatus.enabled ? 'Enabled' : 'Disabled'} />
+        <Metric label="Recovery Codes" value={mfaStatus.recovery_codes_remaining ?? 0} />
+        <Metric label="Last Verified" value={mfaStatus.last_used_at ? shortDate(mfaStatus.last_used_at) : 'Not recorded'} />
+      </div>
+
+      {recoveryCodes.length > 0 && (
+        <div className="mfa-recovery-block">
+          <span>Recovery Codes</span>
+          <div className="recovery-code-grid">
+            {recoveryCodes.map((code) => <code key={code}>{code}</code>)}
+          </div>
+        </div>
+      )}
+
+      {!mfaStatus.enabled && !mfaSetup && (
+        <form className="form-grid two" onSubmit={startMfaSetup}>
+          <Field label="Current Password" type="password" name="current_password" value={securityForms.current_password} onChange={setSecurityForm} required />
+          <button type="submit" className="primary-action">
+            <ShieldCheck size={17} />
+            Start MFA setup
+          </button>
+        </form>
+      )}
+
+      {!mfaStatus.enabled && mfaSetup && (
+        <>
+          {mfaSetup.secret && (
+            <Field className="span-2" label="Authenticator Secret" name="mfa_secret" value={mfaSetup.secret} readOnly />
+          )}
+          <form className="form-grid two" onSubmit={enableMfa}>
+            <Field label="Current Password" type="password" name="current_password" value={securityForms.current_password} onChange={setSecurityForm} required />
+            <Field label="Authenticator Code" name="mfa_code" value={securityForms.mfa_code} onChange={setSecurityForm} inputMode="numeric" autoComplete="one-time-code" required />
+            <button type="submit" className="primary-action">
+              <CheckCircle2 size={17} />
+              Enable MFA
+            </button>
+          </form>
+        </>
+      )}
+
+      {mfaStatus.enabled && (
+        <div className="security-mfa-actions">
+          <form className="form-grid two" onSubmit={regenerateMfaRecoveryCodes}>
+            <Field label="Current Password" type="password" name="current_password" value={securityForms.current_password} onChange={setSecurityForm} required />
+            <Field label="Authenticator Code" name="mfa_code" value={securityForms.mfa_code} onChange={setSecurityForm} inputMode="numeric" autoComplete="one-time-code" required />
+            <button type="submit" className="primary-action">
+              <RefreshCcw size={17} />
+              Regenerate codes
+            </button>
+          </form>
+
+          <form className="form-grid two" onSubmit={disableMfa}>
+            <Field label="Current Password" type="password" name="current_password" value={securityForms.current_password} onChange={setSecurityForm} required />
+            <Field label="Authenticator Code" name="mfa_code" value={securityForms.mfa_code} onChange={setSecurityForm} inputMode="numeric" autoComplete="one-time-code" />
+            <Field label="Recovery Code" name="recovery_code" value={securityForms.recovery_code} onChange={setSecurityForm} autoComplete="one-time-code" />
+            <button type="submit" className="table-action danger">
+              Disable MFA
+            </button>
+          </form>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function PlatformAdminView({
+  currentUser,
+  platform = emptyPlatformAdminData,
+  accountSecurity = emptyAccountSecurity,
+  mfaSetup,
+  forms,
+  securityForms,
+  setPlatformForm,
+  setSecurityForm,
+  setPlatformForms,
+  createCompany,
+  saveCompanyAccount,
+  archiveCompany,
+  restoreCompany,
+  createPlan,
+  deletePlan,
+  saveSubscription,
+  upgradeSubscription,
+  deleteSubscription,
+  saveFeature,
+  saveBranding,
+  saveSuccess,
+  saveStaffUser,
+  deleteStaffUser,
+  saveProfile,
+  startMfaSetup,
+  enableMfa,
+  disableMfa,
+  regenerateMfaRecoveryCodes,
+  createBillingRecord,
+  createSupportTicket,
+  updateSupportTicket,
+  createDeployment,
+  createBackup,
+  updateSettings,
+  startImpersonation,
+  searchPlatform,
+  runAction,
+}) {
+  const [activeTab, setActiveTab] = useState('executive')
+  const [activeLayer, setActiveLayer] = useState('platform')
+  const [selectedCompanyId, setSelectedCompanyId] = useState('')
+  const [companyWorkspaceTab, setCompanyWorkspaceTab] = useState('overview')
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [wizardStep, setWizardStep] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
+  const companies = useMemo(() => platform.companies || [], [platform.companies])
+  const archivedCompanies = useMemo(() => platform.archived_companies || [], [platform.archived_companies])
+  const plans = useMemo(() => platform.plans || [], [platform.plans])
+  const featureFlags = useMemo(() => platform.feature_flags || [], [platform.feature_flags])
+  const subscriptions = useMemo(() => platform.subscriptions || [], [platform.subscriptions])
+  const billingRecords = useMemo(() => platform.billing_records || [], [platform.billing_records])
+  const tickets = useMemo(() => platform.support_tickets || [], [platform.support_tickets])
+  const deployments = useMemo(() => platform.deployments || [], [platform.deployments])
+  const securityEvents = useMemo(() => platform.security_events || [], [platform.security_events])
+  const backups = useMemo(() => platform.backups || [], [platform.backups])
+  const auditLogs = useMemo(() => platform.audit_logs || [], [platform.audit_logs])
+  const platformStaff = useMemo(() => platform.platform_staff || [], [platform.platform_staff])
+  const notifications = useMemo(() => platform.notifications || [], [platform.notifications])
+  const integrations = useMemo(() => platform.integrations || [], [platform.integrations])
+  const automationWorkflows = platform.automation_workflows || { summary: {}, rules: [], recent_runs: [] }
+  const supportMetrics = platform.support_metrics || {}
+  const analytics = platform.analytics || {}
+  const summary = platform.summary || {}
+  const commandCenter = platform.command_center || {}
+  const settingsByKey = useMemo(() => Object.fromEntries((platform.settings || []).map((setting) => [setting.setting_key, setting.setting_value || {}])), [platform.settings])
+  const monitoringThresholds = platform.monitoring?.thresholds
+  const searchResults = platform.search_results || []
+  const catalog = platform.catalog || {}
+  const platformPermissions = catalog.platform_permissions?.length
+    ? catalog.platform_permissions
+    : [{ key: 'platform.manage', label: 'Cloud Console Access', description: 'Can sign in to Structra Cloud Console.' }]
+  const layerIconMap = { platform: BarChart3, customers: Building2, product: Layers3, security: ShieldCheck, engineering: Workflow, executive: BarChart3, operations: Building2, intelligence: ActivityIcon }
+  const tabIconMap = {
+    executive: BarChart3,
+    'operations-center': ActivityIcon,
+    companies: Building2,
+    'customer-success': Handshake,
+    subscriptions: WalletCards,
+    features: Layers3,
+    support: AlertTriangle,
+    payment: WalletCards,
+    company: Building2,
+    module: Layers3,
+    billing: WalletCards,
+    payments: WalletCards,
+    deployment: Upload,
+    backup: Download,
+    notifications: Send,
+    automation: Workflow,
+    monitoring: ActivityIcon,
+    security: ShieldCheck,
+    audit: Clock3,
+    backups: Download,
+    developer: Workflow,
+    integrations: Layers3,
+    data: FileText,
+    settings: Settings,
+    usage: BarChart3,
+    reports: ClipboardList,
+    licenses: CheckCircle2,
+    marketplace: Package,
+    ai: BarChart3,
+    localization: Globe2,
+    identity: Globe2,
+    account: Building2,
+    roles: ShieldCheck,
+    users: Users,
+    subscription: WalletCards,
+    revenue: WalletCards,
+    storage: FileText,
+    timeline: Clock3,
+    analytics: BarChart3,
+  }
+  const cardIconMap = {
+    platform_health: ShieldCheck,
+    live_users: Users,
+    companies_online: Building2,
+    revenue_today: WalletCards,
+    pending_support: AlertTriangle,
+    deployments_running: Upload,
+    security_threats: ShieldCheck,
+    failed_jobs: Workflow,
+    storage: FileText,
+    ai_usage: BarChart3,
+  }
+  const firstCompanyId = companies[0]?.id ? String(companies[0].id) : ''
+  const selectedCompanyExists = companies.some((company) => String(company.id) === String(selectedCompanyId))
+  const effectiveSelectedCompanyId = selectedCompanyExists ? selectedCompanyId : firstCompanyId
+  const selectedCompany = companies.find((company) => String(company.id) === String(effectiveSelectedCompanyId)) || companies[0]
+  const featureCompanyId = forms.feature_company.company_id || firstCompanyId
+  const featureCompany = companies.find((company) => String(company.id) === String(featureCompanyId)) || companies[0]
+  const impersonationCompany = companies.find((company) => String(company.id) === String(forms.impersonation.company_id))
+  const selectedCompanyUsers = impersonationCompany?.users || []
+  const selectedCompanyFeatures = featureCompany?.enabled_features || []
+  const consoleLayers = catalog.console_layers || []
+  const activeLayerConfig = consoleLayers.find((layer) => layer.id === activeLayer) || consoleLayers[0]
+  const productFeatures = featureFlags.filter((flag) => flag.category !== 'module')
+  const platformPermissionSummary = (permissions = []) => {
+    const normalized = normalizePermissionList(permissions)
+    if (normalized.includes('platform.*')) return 'Super Admin Access'
+    if (normalized.includes('platform.manage')) return 'Cloud Console Access'
+    return 'No Cloud Console access'
+  }
+  const hydrateCompanyAccountForm = useCallback((company) => {
+    if (!company?.id) return
+
+    setPlatformForms((current) => ({
+      ...current,
+      company_account: {
+        ...current.company_account,
+        company_id: String(company.id),
+        name: company.name || '',
+        registration_number: company.registration_number || '',
+        industry: company.industry || '',
+        country: company.country || 'GH',
+        city: company.city || '',
+        address: company.address || '',
+        phone: company.phone || '',
+        email: company.email || '',
+        website: company.website || '',
+        tax_id: company.tax_id || '',
+        currency: company.default_currency || 'GHS',
+        timezone: company.base_timezone || 'Africa/Accra',
+        language: company.language || 'en',
+        date_format: company.date_format || 'Y-m-d',
+        fiscal_year_start: company.fiscal_year_start || '01-01',
+        status: company.status || 'active',
+        storage_limit_mb: company.storage_limit_mb ?? '',
+        employee_limit: company.employee_limit ?? '',
+        project_limit: company.project_limit ?? '',
+        branch_limit: company.branch_limit ?? '',
+        subscription_plan_id: company.subscription?.plan?.id ? String(company.subscription.plan.id) : '',
+      },
+    }))
+  }, [setPlatformForms])
+  const roleRows = companies.flatMap((company) => (company.roles || []).map((role) => [company.name, role.name, role.slug, (role.permissions || []).includes('*') ? 'All tenant access' : `${(role.permissions || []).length} permissions`, role.is_system ? 'System' : 'Custom']))
+  const catalogCountries = catalog.countries || []
+  const catalogCurrencies = catalog.currencies || []
+  const catalogCompanyStatuses = catalog.statuses || []
+  const catalogPlanStatuses = catalog.plan_statuses || []
+  const catalogSubscriptionStatuses = catalog.subscription_statuses || []
+  const catalogBillingIntervals = catalog.billing_intervals || []
+  const catalogSupportLevels = catalog.support_levels || []
+  const catalogSupportPriorities = catalog.support_priorities || []
+  const catalogSupportTicketStatuses = catalog.support_ticket_statuses || []
+  const catalogBillingRecordTypes = catalog.billing_record_types || []
+  const catalogBillingStatuses = catalog.billing_statuses || []
+  const catalogDeploymentScopes = catalog.deployment_scopes || []
+  const catalogBackupTypes = catalog.backup_types || []
+  const monitoring = platform.monitoring || {}
+  const monitoringChecks = monitoring.checks || {}
+  const checkTone = (key) => monitoringChecks[key]?.status || 'neutral'
+  const checkValue = (key, fallback = 'Unavailable') => monitoringChecks[key]?.value || fallback
+  const openSupportTickets = tickets.filter((ticket) => !['resolved', 'closed'].includes(ticket.status))
+  const urgentSupportTickets = openSupportTickets.filter((ticket) => ['urgent', 'critical'].includes(ticket.priority))
+  const awaitingCustomerTickets = openSupportTickets.filter((ticket) => ticket.status === 'waiting_customer')
+  const resolvedTodayTickets = tickets.filter((ticket) => ['resolved', 'closed'].includes(ticket.status) && dateFrom(ticket.updated_at)?.toDateString() === new Date().toDateString())
+  const paidBillingRecords = billingRecords.filter((record) => record.status === 'paid')
+  const outstandingBillingRecords = billingRecords.filter((record) => record.record_type === 'invoice' && !['paid', 'void'].includes(record.status))
+  const failedPayments = billingRecords.filter((record) => record.record_type === 'failed_payment' || record.status === 'failed')
+  const renewalSubscriptions = subscriptions.filter((subscription) => {
+    const renewalDate = dateFrom(subscription.renewal_at)
+    return renewalDate && renewalDate >= new Date() && renewalDate <= new Date(Date.now() + 30 * 86400000)
+  })
+  const currentVersion = deployments.find((deployment) => deployment.release_version && ['completed', 'deployed', 'successful'].includes(deployment.status))?.release_version
+    || commandCenter.latest_deployment?.release_version
+    || deployments.find((deployment) => deployment.release_version)?.release_version
+    || monitoring.app_version
+    || 'Not configured'
+  const storagePercent = summary.storage_usage_percent ?? monitoring.storage_usage_percent
+  const latestBackup = commandCenter.latest_backup || backups[0]
+  const latestDeployment = commandCenter.latest_deployment || deployments[0]
+  const activityFeed = useMemo(() => {
+    const events = []
+    companies.slice(0, 20).forEach((company) => {
+      events.push({ type: 'company', at: company.created_at, title: 'Company onboarded', detail: company.name, company_id: company.id })
+      ;(company.timeline || []).slice(0, 6).forEach((event) => events.push({ ...event, at: event.occurred_at, company_id: company.id, detail: event.detail || company.name }))
+    })
+    paidBillingRecords.slice(0, 20).forEach((record) => events.push({ type: 'payment', at: record.paid_at || record.updated_at || record.created_at, title: 'Payment received', detail: `${record.company?.name || 'Platform'} ${money(record.amount)}`, company_id: record.company_id }))
+    tickets.slice(0, 20).forEach((ticket) => events.push({ type: 'support', at: ticket.updated_at || ticket.created_at, title: `Support ticket ${labelize(ticket.status)}`, detail: `${ticket.ticket_number} ${ticket.title}`, company_id: ticket.company_id }))
+    deployments.slice(0, 10).forEach((deployment) => events.push({ type: 'deployment', at: deployment.deployed_at || deployment.scheduled_at || deployment.created_at, title: `Deployment ${labelize(deployment.status)}`, detail: `${deployment.release_version || deployment.deployment_number} ${deployment.title || ''}`.trim() }))
+    backups.slice(0, 10).forEach((backup) => events.push({ type: 'backup', at: backup.completed_at || backup.started_at || backup.created_at, title: `Backup ${labelize(backup.status)}`, detail: `${backup.company?.name || 'Platform'} ${labelize(backup.backup_type)}` }))
+    securityEvents.slice(0, 10).forEach((event) => events.push({ type: 'security', at: event.created_at, title: `${labelize(event.event_type)} ${labelize(event.status)}`, detail: event.company?.name || event.ip_address || 'Platform' }))
+
+    return events
+      .filter((event) => dateFrom(event.at))
+      .sort((a, b) => dateFrom(b.at) - dateFrom(a.at))
+      .slice(0, 24)
+  }, [backups, companies, deployments, paidBillingRecords, securityEvents, tickets])
+  const revenueTrend = useMemo(() => {
+    const revenue = [...(analytics.monthly_revenue || [])].sort((a, b) => String(a.month).localeCompare(String(b.month)))
+    const current = Number(revenue.at(-1)?.revenue || 0)
+    const previous = Number(revenue.at(-2)?.revenue || 0)
+    if (!previous) return null
+    return Math.round(((current - previous) / previous) * 100)
+  }, [analytics.monthly_revenue])
+  const topModuleAdoption = [...(analytics.module_adoption || [])]
+    .sort((a, b) => Number(b.companies || 0) - Number(a.companies || 0))
+    .slice(0, 2)
+  const executiveRecommendation = commandCenter.companies_needing_attention?.[0]
+    ? `Contact ${commandCenter.companies_needing_attention[0].name}. ${(commandCenter.companies_needing_attention[0].health_reasons || [])[0]?.label || 'Their account needs follow-up.'}`
+    : companies.find((company) => company.storage_limit_mb && Number(company.usage?.storage_mb || 0) >= Number(company.storage_limit_mb) * 0.85)
+      ? `Review storage for ${companies.find((company) => company.storage_limit_mb && Number(company.usage?.storage_mb || 0) >= Number(company.storage_limit_mb) * 0.85)?.name}. They are approaching their storage limit.`
+      : 'No urgent customer intervention required.'
+  const platformHealthItems = [
+    { label: 'Platform Status', value: commandCenter.status_label || monitoring.status_label || 'Operational', tone: commandCenter.status || monitoring.status || 'operational' },
+    { label: 'Current Version', value: currentVersion, tone: currentVersion === 'Not configured' ? 'neutral' : 'current' },
+    { label: 'Servers Online', value: monitoring.servers_online_label || 'Not configured', tone: monitoring.servers_online_label ? 'operational' : 'neutral' },
+    { label: 'Queues', value: checkValue('queue'), tone: checkTone('queue') },
+    { label: 'Database', value: checkValue('database'), tone: checkTone('database') },
+    { label: 'Redis', value: checkValue('redis', 'Not used by current config'), tone: checkTone('redis') },
+    { label: 'API', value: checkValue('api'), tone: checkTone('api') },
+    { label: 'Background Jobs', value: `${summary.failed_background_jobs || 0} failed`, tone: (summary.failed_background_jobs || 0) > 0 ? 'critical' : 'healthy' },
+    { label: 'Storage', value: storagePercent === null || storagePercent === undefined ? `${summary.storage_used_mb || 0} MB` : `${storagePercent}%`, tone: Number(storagePercent || 0) >= 85 ? 'warning' : 'healthy' },
+    { label: 'Backups', value: checkValue('backups', latestBackup?.status ? labelize(latestBackup.status) : 'No backups recorded'), tone: checkTone('backups') },
+    { label: 'SSL Certificates', value: checkValue('ssl', 'Not configured'), tone: checkTone('ssl') },
+  ]
+  const customerGrowthMetrics = [
+    { label: 'New Companies', value: summary.new_companies_this_month || 0 },
+    { label: 'Trial Started', value: summary.trial_companies || 0 },
+    { label: 'Converted', value: summary.converted_companies_this_month || 0 },
+    { label: 'Cancelled', value: summary.cancelled_companies_this_month || 0 },
+    { label: 'Net Growth', value: (summary.new_companies_this_month || 0) - (summary.cancelled_companies_this_month || 0) },
+  ]
+  const revenueMetrics = [
+    { label: 'MRR', value: money(summary.monthly_recurring_revenue || 0) },
+    { label: 'ARR', value: money(summary.annual_recurring_revenue || 0) },
+    { label: 'Revenue Today', value: money(summary.revenue_today || 0) },
+    { label: 'Revenue This Week', value: money(summary.revenue_this_week || 0) },
+    { label: 'Revenue This Month', value: money(summary.revenue_this_month || 0) },
+    { label: 'Average Subscription', value: money(summary.average_revenue_per_account || 0) },
+    { label: 'Churn', value: `${summary.churn_rate || 0}%` },
+    { label: 'Renewals', value: summary.renewals_due_30_days || renewalSubscriptions.length },
+    { label: 'Expansion Revenue', value: money(summary.expansion_revenue || 0) },
+    { label: 'Outstanding Invoices', value: `${summary.outstanding_invoices || outstandingBillingRecords.length} / ${money(summary.outstanding_invoice_amount || outstandingBillingRecords.reduce((total, record) => total + Number(record.amount || 0), 0))}` },
+    { label: 'Forecast Revenue', value: money((summary.monthly_recurring_revenue || 0) + (summary.outstanding_invoice_amount || 0)) },
+  ]
+  useEffect(() => {
+    if (!firstCompanyId || forms.feature_company.company_id) return
+
+    setPlatformForms((current) => ({
+      ...current,
+      feature_company: { ...current.feature_company, company_id: firstCompanyId },
+    }))
+  }, [firstCompanyId, forms.feature_company.company_id, setPlatformForms])
+
+  useEffect(() => {
+    if (!firstCompanyId) {
+      if (selectedCompanyId) setSelectedCompanyId('')
+      return
+    }
+
+    if (!selectedCompanyId || !companies.some((company) => String(company.id) === String(selectedCompanyId))) {
+      setSelectedCompanyId(firstCompanyId)
+    }
+  }, [companies, firstCompanyId, selectedCompanyId])
+
+  useEffect(() => {
+    const company = companies.find((item) => String(item.id) === String(effectiveSelectedCompanyId))
+    if (!company?.id || forms.success.company_id === String(company.id)) return
+    const success = company.customer_success || {}
+    setPlatformForms((current) => ({
+      ...current,
+      success: {
+        ...current.success,
+        company_id: String(company.id),
+        success_manager: success.success_manager || '',
+        last_meeting_at: success.last_meeting_at ? String(success.last_meeting_at).slice(0, 10) : '',
+        next_meeting_at: success.next_meeting_at ? String(success.next_meeting_at).slice(0, 10) : '',
+        training_completed_percent: success.training_completed_percent ?? '',
+        adoption_percent: success.adoption_percent ?? '',
+        risk_percent: success.risk_percent ?? '',
+        expansion_opportunity: success.expansion_opportunity || '',
+        notes: success.notes || '',
+      },
+    }))
+  }, [companies, effectiveSelectedCompanyId, forms.success.company_id, setPlatformForms])
+
+  useEffect(() => {
+    const company = companies.find((item) => String(item.id) === String(effectiveSelectedCompanyId))
+    if (!company?.id || forms.company_account.company_id === String(company.id)) return
+    hydrateCompanyAccountForm(company)
+  }, [companies, effectiveSelectedCompanyId, forms.company_account.company_id, hydrateCompanyAccountForm])
+
+  useEffect(() => {
+    const keys = ['database_warning_ms', 'database_critical_ms', 'queue_pending_warning', 'failed_jobs_critical', 'storage_warning_percent', 'storage_critical_percent', 'security_alert_critical']
+    if (!monitoringThresholds || !keys.some((key) => monitoringThresholds[key] !== undefined)) return
+
+    setPlatformForms((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        ...keys.reduce((values, key) => ({
+          ...values,
+          [key]: monitoringThresholds[key] ?? current.settings[key],
+        }), {}),
+      },
+    }))
+  }, [monitoringThresholds, setPlatformForms])
+
+  useEffect(() => {
+    const aiSettings = settingsByKey.ai || {}
+    setPlatformForms((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        ai_enabled: aiSettings.enabled ? 'true' : 'false',
+        ai_usage_percent: aiSettings.usage_percent ?? '',
+        ai_monthly_token_limit: aiSettings.monthly_token_limit ?? '',
+        ai_monthly_budget: aiSettings.monthly_budget ?? '',
+        ai_cost_month_to_date: aiSettings.cost_month_to_date ?? '',
+      },
+    }))
+  }, [settingsByKey, setPlatformForms])
+
+  useEffect(() => {
+    if (!currentUser?.id || forms.profile.user_id === String(currentUser.id)) return
+
+    setPlatformForms((current) => ({
+      ...current,
+      profile: {
+        ...current.profile,
+        user_id: String(currentUser.id),
+        name: currentUser.name || '',
+        email: currentUser.email || '',
+        phone: currentUser.phone || '',
+        job_title: currentUser.job_title || '',
+        current_password: '',
+        password: '',
+        password_confirmation: '',
+      },
+    }))
+  }, [currentUser?.email, currentUser?.id, currentUser?.job_title, currentUser?.name, currentUser?.phone, forms.profile.user_id, setPlatformForms])
+
+  useEffect(() => {
+    if ((forms.company.enabled_feature_keys || []).length > 0 || plans.length === 0) return
+    const plan = plans.find((item) => String(item.id) === String(forms.company.subscription_plan_id)) || plans.find((item) => item.code === 'professional') || plans[0]
+    if (!plan) return
+    setPlatformForms((current) => ({
+      ...current,
+      company: { ...current.company, subscription_plan_id: current.company.subscription_plan_id || String(plan.id), enabled_feature_keys: [...(plan.modules || []), ...(plan.features || [])] },
+    }))
+  }, [forms.company.enabled_feature_keys, forms.company.subscription_plan_id, plans, setPlatformForms])
+
+  function activateLayer(layer) {
+    setActiveLayer(layer.id)
+    setActiveTab(layer.primary_tab || layer.items?.[0]?.id || 'executive')
+  }
+
+  function activateTab(tabId) {
+    setActiveTab(tabId)
+    if (tabId === 'companies') setCompanyWorkspaceTab('overview')
+  }
+
+  async function submitSearch(event) {
+    event.preventDefault()
+    await searchPlatform(searchQuery.trim())
+  }
+
+  function hydrateSuccessForm(company) {
+    const success = company?.customer_success || {}
+    setPlatformForms((current) => ({
+      ...current,
+      success: {
+        ...current.success,
+        company_id: company?.id ? String(company.id) : '',
+        success_manager: success.success_manager || '',
+        last_meeting_at: success.last_meeting_at ? String(success.last_meeting_at).slice(0, 10) : '',
+        next_meeting_at: success.next_meeting_at ? String(success.next_meeting_at).slice(0, 10) : '',
+        training_completed_percent: success.training_completed_percent ?? '',
+        adoption_percent: success.adoption_percent ?? '',
+        risk_percent: success.risk_percent ?? '',
+        expansion_opportunity: success.expansion_opportunity || '',
+        notes: success.notes || '',
+      },
+    }))
+  }
+
+  function selectWorkspaceCompany(companyId) {
+    const company = companies.find((item) => String(item.id) === String(companyId))
+    setSelectedCompanyId(String(companyId))
+    setCompanyWorkspaceTab('overview')
+    if (company) {
+      hydrateSuccessForm(company)
+      hydrateCompanyAccountForm(company)
+      setPlatformForms((current) => ({
+        ...current,
+        branding: { ...current.branding, company_id: String(company.id) },
+        feature_company: { ...current.feature_company, company_id: String(company.id) },
+      }))
+    }
+  }
+
+  function toggleProvisioningModule(flagKey) {
+    setPlatformForms((current) => {
+      const selected = new Set(current.company.enabled_feature_keys || [])
+      if (selected.has(flagKey)) selected.delete(flagKey)
+      else selected.add(flagKey)
+
+      return {
+        ...current,
+        company: { ...current.company, enabled_feature_keys: [...selected] },
+      }
+    })
+  }
+
+  function selectedPlan() {
+    return plans.find((plan) => String(plan.id) === String(forms.company.subscription_plan_id)) || plans.find((plan) => plan.code === 'professional') || plans[0]
+  }
+
+  function seedModulesFromPlan(planId) {
+    const plan = plans.find((item) => String(item.id) === String(planId)) || plans.find((item) => item.code === 'professional') || plans[0]
+    if (!plan) return
+    setPlatformForms((current) => ({
+      ...current,
+      company: { ...current.company, subscription_plan_id: planId, enabled_feature_keys: [...(plan.modules || []), ...(plan.features || [])] },
+    }))
+  }
+
+  function selectCompanyFor(section) {
+    return (event) => {
+      const { value } = event.target
+      const company = companies.find((item) => String(item.id) === String(value))
+      const profile = company?.branding_profile || {}
+      const success = company?.customer_success || {}
+      setPlatformForms((current) => ({
+        ...current,
+        [section]: {
+          ...current[section],
+          ...(section === 'branding'
+            ? {
+                primary_color: profile.primary_color || current.branding.primary_color,
+                secondary_color: profile.secondary_color || current.branding.secondary_color,
+                accent_color: profile.accent_color || current.branding.accent_color,
+                sidebar_color: profile.sidebar_color || current.branding.sidebar_color,
+                button_color: profile.button_color || current.branding.button_color,
+                typography: profile.typography || current.branding.typography,
+                login_welcome_message: profile.login_welcome_message || '',
+                company_motto: profile.company_motto || '',
+              }
+            : {}),
+          ...(section === 'success'
+            ? {
+                success_manager: success.success_manager || '',
+                last_meeting_at: success.last_meeting_at ? String(success.last_meeting_at).slice(0, 10) : '',
+                next_meeting_at: success.next_meeting_at ? String(success.next_meeting_at).slice(0, 10) : '',
+                training_completed_percent: success.training_completed_percent ?? '',
+                adoption_percent: success.adoption_percent ?? '',
+                risk_percent: success.risk_percent ?? '',
+                expansion_opportunity: success.expansion_opportunity || '',
+                notes: success.notes || '',
+              }
+            : {}),
+          company_id: value,
+        },
+      }))
+    }
+  }
+
+  function resetPlatformPlanForm() {
+    setPlatformForms((current) => ({ ...current, plan: emptyPlatformForms.plan }))
+  }
+
+  function editPlatformPlan(plan) {
+    setPlatformForms((current) => ({
+      ...current,
+      plan: {
+        id: String(plan.id),
+        code: plan.code || '',
+        name: plan.name || '',
+        status: plan.status || 'active',
+        currency: plan.currency || 'GHS',
+        monthly_price: plan.monthly_price ?? 0,
+        yearly_price: plan.yearly_price ?? 0,
+        maximum_users: plan.maximum_users ?? '',
+        maximum_projects: plan.maximum_projects ?? '',
+        maximum_storage_mb: plan.maximum_storage_mb ?? '',
+        support_level: plan.support_level || 'standard',
+        api_access: plan.api_access ? 'true' : 'false',
+        custom_branding: plan.custom_branding ? 'true' : 'false',
+        sso_available: plan.sso_available ? 'true' : 'false',
+      },
+    }))
+  }
+
+  function nextUpgradePlan(subscription) {
+    const currentMonthly = Number(subscription?.plan?.monthly_price ?? plans.find((plan) => String(plan.id) === String(subscription?.platform_subscription_plan_id))?.monthly_price ?? 0)
+    const sortedPlans = [...plans].sort((a, b) => Number(a.monthly_price || 0) - Number(b.monthly_price || 0))
+
+    return sortedPlans.find((plan) => Number(plan.monthly_price || 0) > currentMonthly) || sortedPlans[sortedPlans.length - 1]
+  }
+
+  function editPlatformSubscription(subscription, mode = 'edit') {
+    const targetPlan = mode === 'upgrade' ? nextUpgradePlan(subscription) : subscription.plan
+    setPlatformForms((current) => ({
+      ...current,
+      subscription: {
+        id: String(subscription.id),
+        platform_subscription_plan_id: targetPlan?.id ? String(targetPlan.id) : '',
+        status: mode === 'upgrade' ? 'active' : subscription.status || 'active',
+        billing_interval: ['monthly', 'yearly'].includes(subscription.billing_interval) ? subscription.billing_interval : 'monthly',
+        amount: mode === 'upgrade' && targetPlan
+          ? (subscription.billing_interval === 'yearly' ? targetPlan.yearly_price : targetPlan.monthly_price)
+          : subscription.amount ?? '',
+        currency: targetPlan?.currency || subscription.currency || 'GHS',
+        seats: subscription.seats ?? '',
+        renewal_at: subscription.renewal_at ? String(subscription.renewal_at).slice(0, 10) : '',
+      },
+    }))
+  }
+
+  function editPlatformFeature(flag) {
+    setPlatformForms((current) => ({
+      ...current,
+      feature: {
+        id: String(flag.id),
+        name: flag.name || '',
+        module: flag.module || '',
+        category: flag.category || 'feature',
+        description: flag.description || '',
+        rollout_status: flag.rollout_status || 'active',
+        rollout_percentage: flag.rollout_percentage ?? 0,
+        default_enabled: flag.default_enabled ? 'true' : 'false',
+        requires_subscription: flag.requires_subscription === false ? 'false' : 'true',
+        pricing_tier: flag.pricing_tier || '',
+      },
+    }))
+  }
+
+  function editPlatformSupportTicket(ticket) {
+    setPlatformForms((current) => ({
+      ...current,
+      support_update: {
+        id: String(ticket.id),
+        status: ticket.status || 'open',
+        priority: ticket.priority || 'medium',
+        assigned_to: ticket.assigned_to ? String(ticket.assigned_to) : '',
+        resolution_notes: ticket.resolution_notes || '',
+      },
+    }))
+  }
+
+  function resetPlatformStaffForm() {
+    setPlatformForms((current) => ({ ...current, staff: emptyPlatformForms.staff }))
+  }
+
+  function editPlatformStaffUser(item) {
+    setPlatformForms((current) => ({
+      ...current,
+      staff: {
+        id: String(item.id),
+        name: item.name || '',
+        email: item.email || '',
+        password: '',
+        phone: item.phone || '',
+        job_title: item.job_title || '',
+        status: item.status || 'active',
+        permissions: normalizePermissionList(item.effective_permissions || item.permissions || ['platform.manage']).filter((permission) => permission.startsWith('platform.')),
+      },
+    }))
+  }
+
+  function togglePlatformStaffPermission(permission) {
+    setPlatformForms((current) => {
+      const permissions = new Set(normalizePermissionList(current.staff.permissions))
+      if (permissions.has(permission)) {
+        permissions.delete(permission)
+      } else {
+        permissions.add(permission)
+      }
+
+      if (permissions.size === 0) {
+        permissions.add('platform.manage')
+      }
+
+      return {
+        ...current,
+        staff: { ...current.staff, permissions: [...permissions] },
+      }
+    })
+  }
+
+  function setBrandingFile(event) {
+    const { name, files } = event.target
+    setPlatformForms((current) => ({
+      ...current,
+      branding: { ...current.branding, [name]: files?.[0] || '' },
+    }))
+  }
+
+  function featureEnabledForSelected(flag) {
+    return selectedCompanyFeatures.some((item) => item.key === flag.key)
+  }
+
+  function toggleSelectedFeature(flag) {
+    if (!featureCompany?.id) return
+
+    runAction(
+      () => api.updatePlatformCompanyFeature(featureCompany.id, flag.id, { is_enabled: !featureEnabledForSelected(flag) }),
+      'Feature flag updated.',
+    )
+  }
+
+  function renderCompanySelector(section, label = 'Company') {
+    return (
+      <Select label={label} name="company_id" value={forms[section].company_id || ''} onChange={selectCompanyFor(section)}>
+        <option value="">Select company</option>
+        {companies.map((company) => (
+          <option key={company.id} value={company.id}>
+            {company.name}
+          </option>
+        ))}
+      </Select>
+    )
+  }
+
+  function formatConsoleCardValue(card) {
+    return card.format === 'money' ? money(card.value || 0) : card.value
+  }
+
+  function renderGlobalSearch() {
+    return (
+      <form className="cloud-search" onSubmit={submitSearch}>
+        <Field aria-label="Global search" label="Global Search" name="platform_search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Company, invoice, user, project, subscription, payment, ticket" />
+        <button type="submit" className="primary-action"><BarChart3 size={17} />Search</button>
+      </form>
+    )
+  }
+
+  function renderSearchResults() {
+    if (!searchQuery.trim()) return null
+
+    return (
+      <section className="panel cloud-search-results">
+        <PanelTitle icon={BarChart3} title="Global Search Results" />
+        <DataTable
+          columns={['Type', 'Record', 'Detail', 'Company', 'Action']}
+          rows={searchResults.map((item) => [
+            <Badge key="type" value={item.type} />,
+            item.label,
+            item.detail,
+            item.company || '',
+            item.company_id ? <button key="open" type="button" className="table-action" onClick={() => { setActiveLayer('customers'); setActiveTab('companies'); selectWorkspaceCompany(item.company_id) }}>Open company</button> : '',
+          ])}
+        />
+      </section>
+    )
+  }
+
+  function renderCommandCenter() {
+    const cards = commandCenter.cards?.length ? commandCenter.cards : []
+    return (
+      <section className="view-stack cloud-command-center">
+        <div className={`cloud-status-hero cloud-command-hero ${commandCenter.status || 'unavailable'}`}>
+          <div>
+            <span>Structra Cloud Console</span>
+            <h2>{commandCenter.status_label || 'Platform status unavailable'}</h2>
+            <p>{revenueTrend === null ? 'Platform operations are ready for review.' : `Revenue is ${revenueTrend >= 0 ? 'up' : 'down'} ${Math.abs(revenueTrend)}% against the previous revenue period.`}</p>
+          </div>
+          <div className="cloud-status-meta">
+            <Metric label="MRR" value={money(summary.monthly_recurring_revenue || 0)} />
+            <Metric label="ARR" value={money(summary.annual_recurring_revenue || 0)} />
+            <Metric label="SLA" value={summary.support_sla_compliance === null || summary.support_sla_compliance === undefined ? 'N/A' : `${summary.support_sla_compliance}%`} />
+            <Metric label="Version" value={currentVersion} />
+          </div>
+        </div>
+
+        <section className="panel cloud-ai-summary">
+          <PanelTitle icon={BarChart3} title="Today's Platform Summary" />
+          <div className="cloud-summary-grid">
+            <div>
+              <strong>{summary.new_companies_this_month || 0} new companies joined this month.</strong>
+              <span>{summary.renewals_due_30_days || renewalSubscriptions.length} subscription renewal{(summary.renewals_due_30_days || renewalSubscriptions.length) === 1 ? '' : 's'} due within 30 days.</span>
+              <span>Support SLA is {summary.support_sla_compliance === null || summary.support_sla_compliance === undefined ? 'not yet measured' : `${summary.support_sla_compliance}%`}.</span>
+              <span>{summary.security_alerts || 0} critical security alert{(summary.security_alerts || 0) === 1 ? '' : 's'} open.</span>
+            </div>
+            <div>
+              <strong>Module adoption</strong>
+              {topModuleAdoption.length > 0 ? topModuleAdoption.map((module) => <span key={module.module}>{moduleLabel(module.module)}: {module.companies || 0} companies</span>) : <span>No module adoption data yet.</span>}
+            </div>
+            <div>
+              <strong>Recommendation</strong>
+              <span>{executiveRecommendation}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="cloud-health-matrix" aria-label="Platform health">
+          {platformHealthItems.map((item) => (
+            <div key={item.label} className="cloud-health-cell">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <Badge value={item.tone} />
+            </div>
+          ))}
+        </section>
+
+        <div className="cloud-metric-strip">
+          {customerGrowthMetrics.map((item) => <Metric key={item.label} label={item.label} value={item.value} />)}
+        </div>
+
+        <div className="cloud-metric-strip revenue-strip">
+          {revenueMetrics.map((item) => <Metric key={item.label} label={item.label} value={item.value} />)}
+        </div>
+
+        {cards.length > 0 && (
+          <div className="kpi-grid cloud-status-grid">
+            {cards.map((card) => {
+              const Icon = cardIconMap[card.key] || BarChart3
+              return <Kpi key={card.key} icon={Icon} label={card.label} value={formatConsoleCardValue(card)} sub={card.sub} />
+            })}
+          </div>
+        )}
+
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={AlertTriangle} title="Command Alerts" />
+            <DataTable columns={['Severity', 'Alert', 'Count']} rows={(commandCenter.alerts || []).map((alert) => [<Badge key="severity" value={alert.severity} />, alert.title, alert.count])} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ActivityIcon} title="Activity Feed" />
+            <div className="cloud-activity-feed">
+              {activityFeed.slice(0, 8).map((event, index) => {
+                const Icon = tabIconMap[event.type] || Clock3
+                return (
+                  <article key={`${event.title}-${event.at}-${index}`}>
+                    <Icon size={15} />
+                    <div>
+                      <span>{timelineTime(event.at)}</span>
+                      <strong>{event.title}</strong>
+                      <small>{event.detail}</small>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        </div>
+
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Companies Needing Attention" />
+            <DataTable columns={['Company', 'Health', 'Status', 'Reason']} rows={(commandCenter.companies_needing_attention || []).map((company) => [company.name, `${company.health_score || 0}%`, <Badge key="status" value={company.status} />, (company.health_reasons || [])[0]?.label || 'Review account'])} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Upload} title="Release & Backup Status" />
+            <DataTable columns={['Area', 'Latest Record', 'Status', 'When']} rows={[
+              ['Deployment', commandCenter.latest_deployment?.deployment_number || 'None', commandCenter.latest_deployment?.status || '', shortDate(commandCenter.latest_deployment?.created_at)],
+              ['Backup', commandCenter.latest_backup?.backup_number || 'None', commandCenter.latest_backup?.status || '', shortDate(commandCenter.latest_backup?.created_at)],
+            ]} />
+          </section>
+        </div>
+
+        {renderExecutive()}
+      </section>
+    )
+  }
+
+  function renderOperationsCenter() {
+    const operationalGroups = [
+      {
+        title: 'Platform Health',
+        icon: ShieldCheck,
+        rows: platformHealthItems.slice(0, 8).map((item) => [item.label, item.value, <Badge key={item.label} value={item.tone} />]),
+      },
+      {
+        title: 'Security',
+        icon: ShieldCheck,
+        rows: [
+          ['Failed Logins', securityEvents.filter((event) => String(event.event_type || '').includes('login')).length, <Badge key="failed-logins" value={securityEvents.length ? 'warning' : 'healthy'} />],
+          ['Open Alerts', summary.security_alerts || 0, <Badge key="open-alerts" value={(summary.security_alerts || 0) > 0 ? 'critical' : 'healthy'} />],
+          ['Suspicious Activity', securityEvents.filter((event) => ['open', 'investigating'].includes(event.status)).length, <Badge key="suspicious" value={(summary.security_alerts || 0) > 0 ? 'warning' : 'healthy'} />],
+        ],
+      },
+      {
+        title: 'Business',
+        icon: WalletCards,
+        rows: [
+          ['Revenue Today', money(summary.revenue_today || 0), <Badge key="revenue" value="healthy" />],
+          ['Trials Started', summary.trial_companies || 0, <Badge key="trial" value="active" />],
+          ['Conversions', summary.converted_companies_this_month || 0, <Badge key="converted" value="healthy" />],
+          ['Renewals', summary.renewals_due_30_days || renewalSubscriptions.length, <Badge key="renewals" value={(summary.renewals_due_30_days || renewalSubscriptions.length) > 0 ? 'warning' : 'healthy'} />],
+        ],
+      },
+      {
+        title: 'Customer Success',
+        icon: Handshake,
+        rows: [
+          ['At Risk', companies.filter((company) => Number(company.health_score || 0) < 70).length, <Badge key="risk" value={companies.some((company) => Number(company.health_score || 0) < 70) ? 'warning' : 'healthy'} />],
+          ['Needs Follow-up', commandCenter.companies_needing_attention?.length || 0, <Badge key="follow" value={(commandCenter.companies_needing_attention?.length || 0) > 0 ? 'warning' : 'healthy'} />],
+          ['Training Pending', companies.filter((company) => Number(company.customer_success?.training_completed_percent || 100) < 80).length, <Badge key="training" value="neutral" />],
+          ['Renewals Due', renewalSubscriptions.length, <Badge key="customer-renewals" value={renewalSubscriptions.length > 0 ? 'warning' : 'healthy'} />],
+        ],
+      },
+      {
+        title: 'Engineering',
+        icon: Workflow,
+        rows: [
+          ['Failed Jobs', summary.failed_background_jobs || 0, <Badge key="jobs" value={(summary.failed_background_jobs || 0) > 0 ? 'critical' : 'healthy'} />],
+          ['Queue Length', monitoring.jobs_pending ?? 0, <Badge key="queue" value={checkTone('queue')} />],
+          ['API Errors', securityEvents.filter((event) => String(event.event_type || '').includes('api')).length, <Badge key="api" value={securityEvents.some((event) => String(event.event_type || '').includes('api')) ? 'warning' : 'healthy'} />],
+          ['Deployments', summary.deployments_running || 0, <Badge key="deployments" value={(summary.deployments_running || 0) > 0 ? 'warning' : 'healthy'} />],
+        ],
+      },
+    ]
+
+    return (
+      <section className="view-stack">
+        <div className="cloud-console-top">
+          <div>
+            <span>Platform Operations Center</span>
+            <h2>Live operating picture</h2>
+          </div>
+          <div className="cloud-status-meta">
+            <Metric label="API" value={checkValue('api')} />
+            <Metric label="Queues" value={checkValue('queue')} />
+            <Metric label="Storage" value={storagePercent === null || storagePercent === undefined ? `${summary.storage_used_mb || 0} MB` : `${storagePercent}%`} />
+          </div>
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ActivityIcon} title="Live Activity" />
+            <div className="cloud-activity-feed">
+              {activityFeed.slice(0, 14).map((event, index) => {
+                const Icon = tabIconMap[event.type] || Clock3
+                return (
+                  <article key={`${event.title}-${event.at}-${index}`}>
+                    <Icon size={15} />
+                    <div>
+                      <span>{timelineTime(event.at)}</span>
+                      <strong>{event.title}</strong>
+                      <small>{event.detail}</small>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={AlertTriangle} title="Operations Queue" />
+            <DataTable columns={['Area', 'Count', 'Status']} rows={(commandCenter.alerts || []).map((alert) => [alert.title, alert.count, <Badge key={alert.type} value={alert.severity} />])} />
+          </section>
+        </div>
+        <div className="cloud-ops-grid">
+          {operationalGroups.map((group) => (
+            <section key={group.title} className="panel">
+              <PanelTitle icon={group.icon} title={group.title} />
+              <DataTable columns={['Signal', 'Value', 'Status']} rows={group.rows} />
+            </section>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  function renderSuccessForm() {
+    return (
+      <form className="form-grid two cloud-success-form" onSubmit={saveSuccess}>
+        {renderCompanySelector('success')}
+        <Field label="Success Manager" name="success_manager" value={forms.success.success_manager} onChange={setPlatformForm('success')} />
+        <Field label="Last Meeting" type="date" name="last_meeting_at" value={forms.success.last_meeting_at} onChange={setPlatformForm('success')} />
+        <Field label="Next Meeting" type="date" name="next_meeting_at" value={forms.success.next_meeting_at} onChange={setPlatformForm('success')} />
+        <Field label="Training Completed %" type="number" name="training_completed_percent" value={forms.success.training_completed_percent} onChange={setPlatformForm('success')} />
+        <Field label="Adoption %" type="number" name="adoption_percent" value={forms.success.adoption_percent} onChange={setPlatformForm('success')} />
+        <Field label="Risk %" type="number" name="risk_percent" value={forms.success.risk_percent} onChange={setPlatformForm('success')} />
+        <Field label="Expansion Opportunity" name="expansion_opportunity" value={forms.success.expansion_opportunity} onChange={setPlatformForm('success')} />
+        <TextArea className="span-2" label="Notes" name="notes" value={forms.success.notes} onChange={setPlatformForm('success')} />
+        <button type="submit" className="primary-action span-2"><CheckCircle2 size={17} />Save customer success</button>
+      </form>
+    )
+  }
+
+  function renderCompanyAccountForm(company) {
+    if (!company?.id) return null
+
+    return (
+      <section className="panel">
+        <PanelTitle icon={Building2} title="Company Account" />
+        <form className="form-grid two" onSubmit={saveCompanyAccount}>
+          <Field label="Company Name" name="name" value={forms.company_account.name} onChange={setPlatformForm('company_account')} required />
+          <Field label="Registration Number" name="registration_number" value={forms.company_account.registration_number} onChange={setPlatformForm('company_account')} />
+          <Field label="Industry" name="industry" value={forms.company_account.industry} onChange={setPlatformForm('company_account')} />
+          <Select label="Status" name="status" value={forms.company_account.status} onChange={setPlatformForm('company_account')}>
+            {catalogCompanyStatuses.filter((status) => status !== 'archived').map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
+          </Select>
+          <Select label="Subscription Plan" name="subscription_plan_id" value={forms.company_account.subscription_plan_id} onChange={setPlatformForm('company_account')}>
+            <option value="">No plan</option>
+            {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+          </Select>
+          <Select label="Country" name="country" value={forms.company_account.country} onChange={setPlatformForm('company_account')}>
+            {catalogCountries.map((country) => <option key={country} value={country}>{country}</option>)}
+          </Select>
+          <Select label="Currency" name="currency" value={forms.company_account.currency} onChange={setPlatformForm('company_account')}>
+            {catalogCurrencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+          </Select>
+          <Field label="City" name="city" value={forms.company_account.city} onChange={setPlatformForm('company_account')} />
+          <Field label="Address" name="address" value={forms.company_account.address} onChange={setPlatformForm('company_account')} />
+          <Field label="Phone" name="phone" value={forms.company_account.phone} onChange={setPlatformForm('company_account')} />
+          <Field label="Email" type="email" name="email" value={forms.company_account.email} onChange={setPlatformForm('company_account')} />
+          <Field label="Website" type="url" name="website" value={forms.company_account.website} onChange={setPlatformForm('company_account')} />
+          <Field label="Tax Number" name="tax_id" value={forms.company_account.tax_id} onChange={setPlatformForm('company_account')} />
+          <Field label="Timezone" name="timezone" value={forms.company_account.timezone} onChange={setPlatformForm('company_account')} />
+          <Field label="Language" name="language" value={forms.company_account.language} onChange={setPlatformForm('company_account')} />
+          <Field label="Date Format" name="date_format" value={forms.company_account.date_format} onChange={setPlatformForm('company_account')} />
+          <Field label="Fiscal Year Start" name="fiscal_year_start" value={forms.company_account.fiscal_year_start} onChange={setPlatformForm('company_account')} />
+          <Field label="Storage Limit MB" type="number" name="storage_limit_mb" value={forms.company_account.storage_limit_mb} onChange={setPlatformForm('company_account')} />
+          <Field label="Employee Limit" type="number" name="employee_limit" value={forms.company_account.employee_limit} onChange={setPlatformForm('company_account')} />
+          <Field label="Project Limit" type="number" name="project_limit" value={forms.company_account.project_limit} onChange={setPlatformForm('company_account')} />
+          <Field label="Branch Limit" type="number" name="branch_limit" value={forms.company_account.branch_limit} onChange={setPlatformForm('company_account')} />
+          <div className="row-actions span-2">
+            <button type="submit" className="primary-action"><CheckCircle2 size={17} />Save account</button>
+            <button type="button" className="table-action danger" onClick={() => archiveCompany(company)}><Archive size={14} />Archive account</button>
+          </div>
+        </form>
+      </section>
+    )
+  }
+
+  function companyRevenue(company) {
+    const workspace = company?.workspace || {}
+    const platformBilling = workspace.billing_records || []
+    const tenantInvoices = workspace.invoices || []
+    const tenantPayments = workspace.payments || []
+
+    return {
+      platformRevenue: platformBilling.filter((record) => record.status === 'paid').reduce((total, record) => total + Number(record.amount || 0), 0),
+      outstanding: platformBilling.filter((record) => record.record_type === 'invoice' && !['paid', 'void'].includes(record.status)).reduce((total, record) => total + Number(record.amount || 0), 0),
+      tenantInvoiceValue: tenantInvoices.reduce((total, invoice) => total + Number(invoice.total_amount || 0), 0),
+      tenantPayments: tenantPayments.reduce((total, payment) => total + Number(payment.amount || 0), 0),
+    }
+  }
+
+  function companyHealthSignals(company) {
+    const workspace = company?.workspace || {}
+    const success = company?.customer_success || {}
+    const usage = company?.usage || {}
+    const lastLogin = dateFrom(usage.last_login_at)
+    const lastLoginDays = lastLogin ? Math.floor((Date.now() - lastLogin.getTime()) / 86400000) : null
+    const openTickets = (workspace.support_tickets || []).filter((ticket) => !['resolved', 'closed'].includes(ticket.status)).length
+    const overdueBilling = (workspace.billing_records || []).filter((record) => record.record_type === 'invoice' && !['paid', 'void'].includes(record.status) && dateFrom(record.due_on) && dateFrom(record.due_on) < new Date()).length
+    const securityAlerts = (workspace.security_events || []).filter((event) => ['open', 'investigating'].includes(event.status)).length
+    const storagePressure = company?.storage_limit_mb ? Math.round((Number(usage.storage_mb || 0) / Math.max(1, Number(company.storage_limit_mb))) * 100) : null
+    const renewalDate = dateFrom(success.renewal_date || company?.subscription?.renewal_at)
+    const renewalDays = renewalDate ? Math.ceil((renewalDate - new Date()) / 86400000) : null
+
+    return [
+      { label: 'Company Health', value: `${company?.health_score || 0}%`, tone: Number(company?.health_score || 0) >= 80 ? 'healthy' : Number(company?.health_score || 0) >= 60 ? 'warning' : 'critical' },
+      { label: 'Login Activity', value: lastLoginDays === null ? 'No logins' : lastLoginDays <= 7 ? 'Excellent' : `${lastLoginDays} days ago`, tone: lastLoginDays === null || lastLoginDays > 28 ? 'warning' : 'healthy' },
+      { label: 'Payment', value: overdueBilling > 0 ? `${overdueBilling} overdue` : 'Healthy', tone: overdueBilling > 0 ? 'critical' : 'healthy' },
+      { label: 'Support', value: openTickets > 0 ? `${openTickets} open` : 'Healthy', tone: openTickets > 0 ? 'warning' : 'healthy' },
+      { label: 'Usage', value: Number(usage.score || 0) > 0 ? 'Excellent' : 'Low', tone: Number(usage.score || 0) > 0 ? 'healthy' : 'neutral' },
+      { label: 'Security', value: securityAlerts > 0 ? `${securityAlerts} alert${securityAlerts === 1 ? '' : 's'}` : 'Good', tone: securityAlerts > 0 ? 'critical' : 'healthy' },
+      { label: 'Storage', value: storagePressure === null ? `${usage.storage_mb || 0} MB` : `${storagePressure}%`, tone: storagePressure !== null && storagePressure >= 85 ? 'warning' : 'healthy' },
+      { label: 'API', value: workspace.api?.access_enabled ? 'Healthy' : 'Not enabled', tone: workspace.api?.access_enabled ? 'healthy' : 'neutral' },
+      { label: 'Automation', value: Number(usage.automation_runs || 0) > 0 ? 'Healthy' : 'Quiet', tone: Number(usage.automation_runs || 0) > 0 ? 'healthy' : 'neutral' },
+      { label: 'Renewal', value: renewalDays === null ? 'Not set' : `${renewalDays} days`, tone: renewalDays !== null && renewalDays <= 30 ? 'warning' : 'healthy' },
+    ]
+  }
+
+  function renderWorkspaceTabContent(company) {
+    const workspace = company?.workspace || {}
+    const success = company?.customer_success || {}
+    const enabledModules = (company?.enabled_features || []).filter((feature) => feature.category === 'module')
+    const revenue = companyRevenue(company)
+    const healthSignals = companyHealthSignals(company)
+
+    if (companyWorkspaceTab === 'overview') {
+      return (
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Company Health" />
+            <div className="cloud-health-band">
+              {healthSignals.map((signal) => (
+                <div key={signal.label} className="cloud-health-cell compact">
+                  <span>{signal.label}</span>
+                  <strong>{signal.value}</strong>
+                  <Badge value={signal.tone} />
+                </div>
+              ))}
+            </div>
+            <div className="cloud-reason-list">
+              {(company.health_reasons || []).map((reason, index) => <span key={`${reason.label}-${index}`} className={`cloud-reason ${reason.tone}`}>{reason.label}</span>)}
+            </div>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Handshake} title="Customer Success" />
+            <div className="cloud-success-scorecard">
+              <Metric label="Health" value={`${success.health_score || company.health_score || 0}%`} />
+              <Metric label="Risk" value={success.risk_percent === null || success.risk_percent === undefined ? 'Low' : `${success.risk_percent}%`} />
+              <Metric label="Renewal" value={success.renewal_date ? shortDate(success.renewal_date) : 'Not set'} />
+              <Metric label="Adoption" value={success.adoption_percent === null || success.adoption_percent === undefined ? 'N/A' : `${success.adoption_percent}%`} />
+              <Metric label="Training" value={success.training_completed_percent === null || success.training_completed_percent === undefined ? 'N/A' : `${success.training_completed_percent}%`} />
+              <Metric label="Expansion" value={success.expansion_opportunity || 'None'} />
+            </div>
+            {renderSuccessForm()}
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Clock3} title="Company Timeline" />
+            <div className="cloud-timeline">
+              {(company.timeline || []).map((event, index) => (
+                <article key={`${event.title}-${index}`}>
+                  {(() => {
+                    const Icon = tabIconMap[event.type] || Clock3
+                    return <Icon size={15} />
+                  })()}
+                  <div>
+                    <span>{timelineTime(event.occurred_at)}</span>
+                    <strong>{event.title}</strong>
+                    <small>{event.detail}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      )
+    }
+
+    if (companyWorkspaceTab === 'subscription') return <section className="panel"><PanelTitle icon={WalletCards} title="Subscription" /><DataTable columns={['Subscription', 'Plan', 'Status', 'Amount', 'Interval', 'Seats', 'Renewal']} rows={company.subscription ? [[company.subscription.subscription_number, company.subscription.plan?.name || '', <Badge key="status" value={company.subscription.status} />, money(company.subscription.amount), labelize(company.subscription.billing_interval), company.subscription.seats || 'Unlimited', shortDate(company.subscription.renewal_at)]] : []} /></section>
+    if (companyWorkspaceTab === 'modules') return <section className="panel"><PanelTitle icon={Layers3} title="Modules" /><div className="platform-feature-grid">{featureFlags.filter((flag) => flag.category === 'module').map((flag) => <button key={flag.id} type="button" className={`feature-toggle ${(company.enabled_features || []).some((feature) => feature.key === flag.key) ? 'enabled' : ''}`} onClick={() => runAction(() => api.updatePlatformCompanyFeature(company.id, flag.id, { is_enabled: !(company.enabled_features || []).some((feature) => feature.key === flag.key) }), 'Feature flag updated.')}><span>{flag.module}</span><strong>{flag.name}</strong><small>{flag.key}</small></button>)}</div></section>
+    if (companyWorkspaceTab === 'account') return renderCompanyAccountForm(company)
+    if (companyWorkspaceTab === 'users') return <section className="panel"><PanelTitle icon={Users} title="Users" /><DataTable columns={['Name', 'Email', 'Role', 'Branch', 'Status', 'Last Login']} rows={(workspace.users || []).map((user) => [user.name, user.email, user.role?.name || '', user.branch?.name || '', <Badge key="status" value={user.status} />, shortDate(user.last_login_at)])} /></section>
+    if (companyWorkspaceTab === 'branches') return <section className="panel"><PanelTitle icon={Building2} title="Branches" /><DataTable columns={['Name', 'Code', 'City', 'Country', 'Email']} rows={(workspace.branches || []).map((branch) => [branch.name, branch.code, branch.city || '', branch.country, branch.email || ''])} /></section>
+    if (companyWorkspaceTab === 'projects') return <section className="panel"><PanelTitle icon={FolderKanban} title="Projects" /><DataTable columns={['Code', 'Name', 'Status', 'Health', 'Value', 'Progress']} rows={(workspace.projects || []).map((project) => [project.code, project.name, <Badge key="status" value={project.status} />, <Badge key="health" value={project.health_status} />, money(project.contract_value), `${project.progress_percent || 0}%`])} /></section>
+    if (companyWorkspaceTab === 'revenue') return <div className="grid-main"><section className="panel"><PanelTitle icon={WalletCards} title="Revenue" /><div className="cloud-success-scorecard"><Metric label="Platform Revenue" value={money(revenue.platformRevenue)} /><Metric label="Outstanding" value={money(revenue.outstanding)} /><Metric label="ERP Invoice Value" value={money(revenue.tenantInvoiceValue)} /><Metric label="ERP Payments" value={money(revenue.tenantPayments)} /></div></section><section className="panel"><PanelTitle icon={WalletCards} title="Invoices" /><DataTable columns={['Invoice', 'Title', 'Status', 'Total', 'Paid', 'Balance']} rows={(workspace.invoices || []).map((invoice) => [invoice.invoice_number, invoice.title, <Badge key="status" value={invoice.status} />, money(invoice.total_amount), money(invoice.amount_paid), money(invoice.balance_due)])} /></section></div>
+    if (companyWorkspaceTab === 'payments') return <section className="panel"><PanelTitle icon={WalletCards} title="Payments" /><DataTable columns={['Payment', 'Invoice', 'Amount', 'Method', 'Received']} rows={(workspace.payments || []).map((payment) => [payment.payment_number, payment.invoice?.invoice_number || '', money(payment.amount), labelize(payment.method), shortDate(payment.received_at)])} /></section>
+    if (companyWorkspaceTab === 'support') return <section className="panel"><PanelTitle icon={AlertTriangle} title="Support" /><DataTable columns={['Ticket', 'Title', 'Priority', 'Status', 'SLA']} rows={(workspace.support_tickets || []).map((ticket) => [ticket.ticket_number, ticket.title, <Badge key="priority" value={ticket.priority} />, <Badge key="status" value={ticket.status} />, shortDate(ticket.sla_due_at)])} /></section>
+    if (companyWorkspaceTab === 'billing') return <section className="panel"><PanelTitle icon={WalletCards} title="Platform Billing" /><DataTable columns={['Record', 'Type', 'Status', 'Amount', 'Issued', 'Due']} rows={(workspace.billing_records || []).map((record) => [record.record_number, labelize(record.record_type), <Badge key="status" value={record.status} />, money(record.amount), shortDate(record.issued_on), shortDate(record.due_on)])} /></section>
+    if (companyWorkspaceTab === 'branding') return renderBranding()
+    if (companyWorkspaceTab === 'automation') return <section className="panel"><PanelTitle icon={Workflow} title="Automation" /><DataTable columns={['Metric', 'Value']} rows={[['Automation Runs', company.usage?.automation_runs || 0], ['Automation Features Enabled', enabledModules.filter((feature) => feature.module === 'automation').length]]} /></section>
+    if (companyWorkspaceTab === 'security') return <section className="panel"><PanelTitle icon={ShieldCheck} title="Security" /><DataTable columns={['Event', 'Severity', 'Status', 'IP', 'Created']} rows={(workspace.security_events || []).map((event) => [labelize(event.event_type), <Badge key="severity" value={event.severity} />, <Badge key="status" value={event.status} />, event.ip_address || '', shortDate(event.created_at)])} /></section>
+    if (companyWorkspaceTab === 'storage') return <section className="panel"><PanelTitle icon={FileText} title="Storage" /><div className="cloud-success-scorecard"><Metric label="Storage Used" value={`${company.usage?.storage_mb || 0} MB`} /><Metric label="Storage Limit" value={company.storage_limit_mb ? `${company.storage_limit_mb} MB` : 'Unlimited'} /><Metric label="Documents" value={company.usage?.documents || 0} /><Metric label="Backups" value={company.usage?.backups || 0} /></div></section>
+    if (companyWorkspaceTab === 'audit') return <section className="panel"><PanelTitle icon={Clock3} title="Audit Logs" /><DataTable columns={['When', 'Action', 'Record', 'IP']} rows={(workspace.audit_logs || []).map((log) => [timelineTime(log.created_at), labelize(log.action), String(log.auditable_type || '').split('\\').pop(), log.ip_address || ''])} /></section>
+    if (companyWorkspaceTab === 'backups') return <section className="panel"><PanelTitle icon={Download} title="Backups" /><DataTable columns={['Backup', 'Type', 'Status', 'Size', 'Started']} rows={(workspace.backups || []).map((backup) => [backup.backup_number, labelize(backup.backup_type), <Badge key="status" value={backup.status} />, `${backup.size_mb || 0} MB`, shortDate(backup.started_at)])} /></section>
+    if (companyWorkspaceTab === 'api') return <section className="panel"><PanelTitle icon={Workflow} title="API" /><DataTable columns={['Control', 'Value']} rows={[['API Access', workspace.api?.access_enabled ? 'Enabled' : 'Disabled'], ['API Calls', workspace.api?.api_calls || 0]]} /></section>
+    if (companyWorkspaceTab === 'domains') return <section className="panel"><PanelTitle icon={Globe2} title="Domains" /><DataTable columns={['Type', 'Value', 'Status']} rows={(workspace.domains || []).map((domain) => [labelize(domain.type), domain.value || '', <Badge key="status" value={domain.status} />])} /></section>
+    if (companyWorkspaceTab === 'integrations') return <section className="panel"><PanelTitle icon={Layers3} title="Integrations" /><DataTable columns={['Provider', 'Name', 'Category', 'Status']} rows={(workspace.integrations || []).map((item) => [item.provider, item.name, labelize(item.category), <Badge key="status" value={item.status} />])} /></section>
+    if (companyWorkspaceTab === 'settings') return <section className="panel"><PanelTitle icon={Settings} title="Settings" /><DataTable columns={['Setting', 'Value']} rows={Object.entries(company.settings || {}).map(([key, value]) => [labelize(key), typeof value === 'object' ? JSON.stringify(value) : String(value)])} /></section>
+    if (companyWorkspaceTab === 'timeline') return <section className="panel"><PanelTitle icon={Clock3} title="Activity Timeline" /><div className="cloud-timeline">{(company.timeline || []).map((event, index) => { const Icon = tabIconMap[event.type] || Clock3; return <article key={`${event.title}-${index}`}><Icon size={15} /><div><span>{timelineTime(event.occurred_at)}</span><strong>{event.title}</strong><small>{event.detail}</small></div></article> })}</div></section>
+    if (companyWorkspaceTab === 'analytics') return <div className="grid-main"><ChartPanel icon={BarChart3} title="Usage Analytics"><AnalyticsBarChart data={Object.entries(company.usage || {}).map(([key, value]) => ({ metric: labelize(key), value: Number(value || 0) })).filter((item) => Number.isFinite(item.value))} xKey="metric" bars={[{ key: 'value', color: '#2364d8' }]} /></ChartPanel><section className="panel"><PanelTitle icon={BarChart3} title="Analytics Summary" /><DataTable columns={['Metric', 'Value']} rows={Object.entries(company.usage || {}).map(([key, value]) => [labelize(key), String(value ?? '')])} /></section></div>
+
+    return <section className="panel"><PanelTitle icon={BarChart3} title="Usage" /><DataTable columns={['Metric', 'Value']} rows={Object.entries(company.usage || {}).map(([key, value]) => [labelize(key), String(value ?? '')])} /></section>
+  }
+
+  function renderCompanyWorkspace() {
+    const workspaceTabs = ['overview', 'subscription', 'modules', 'users', 'branches', 'projects', 'revenue', 'usage', 'storage', 'automation', 'security', 'integrations', 'audit', 'backups', 'settings', 'branding', 'support', 'timeline', 'analytics']
+
+    return (
+      <section className="cloud-company-workspace">
+        <aside className="cloud-company-list">
+          <div className="cloud-list-head">
+            <strong>Companies</strong>
+            <button type="button" className="table-action" onClick={() => setWizardOpen(true)}><Plus size={14} />Provision</button>
+          </div>
+          {companies.map((company) => (
+            <button key={company.id} type="button" className={String(selectedCompany?.id) === String(company.id) ? 'active' : ''} onClick={() => selectWorkspaceCompany(company.id)}>
+              <div className="cloud-company-logo">{initials(company.name)}</div>
+              <div>
+                <strong>{company.name}</strong>
+                <span>{company.country} | {company.subscription?.plan?.name || 'No plan'} | Renewal {shortDate(company.subscription?.renewal_at)}</span>
+                <small>{company.usage?.projects || 0} projects | {company.usage?.users || 0} users | {company.storage_limit_mb ? `${Math.round((Number(company.usage?.storage_mb || 0) / Math.max(1, Number(company.storage_limit_mb))) * 100)}% storage` : `${company.usage?.storage_mb || 0} MB storage`}</small>
+              </div>
+              <Badge value={Number(company.health_score || 0) >= 80 ? 'healthy' : Number(company.health_score || 0) >= 60 ? 'warning' : 'critical'} />
+            </button>
+          ))}
+          {archivedCompanies.length > 0 && (
+            <div className="cloud-archived-list">
+              <strong>Archived Companies</strong>
+              {archivedCompanies.map((company) => (
+                <article key={company.id}>
+                  <div>
+                    <span>{company.name}</span>
+                    <small>{company.tenant_key} | {shortDate(company.deleted_at)}</small>
+                  </div>
+                  <button type="button" className="table-action" onClick={() => restoreCompany(company)}><RefreshCcw size={14} />Restore</button>
+                </article>
+              ))}
+            </div>
+          )}
+        </aside>
+        <main className="cloud-company-main">
+          {selectedCompany ? (
+            <>
+              <header className="cloud-company-header">
+                <div>
+                  <span>{selectedCompany.tenant_key}</span>
+                  <h2>{selectedCompany.name}</h2>
+                  <small>{selectedCompany.country} | {selectedCompany.default_currency} | {selectedCompany.subscription?.plan?.name || 'No subscription'}</small>
+                </div>
+                <div className="cloud-status-meta">
+                  <Metric label="Health" value={`${selectedCompany.health_score || 0}%`} />
+                  <Metric label="Users" value={selectedCompany.usage?.users || 0} />
+                  <Metric label="Projects" value={selectedCompany.usage?.projects || 0} />
+                  <Metric label="Renewal" value={shortDate(selectedCompany.subscription?.renewal_at) || 'Not set'} />
+                </div>
+              </header>
+              <nav className="module-tabs cloud-workspace-tabs" aria-label="Company workspace">
+                {workspaceTabs.map((tab) => {
+                  const Icon = tabIconMap[tab] || BarChart3
+                  return <button key={tab} type="button" className={companyWorkspaceTab === tab ? 'active' : ''} onClick={() => setCompanyWorkspaceTab(tab)}><Icon size={14} />{labelize(tab)}</button>
+                })}
+              </nav>
+              {renderWorkspaceTabContent(selectedCompany)}
+            </>
+          ) : (
+            <section className="panel"><PanelTitle icon={Building2} title="No Company Selected" /></section>
+          )}
+        </main>
+        {wizardOpen && renderProvisioningWizard()}
+      </section>
+    )
+  }
+
+  function renderProvisioningWizard() {
+    const steps = ['Company Information', 'Subscription', 'Modules', 'Branding', 'Administrator', 'Review']
+    const moduleFlags = featureFlags.filter((flag) => flag.category === 'module')
+    const selectedKeys = new Set(forms.company.enabled_feature_keys || [])
+
+    return (
+      <section className="cloud-wizard">
+        <div className="cloud-wizard-card">
+          <header>
+            <div>
+              <span>Tenant Provisioning Wizard</span>
+              <h2>{steps[wizardStep - 1]}</h2>
+            </div>
+            <button type="button" className="table-action" onClick={() => setWizardOpen(false)}>Close</button>
+          </header>
+          <div className="cloud-wizard-steps">
+            {steps.map((step, index) => <button key={step} type="button" className={wizardStep === index + 1 ? 'active' : ''} onClick={() => setWizardStep(index + 1)}>{index + 1}</button>)}
+          </div>
+
+          <form className="form-grid two" onSubmit={createCompany}>
+            {wizardStep === 1 && (
+              <>
+                <Field label="Company Name" name="name" value={forms.company.name} onChange={setPlatformForm('company')} required />
+                <Field label="Industry" name="industry" value={forms.company.industry} onChange={setPlatformForm('company')} />
+                <Select label="Country" name="country" value={forms.company.country} onChange={setPlatformForm('company')}>{catalogCountries.map((country) => <option key={country} value={country}>{country}</option>)}</Select>
+                <Select label="Currency" name="currency" value={forms.company.currency} onChange={setPlatformForm('company')}>{catalogCurrencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}</Select>
+                <Field label="City" name="city" value={forms.company.city} onChange={setPlatformForm('company')} />
+                <Field label="Timezone" name="timezone" value={forms.company.timezone} onChange={setPlatformForm('company')} />
+              </>
+            )}
+            {wizardStep === 2 && (
+              <>
+                <Select label="Subscription Plan" name="subscription_plan_id" value={forms.company.subscription_plan_id} onChange={(event) => seedModulesFromPlan(event.target.value)}>{plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} - {money(plan.monthly_price)}/mo</option>)}</Select>
+                <Select label="Status" name="status" value={forms.company.status} onChange={setPlatformForm('company')}>{catalogCompanyStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}</Select>
+                <Field label="Trial Days" type="number" name="trial_days" value={forms.company.trial_days} onChange={setPlatformForm('company')} />
+                <Field label="Storage Limit MB" type="number" name="storage_limit_mb" value={forms.company.storage_limit_mb} onChange={setPlatformForm('company')} />
+                <Field label="Employee Limit" type="number" name="employee_limit" value={forms.company.employee_limit} onChange={setPlatformForm('company')} />
+                <Field label="Project Limit" type="number" name="project_limit" value={forms.company.project_limit} onChange={setPlatformForm('company')} />
+              </>
+            )}
+            {wizardStep === 3 && (
+              <div className="platform-feature-grid span-2">
+                {moduleFlags.map((flag) => <button key={flag.key} type="button" className={`feature-toggle ${selectedKeys.has(flag.key) ? 'enabled' : ''}`} onClick={() => toggleProvisioningModule(flag.key)}><span>{flag.module}</span><strong>{flag.name}</strong><small>{flag.key}</small></button>)}
+              </div>
+            )}
+            {wizardStep === 4 && (
+              <>
+                <Field label="Primary Color" name="primary_color" value={forms.branding.primary_color} onChange={setPlatformForm('branding')} />
+                <Field label="Secondary Color" name="secondary_color" value={forms.branding.secondary_color} onChange={setPlatformForm('branding')} />
+                <Field label="Accent Color" name="accent_color" value={forms.branding.accent_color} onChange={setPlatformForm('branding')} />
+                <Field label="Sidebar Color" name="sidebar_color" value={forms.branding.sidebar_color} onChange={setPlatformForm('branding')} />
+                <Field label="Button Color" name="button_color" value={forms.branding.button_color} onChange={setPlatformForm('branding')} />
+                <TextArea className="span-2" label="Login Welcome Message" name="login_welcome_message" value={forms.branding.login_welcome_message} onChange={setPlatformForm('branding')} />
+              </>
+            )}
+            {wizardStep === 5 && (
+              <>
+                <Field label="Primary Contact" name="primary_contact_name" value={forms.company.primary_contact_name} onChange={setPlatformForm('company')} required />
+                <Field label="Contact Email" type="email" name="primary_contact_email" value={forms.company.primary_contact_email} onChange={setPlatformForm('company')} required />
+                <Field label="Contact Phone" name="primary_contact_phone" value={forms.company.primary_contact_phone} onChange={setPlatformForm('company')} />
+                <Field label="Temporary Password" type="password" name="admin_password" value={forms.company.admin_password} onChange={setPlatformForm('company')} placeholder="Auto-generated if blank" />
+              </>
+            )}
+            {wizardStep === 6 && (
+              <section className="span-2 cloud-review">
+                <Metric label="Company" value={forms.company.name || 'Not set'} />
+                <Metric label="Plan" value={selectedPlan()?.name || 'Not set'} />
+                <Metric label="Modules" value={(forms.company.enabled_feature_keys || []).filter((key) => key.startsWith('module.')).length} />
+                <Metric label="Admin" value={forms.company.primary_contact_email || 'Not set'} />
+              </section>
+            )}
+            <div className="row-actions span-2">
+              <button type="button" className="table-action" disabled={wizardStep === 1} onClick={() => setWizardStep((current) => Math.max(1, current - 1))}>Back</button>
+              {wizardStep < steps.length ? (
+                <button type="button" className="primary-action" onClick={() => setWizardStep((current) => Math.min(steps.length, current + 1))}>Next</button>
+              ) : (
+                <button type="submit" className="primary-action"><Plus size={17} />Provision company</button>
+              )}
+            </div>
+          </form>
+        </div>
+      </section>
+    )
+  }
+
+  function renderCustomerSuccess() {
+    const atRiskCompanies = companies.filter((company) => Number(company.health_score || 0) < 70)
+    const needsFollowUp = companies.filter((company) => {
+      const success = company.customer_success || {}
+      const nextMeeting = dateFrom(success.next_meeting_at)
+      return Number(company.health_score || 0) < 80 || (nextMeeting && nextMeeting <= new Date(Date.now() + 7 * 86400000))
+    })
+    const trainingPending = companies.filter((company) => Number(company.customer_success?.training_completed_percent ?? 100) < 80)
+    const averageAdoption = companies.length ? Math.round(companies.reduce((total, company) => total + Number(company.customer_success?.adoption_percent || 0), 0) / companies.length) : 0
+
+    return (
+      <section className="view-stack">
+        <div className="kpi-grid cloud-status-grid">
+          <Kpi icon={ShieldCheck} label="Customer Health" value={`${companies.length ? Math.round(companies.reduce((total, company) => total + Number(company.health_score || 0), 0) / companies.length) : 0}%`} sub={`${atRiskCompanies.length} at risk`} />
+          <Kpi icon={Handshake} label="Adoption" value={`${averageAdoption}%`} sub={`${trainingPending.length} training plans pending`} />
+          <Kpi icon={CalendarDays} label="Renewals Due" value={renewalSubscriptions.length} sub="Next 30 days" />
+          <Kpi icon={WalletCards} label="Expansion Pipeline" value={companies.filter((company) => company.customer_success?.expansion_opportunity).length} sub="Accounts with opportunity" />
+          <Kpi icon={AlertTriangle} label="Needs Follow-up" value={needsFollowUp.length} sub="Health, renewal, or meeting signal" />
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Handshake} title="Customer Success Portfolio" />
+            <DataTable
+              columns={['Company', 'Health', 'Risk', 'Adoption', 'Training', 'Renewal', 'Expansion', 'Manager']}
+              rows={companies.map((company) => {
+                const success = company.customer_success || {}
+                return [
+                  company.name,
+                  `${company.health_score || 0}%`,
+                  success.risk_percent === null || success.risk_percent === undefined ? 'Low' : `${success.risk_percent}%`,
+                  success.adoption_percent === null || success.adoption_percent === undefined ? 'N/A' : `${success.adoption_percent}%`,
+                  success.training_completed_percent === null || success.training_completed_percent === undefined ? 'N/A' : `${success.training_completed_percent}%`,
+                  success.renewal_date ? shortDate(success.renewal_date) : shortDate(company.subscription?.renewal_at),
+                  success.expansion_opportunity || '',
+                  success.success_manager || '',
+                ]
+              })}
+            />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={AlertTriangle} title="Follow-up Queue" />
+            <div className="cloud-activity-feed">
+              {needsFollowUp.slice(0, 10).map((company) => (
+                <article key={company.id}>
+                  <Building2 size={15} />
+                  <div>
+                    <span>{company.subscription?.plan?.name || 'No plan'}</span>
+                    <strong>{company.name}</strong>
+                    <small>{(company.health_reasons || [])[0]?.label || company.customer_success?.expansion_opportunity || 'Customer success review'}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderExecutive() {
+    return (
+      <>
+        <div className="kpi-grid platform-kpi-grid">
+          <Kpi icon={WalletCards} label="MRR" value={money(summary.monthly_recurring_revenue || 0)} sub={`ARR ${money(summary.annual_recurring_revenue || 0)}`} />
+          <Kpi icon={WalletCards} label="Revenue Today" value={money(summary.revenue_today || 0)} sub={`Week ${money(summary.revenue_this_week || 0)}`} />
+          <Kpi icon={BarChart3} label="Revenue This Month" value={money(summary.revenue_this_month || 0)} sub={`Forecast ${money((summary.monthly_recurring_revenue || 0) + (summary.outstanding_invoice_amount || 0))}`} />
+          <Kpi icon={Building2} label="Customer Growth" value={(summary.new_companies_this_month || 0) - (summary.cancelled_companies_this_month || 0)} sub={`${summary.new_companies_this_month || 0} new, ${summary.cancelled_companies_this_month || 0} cancelled`} />
+          <Kpi icon={CheckCircle2} label="Trials & Conversions" value={summary.trial_companies || 0} sub={`${summary.converted_companies_this_month || 0} converted this month`} />
+          <Kpi icon={WalletCards} label="Average Subscription" value={money(summary.average_revenue_per_account || 0)} sub={`${summary.churn_rate || 0}% churn`} />
+          <Kpi icon={CalendarDays} label="Renewals" value={summary.renewals_due_30_days || renewalSubscriptions.length} sub="Due within 30 days" />
+          <Kpi icon={FileText} label="Outstanding Invoices" value={summary.outstanding_invoices || outstandingBillingRecords.length} sub={money(summary.outstanding_invoice_amount || 0)} />
+          <Kpi icon={AlertTriangle} label="Support SLA" value={summary.support_sla_compliance === null || summary.support_sla_compliance === undefined ? 'N/A' : `${summary.support_sla_compliance}%`} sub={`${summary.support_tickets_open || 0} open tickets`} />
+          <Kpi icon={ActivityIcon} label="Platform Health" value={summary.platform_uptime === null || summary.platform_uptime === undefined ? 'Not set' : `${summary.platform_uptime}%`} sub={`${summary.failed_background_jobs || 0} failed jobs`} />
+        </div>
+        <div className="grid-main">
+          <ChartPanel icon={WalletCards} title="Monthly Revenue">
+            <AnalyticsBarChart data={analytics.monthly_revenue || []} xKey="month" bars={[{ key: 'revenue', color: '#2364d8' }]} />
+          </ChartPanel>
+          <ChartPanel icon={Building2} title="Customer Growth">
+            <AnalyticsBarChart data={analytics.company_growth || []} xKey="month" bars={[{ key: 'companies', color: '#188a5a' }]} />
+          </ChartPanel>
+        </div>
+        <div className="grid-main">
+          <ChartPanel icon={Layers3} title="Module Adoption">
+            <AnalyticsBarChart data={analytics.module_adoption || []} xKey="module" bars={[{ key: 'companies', color: '#b66a05' }]} />
+          </ChartPanel>
+          <ChartPanel icon={Globe2} title="Companies by Country">
+            <AnalyticsBarChart data={analytics.companies_by_country || []} xKey="country" bars={[{ key: 'companies', color: '#6d5dfc' }]} />
+          </ChartPanel>
+        </div>
+      </>
+    )
+  }
+
+  function renderSubscriptions() {
+    const isEditingPlan = Boolean(forms.plan.id)
+    const selectedSubscription = subscriptions.find((subscription) => String(subscription.id) === String(forms.subscription.id))
+
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Plus} title={isEditingPlan ? 'Edit Subscription Plan' : 'Create Subscription Plan'} />
+          <form className="form-grid platform-plan-form" onSubmit={createPlan}>
+            <Field label="Code" name="code" value={forms.plan.code} onChange={setPlatformForm('plan')} />
+            <Field label="Name" name="name" value={forms.plan.name} onChange={setPlatformForm('plan')} required />
+            <Select label="Status" name="status" value={forms.plan.status} onChange={setPlatformForm('plan')}>
+              {catalogPlanStatuses.filter((status) => status !== 'archived').map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
+            </Select>
+            <Select label="Currency" name="currency" value={forms.plan.currency} onChange={setPlatformForm('plan')}>
+              {catalogCurrencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+            </Select>
+            <Field label="Monthly Price" type="number" name="monthly_price" value={forms.plan.monthly_price} onChange={setPlatformForm('plan')} />
+            <Field label="Yearly Price" type="number" name="yearly_price" value={forms.plan.yearly_price} onChange={setPlatformForm('plan')} />
+            <Field label="Maximum Users" type="number" name="maximum_users" value={forms.plan.maximum_users} onChange={setPlatformForm('plan')} />
+            <Field label="Maximum Projects" type="number" name="maximum_projects" value={forms.plan.maximum_projects} onChange={setPlatformForm('plan')} />
+            <Field label="Storage MB" type="number" name="maximum_storage_mb" value={forms.plan.maximum_storage_mb} onChange={setPlatformForm('plan')} />
+            <Select label="Support" name="support_level" value={forms.plan.support_level} onChange={setPlatformForm('plan')}>
+              {catalogSupportLevels.map((level) => <option key={level} value={level}>{labelize(level)}</option>)}
+            </Select>
+            <Select label="API Access" name="api_access" value={forms.plan.api_access} onChange={setPlatformForm('plan')}><option value="true">Enabled</option><option value="false">Disabled</option></Select>
+            <Select label="Custom Branding" name="custom_branding" value={forms.plan.custom_branding} onChange={setPlatformForm('plan')}><option value="true">Enabled</option><option value="false">Disabled</option></Select>
+            <Select label="SSO" name="sso_available" value={forms.plan.sso_available} onChange={setPlatformForm('plan')}><option value="true">Enabled</option><option value="false">Disabled</option></Select>
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">{isEditingPlan ? <CheckCircle2 size={17} /> : <Plus size={17} />}{isEditingPlan ? 'Save plan' : 'Create plan'}</button>
+              {isEditingPlan && <button type="button" className="table-action" onClick={resetPlatformPlanForm}>Cancel</button>}
+            </div>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={WalletCards} title="Edit / Upgrade Subscription" />
+          <form className="form-grid platform-plan-form" onSubmit={saveSubscription}>
+            <Select label="Subscription" name="id" value={forms.subscription.id} onChange={(event) => {
+              const subscription = subscriptions.find((item) => String(item.id) === String(event.target.value))
+              if (subscription) editPlatformSubscription(subscription)
+              else setPlatformForms((current) => ({ ...current, subscription: emptyPlatformForms.subscription }))
+            }}>
+              <option value="">Select subscription</option>
+              {subscriptions.map((subscription) => <option key={subscription.id} value={subscription.id}>{subscription.company?.name || 'Company'} - {subscription.subscription_number}</option>)}
+            </Select>
+            <Select label="Plan" name="platform_subscription_plan_id" value={forms.subscription.platform_subscription_plan_id} onChange={setPlatformForm('subscription')}>
+              <option value="">Select plan</option>
+              {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} - {money(plan.monthly_price)}/mo</option>)}
+            </Select>
+            <Select label="Status" name="status" value={forms.subscription.status} onChange={setPlatformForm('subscription')}>
+              {catalogSubscriptionStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
+            </Select>
+            <Select label="Billing Interval" name="billing_interval" value={forms.subscription.billing_interval} onChange={setPlatformForm('subscription')}>
+              {catalogBillingIntervals.map((interval) => <option key={interval} value={interval}>{labelize(interval)}</option>)}
+            </Select>
+            <Field label="Amount" type="number" name="amount" value={forms.subscription.amount} onChange={setPlatformForm('subscription')} />
+            <Select label="Currency" name="currency" value={forms.subscription.currency} onChange={setPlatformForm('subscription')}>
+              {catalogCurrencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+            </Select>
+            <Field label="Seats" type="number" name="seats" value={forms.subscription.seats} onChange={setPlatformForm('subscription')} />
+            <Field label="Renewal Date" type="date" name="renewal_at" value={forms.subscription.renewal_at} onChange={setPlatformForm('subscription')} />
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action"><CheckCircle2 size={17} />Save subscription</button>
+              <button type="button" className="primary-action" onClick={upgradeSubscription} disabled={!selectedSubscription}><Upload size={17} />Upgrade subscription</button>
+              <button type="button" className="table-action" onClick={() => setPlatformForms((current) => ({ ...current, subscription: emptyPlatformForms.subscription }))}>Clear</button>
+            </div>
+          </form>
+        </section>
+
+        <section className="panel span-2">
+          <PanelTitle icon={WalletCards} title="Subscription Plans" />
+          <DataTable
+            columns={['Plan', 'Status', 'Monthly', 'Yearly', 'Users', 'Projects', 'Storage', 'Support', 'Subscribers', 'Actions']}
+            rows={plans.map((plan) => [
+              plan.name,
+              <Badge key="status" value={plan.status} />,
+              money(plan.monthly_price),
+              money(plan.yearly_price),
+              plan.maximum_users || 'Unlimited',
+              plan.maximum_projects || 'Unlimited',
+              plan.maximum_storage_mb || 'Unlimited',
+              labelize(plan.support_level),
+              plan.subscriptions_count || 0,
+              <div key="actions" className="row-actions">
+                <button type="button" className="table-action" onClick={() => editPlatformPlan(plan)}>Edit</button>
+                <button type="button" className="table-action danger" onClick={() => deletePlan(plan)}>Delete</button>
+              </div>,
+            ])}
+          />
+        </section>
+
+        <section className="panel span-2">
+          <PanelTitle icon={WalletCards} title="Company Subscriptions" />
+          <DataTable
+            columns={['Subscription', 'Company', 'Plan', 'Status', 'Amount', 'Interval', 'Seats', 'Renewal', 'Actions']}
+            rows={subscriptions.map((subscription) => [
+              subscription.subscription_number,
+              subscription.company?.name || '',
+              subscription.plan?.name || '',
+              <Badge key="status" value={subscription.status} />,
+              money(subscription.amount),
+              labelize(subscription.billing_interval),
+              subscription.seats || 'Unlimited',
+              shortDate(subscription.renewal_at),
+              <div key="actions" className="row-actions">
+                <button type="button" className="table-action" onClick={() => editPlatformSubscription(subscription)}>Edit</button>
+                <button type="button" className="table-action" onClick={() => editPlatformSubscription(subscription, 'upgrade')}>Upgrade</button>
+                <button type="button" className="table-action danger" onClick={() => deleteSubscription(subscription)}>Delete</button>
+              </div>,
+            ])}
+          />
+        </section>
+      </div>
+    )
+  }
+
+  function renderFeatures() {
+    const selectedFeature = featureFlags.find((flag) => String(flag.id) === String(forms.feature.id))
+    const featureGroups = Object.entries(featureFlags.reduce((groups, flag) => {
+      const group = flag.key?.includes('ai') ? 'AI' : flag.key?.includes('integration') ? 'Integrations' : moduleLabel(flag.module || flag.category)
+      groups[group] = [...(groups[group] || []), flag]
+      return groups
+    }, {})).sort(([a], [b]) => a.localeCompare(b))
+
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Layers3} title="Company Feature Flags" />
+          {renderCompanySelector('feature_company')}
+          <div className="cloud-feature-groups">
+            {featureGroups.map(([group, flags]) => (
+              <section key={group}>
+                <div className="cloud-feature-group-head">
+                  <Layers3 size={15} />
+                  <strong>{group}</strong>
+                  <span>{flags.filter((flag) => featureEnabledForSelected(flag)).length}/{flags.length}</span>
+                </div>
+                <div className="platform-feature-grid">
+                  {flags.map((flag) => (
+                    <button key={flag.id} type="button" className={`feature-toggle ${featureEnabledForSelected(flag) ? 'enabled' : ''}`} onClick={() => toggleSelectedFeature(flag)}>
+                      <span>{labelize(flag.category)}</span>
+                      <strong>{flag.name}</strong>
+                      <small>{flag.key}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </section>
+        <section className="panel">
+          <PanelTitle icon={BarChart3} title="Feature Release Settings" />
+          <form className="form-grid" onSubmit={saveFeature}>
+            <Select label="Feature" name="id" value={forms.feature.id} onChange={(event) => {
+              const flag = featureFlags.find((item) => String(item.id) === String(event.target.value))
+              if (flag) editPlatformFeature(flag)
+              else setPlatformForms((current) => ({ ...current, feature: emptyPlatformForms.feature }))
+            }}>
+              <option value="">Select feature</option>
+              {featureFlags.map((flag) => <option key={flag.id} value={flag.id}>{flag.name}</option>)}
+            </Select>
+            <Field label="Name" name="name" value={forms.feature.name} onChange={setPlatformForm('feature')} disabled={!selectedFeature} />
+            <Field label="Module" name="module" value={forms.feature.module} onChange={setPlatformForm('feature')} disabled={!selectedFeature} />
+            <Select label="Category" name="category" value={forms.feature.category} onChange={setPlatformForm('feature')} disabled={!selectedFeature}>
+              <option value="module">Module</option>
+              <option value="feature">Feature</option>
+            </Select>
+            <Select label="Rollout Status" name="rollout_status" value={forms.feature.rollout_status} onChange={setPlatformForm('feature')} disabled={!selectedFeature}>
+              {['planned', 'beta', 'active', 'paused', 'retired'].map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
+            </Select>
+            <Field label="Rollout %" type="number" name="rollout_percentage" value={forms.feature.rollout_percentage} onChange={setPlatformForm('feature')} disabled={!selectedFeature} />
+            <Select label="Default Enabled" name="default_enabled" value={forms.feature.default_enabled} onChange={setPlatformForm('feature')} disabled={!selectedFeature}><option value="true">Enabled</option><option value="false">Disabled</option></Select>
+            <Select label="Requires Subscription" name="requires_subscription" value={forms.feature.requires_subscription} onChange={setPlatformForm('feature')} disabled={!selectedFeature}><option value="true">Required</option><option value="false">Optional</option></Select>
+            <Field label="Pricing Tier" name="pricing_tier" value={forms.feature.pricing_tier} onChange={setPlatformForm('feature')} disabled={!selectedFeature} />
+            <TextArea className="span-2" label="Description" name="description" value={forms.feature.description} onChange={setPlatformForm('feature')} disabled={!selectedFeature} />
+            <button type="submit" className="primary-action span-2" disabled={!selectedFeature}><CheckCircle2 size={17} />Save feature release</button>
+          </form>
+        </section>
+        <section className="panel span-2">
+          <PanelTitle icon={BarChart3} title="Feature Usage" />
+          <DataTable
+            columns={['Feature', 'Module', 'Category', 'Status', 'Rollout', 'Enabled Companies', 'Actions']}
+            rows={featureFlags.map((flag) => [
+              flag.name,
+              moduleLabel(flag.module),
+              labelize(flag.category),
+              <Badge key="status" value={flag.rollout_status} />,
+              `${flag.rollout_percentage}%`,
+              flag.enabled_companies_count || 0,
+              <button key="edit" type="button" className="table-action" onClick={() => editPlatformFeature(flag)}>Edit</button>,
+            ])}
+          />
+        </section>
+      </div>
+    )
+  }
+
+  function renderBranding() {
+    return (
+      <section className="panel">
+        <PanelTitle icon={Settings} title="Branding Management" />
+        <form className="form-grid platform-branding-form" onSubmit={saveBranding}>
+          {renderCompanySelector('branding')}
+          <Field label="Primary Color" name="primary_color" value={forms.branding.primary_color} onChange={setPlatformForm('branding')} />
+          <Field label="Secondary Color" name="secondary_color" value={forms.branding.secondary_color} onChange={setPlatformForm('branding')} />
+          <Field label="Accent Color" name="accent_color" value={forms.branding.accent_color} onChange={setPlatformForm('branding')} />
+          <Field label="Sidebar Color" name="sidebar_color" value={forms.branding.sidebar_color} onChange={setPlatformForm('branding')} />
+          <Field label="Button Color" name="button_color" value={forms.branding.button_color} onChange={setPlatformForm('branding')} />
+          <Field label="Typography" name="typography" value={forms.branding.typography} onChange={setPlatformForm('branding')} />
+          <Field label="Company Motto" name="company_motto" value={forms.branding.company_motto} onChange={setPlatformForm('branding')} />
+          <Field label="Logo" type="file" name="logo" onChange={setBrandingFile} />
+          <Field label="Dark Logo" type="file" name="dark_logo" onChange={setBrandingFile} />
+          <Field label="Light Logo" type="file" name="light_logo" onChange={setBrandingFile} />
+          <Field label="Favicon" type="file" name="favicon" onChange={setBrandingFile} />
+          <Field label="Login Background" type="file" name="login_background" onChange={setBrandingFile} />
+          <Field label="Dashboard Background" type="file" name="dashboard_background" onChange={setBrandingFile} />
+          <Field label="Watermark" type="file" name="watermark" onChange={setBrandingFile} />
+          <TextArea className="span-2" label="Login Welcome Message" name="login_welcome_message" value={forms.branding.login_welcome_message} onChange={setPlatformForm('branding')} />
+          <button type="submit" className="primary-action"><Upload size={17} />Save branding</button>
+        </form>
+      </section>
+    )
+  }
+
+  function renderBilling() {
+    const paymentRows = billingRecords.filter((record) => ['payment', 'refund', 'failed_payment'].includes(record.record_type))
+    return (
+      <section className="view-stack">
+        <div className="kpi-grid cloud-status-grid">
+          <Kpi icon={WalletCards} label="MRR" value={money(summary.monthly_recurring_revenue || 0)} sub={`ARR ${money(summary.annual_recurring_revenue || 0)}`} />
+          <Kpi icon={WalletCards} label="Revenue This Month" value={money(summary.revenue_this_month || 0)} sub={`Today ${money(summary.revenue_today || 0)}`} />
+          <Kpi icon={FileText} label="Outstanding" value={money(summary.outstanding_invoice_amount || outstandingBillingRecords.reduce((total, record) => total + Number(record.amount || 0), 0))} sub={`${summary.outstanding_invoices || outstandingBillingRecords.length} invoices`} />
+          <Kpi icon={AlertTriangle} label="Failed Payments" value={failedPayments.length} sub="Gateway or payment failures" />
+          <Kpi icon={CalendarDays} label="Renewals" value={summary.renewals_due_30_days || renewalSubscriptions.length} sub="Due within 30 days" />
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={WalletCards} title="Billing Record" />
+            <form className="form-grid" onSubmit={createBillingRecord}>
+              {renderCompanySelector('billing')}
+              <Select label="Type" name="record_type" value={forms.billing.record_type} onChange={setPlatformForm('billing')}>
+                {catalogBillingRecordTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}
+              </Select>
+              <Select label="Status" name="status" value={forms.billing.status} onChange={setPlatformForm('billing')}>
+                {catalogBillingStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
+              </Select>
+              <Field label="Amount" type="number" name="amount" value={forms.billing.amount} onChange={setPlatformForm('billing')} />
+              <Field label="Currency" name="currency" value={forms.billing.currency} onChange={setPlatformForm('billing')} />
+              <Field label="Issued On" type="date" name="issued_on" value={forms.billing.issued_on} onChange={setPlatformForm('billing')} />
+              <Field label="Due On" type="date" name="due_on" value={forms.billing.due_on} onChange={setPlatformForm('billing')} />
+              <button type="submit" className="primary-action"><Plus size={17} />Create record</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={BarChart3} title="Billing Mix" />
+            <DataTable columns={['Type', 'Records', 'Amount']} rows={Object.entries(billingRecords.reduce((groups, record) => {
+              const current = groups[record.record_type] || { count: 0, amount: 0 }
+              groups[record.record_type] = { count: current.count + 1, amount: current.amount + Number(record.amount || 0) }
+              return groups
+            }, {})).map(([type, value]) => [labelize(type), value.count, money(value.amount)])} />
+          </section>
+          <section className="panel span-2">
+            <PanelTitle icon={WalletCards} title={activeTab === 'payments' ? 'Payments' : 'Billing'} />
+            <DataTable columns={['No.', 'Company', 'Type', 'Status', 'Amount', 'Issued', 'Due', 'Paid']} rows={(activeTab === 'payments' ? paymentRows : billingRecords).map((record) => [record.record_number, record.company?.name || '', labelize(record.record_type), <Badge key="status" value={record.status} />, money(record.amount), shortDate(record.issued_on), shortDate(record.due_on), shortDate(record.paid_at)])} />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderSupport() {
+    const selectedTicket = tickets.find((ticket) => String(ticket.id) === String(forms.support_update.id))
+    const topIssues = Object.entries(tickets.reduce((groups, ticket) => {
+      const category = ticket.category || 'general'
+      groups[category] = (groups[category] || 0) + 1
+      return groups
+    }, {})).sort((a, b) => b[1] - a[1]).slice(0, 5)
+
+    return (
+      <section className="view-stack">
+        <div className="kpi-grid cloud-status-grid">
+          <Kpi icon={AlertTriangle} label="Open Tickets" value={supportMetrics.open_tickets ?? openSupportTickets.length} sub={`${supportMetrics.escalated_tickets ?? urgentSupportTickets.length} escalated`} />
+          <Kpi icon={Users} label="Awaiting Customer" value={supportMetrics.awaiting_customer ?? awaitingCustomerTickets.length} sub="Customer-side response" />
+          <Kpi icon={CheckCircle2} label="Resolved Today" value={supportMetrics.resolved_today ?? resolvedTodayTickets.length} sub={`${tickets.filter((ticket) => ['resolved', 'closed'].includes(ticket.status)).length} total resolved`} />
+          <Kpi icon={Clock3} label="SLA Compliance" value={summary.support_sla_compliance === null || summary.support_sla_compliance === undefined ? 'N/A' : `${summary.support_sla_compliance}%`} sub="Platform support" />
+          <Kpi icon={BarChart3} label="Customer Satisfaction" value={supportMetrics.customer_satisfaction_score === null || supportMetrics.customer_satisfaction_score === undefined ? 'Not tracked' : supportMetrics.customer_satisfaction_score} sub={supportMetrics.customer_satisfaction_source || 'No survey source configured'} />
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={AlertTriangle} title="Create Support Ticket" />
+            <form className="form-grid" onSubmit={createSupportTicket}>
+              {renderCompanySelector('support')}
+              <Field label="Title" name="title" value={forms.support.title} onChange={setPlatformForm('support')} required />
+              <Field label="Category" name="category" value={forms.support.category} onChange={setPlatformForm('support')} />
+              <Select label="Priority" name="priority" value={forms.support.priority} onChange={setPlatformForm('support')}>
+                {catalogSupportPriorities.map((priority) => <option key={priority} value={priority}>{labelize(priority)}</option>)}
+              </Select>
+              <Field label="SLA Due" type="datetime-local" name="sla_due_at" value={forms.support.sla_due_at} onChange={setPlatformForm('support')} />
+              <TextArea className="span-2" label="Description" name="description" value={forms.support.description} onChange={setPlatformForm('support')} />
+              <button type="submit" className="primary-action"><Plus size={17} />Create ticket</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={CheckCircle2} title="Update Support Ticket" />
+            <form className="form-grid" onSubmit={updateSupportTicket}>
+              <Select label="Ticket" name="id" value={forms.support_update.id} onChange={(event) => {
+                const ticket = tickets.find((item) => String(item.id) === String(event.target.value))
+                if (ticket) editPlatformSupportTicket(ticket)
+                else setPlatformForms((current) => ({ ...current, support_update: emptyPlatformForms.support_update }))
+              }}>
+                <option value="">Select ticket</option>
+                {tickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.ticket_number} - {ticket.title}</option>)}
+              </Select>
+              <Select label="Status" name="status" value={forms.support_update.status} onChange={setPlatformForm('support_update')} disabled={!selectedTicket}>
+                {catalogSupportTicketStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}
+              </Select>
+              <Select label="Priority" name="priority" value={forms.support_update.priority} onChange={setPlatformForm('support_update')} disabled={!selectedTicket}>
+                {catalogSupportPriorities.map((priority) => <option key={priority} value={priority}>{labelize(priority)}</option>)}
+              </Select>
+              <Select label="Assigned To" name="assigned_to" value={forms.support_update.assigned_to} onChange={setPlatformForm('support_update')} disabled={!selectedTicket}>
+                <option value="">Unassigned</option>
+                {platformStaff.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </Select>
+              <TextArea className="span-2" label="Resolution Notes" name="resolution_notes" value={forms.support_update.resolution_notes} onChange={setPlatformForm('support_update')} disabled={!selectedTicket} />
+              <div className="row-actions span-2">
+                <button type="submit" className="primary-action" disabled={!selectedTicket}><CheckCircle2 size={17} />Save ticket</button>
+                <button type="button" className="table-action" onClick={() => setPlatformForms((current) => ({ ...current, support_update: emptyPlatformForms.support_update }))}>Clear</button>
+              </div>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={BarChart3} title="Top Issues" />
+            <DataTable columns={['Category', 'Tickets']} rows={topIssues.map(([category, count]) => [labelize(category), count])} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Clock3} title="Ticket Activity" />
+            <div className="cloud-activity-feed">
+              {tickets.slice(0, 8).map((ticket) => (
+                <article key={ticket.id}>
+                  <AlertTriangle size={15} />
+                  <div>
+                    <span>{timelineTime(ticket.updated_at || ticket.created_at)}</span>
+                    <strong>{ticket.ticket_number} {labelize(ticket.status)}</strong>
+                    <small>{ticket.company?.name || ''} | {ticket.title}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section className="panel span-2">
+            <PanelTitle icon={AlertTriangle} title="Support Center" />
+            <DataTable
+              columns={['Ticket', 'Company', 'Title', 'Priority', 'Status', 'SLA', 'Assigned', 'Actions']}
+              rows={tickets.map((ticket) => [
+                ticket.ticket_number,
+                ticket.company?.name || '',
+                ticket.title,
+                <Badge key="priority" value={ticket.priority} />,
+                <Badge key="status" value={ticket.status} />,
+                shortDate(ticket.sla_due_at),
+                ticket.assignee?.name || '',
+                <button key="edit" type="button" className="table-action" onClick={() => editPlatformSupportTicket(ticket)}>Edit</button>,
+              ])}
+            />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderDeployment() {
+    const upcomingDeployments = deployments.filter((deployment) => ['scheduled', 'queued'].includes(deployment.status))
+    const runningDeployments = deployments.filter((deployment) => ['running', 'deploying'].includes(deployment.status))
+    const completedDeployments = deployments.filter((deployment) => ['completed', 'deployed', 'successful'].includes(deployment.status))
+    const failedDeployments = deployments.filter((deployment) => ['failed', 'rolled_back'].includes(deployment.status))
+
+    return (
+      <section className="view-stack">
+        <div className="kpi-grid cloud-status-grid">
+          <Kpi icon={CalendarDays} label="Upcoming" value={upcomingDeployments.length} sub="Scheduled or queued" />
+          <Kpi icon={Upload} label="Running" value={runningDeployments.length} sub="Live deployments" />
+          <Kpi icon={CheckCircle2} label="Completed" value={completedDeployments.length} sub={`Latest ${currentVersion}`} />
+          <Kpi icon={AlertTriangle} label="Failed" value={failedDeployments.length} sub="Needs engineering review" />
+          <Kpi icon={RefreshCcw} label="Rollback Available" value={completedDeployments.length > 0 ? 'Yes' : 'No'} sub={latestDeployment?.deployment_number || 'No deployment'} />
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Upload} title="Schedule Deployment" />
+            <form className="form-grid" onSubmit={createDeployment}>
+              <Field label="Title" name="title" value={forms.deployment.title} onChange={setPlatformForm('deployment')} required />
+              <Field label="Release Version" name="release_version" value={forms.deployment.release_version} onChange={setPlatformForm('deployment')} />
+              <Select label="Target" name="target_scope" value={forms.deployment.target_scope} onChange={setPlatformForm('deployment')}>
+                {catalogDeploymentScopes.map((scope) => <option key={scope} value={scope}>{labelize(scope)}</option>)}
+              </Select>
+              <Field label="Scheduled At" type="datetime-local" name="scheduled_at" value={forms.deployment.scheduled_at} onChange={setPlatformForm('deployment')} />
+              <TextArea className="span-2" label="Notes" name="notes" value={forms.deployment.notes} onChange={setPlatformForm('deployment')} />
+              <button type="submit" className="primary-action"><Upload size={17} />Create deployment</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ActivityIcon} title="Release Activity" />
+            <div className="cloud-activity-feed">
+              {deployments.slice(0, 8).map((deployment) => (
+                <article key={deployment.id}>
+                  <Upload size={15} />
+                  <div>
+                    <span>{timelineTime(deployment.deployed_at || deployment.scheduled_at || deployment.created_at)}</span>
+                    <strong>{deployment.release_version || deployment.deployment_number}</strong>
+                    <small>{deployment.title} | {labelize(deployment.status)}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section className="panel span-2">
+            <PanelTitle icon={Upload} title="Deployment Center" />
+            <DataTable columns={['No.', 'Title', 'Version', 'Target', 'Status', 'Scheduled', 'Deployed', 'Duration', 'Errors']} rows={deployments.map((deployment) => [deployment.deployment_number, deployment.title, deployment.release_version || '', labelize(deployment.target_scope), <Badge key="status" value={deployment.status} />, shortDate(deployment.scheduled_at), shortDate(deployment.deployed_at), deployment.duration_seconds ? `${deployment.duration_seconds}s` : '', deployment.error_message || ''])} />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderBackups() {
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Download} title="Queue Backup" />
+          <form className="form-grid" onSubmit={createBackup}>
+            {renderCompanySelector('backup', 'Tenant')}
+            <Select label="Backup Type" name="backup_type" value={forms.backup.backup_type} onChange={setPlatformForm('backup')}>
+              {catalogBackupTypes.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}
+            </Select>
+            <Field label="Storage Path" name="storage_path" value={forms.backup.storage_path} onChange={setPlatformForm('backup')} />
+            <button type="submit" className="primary-action"><Download size={17} />Queue backup</button>
+          </form>
+        </section>
+        <section className="panel">
+          <PanelTitle icon={Download} title="Backups" />
+          <DataTable columns={['No.', 'Company', 'Type', 'Status', 'Size', 'Path', 'Started', 'Completed', 'Verified']} rows={backups.map((backup) => [backup.backup_number, backup.company?.name || 'Platform', labelize(backup.backup_type), <Badge key="status" value={backup.status} />, `${backup.size_mb || 0} MB`, backup.storage_path || '', shortDate(backup.started_at), shortDate(backup.completed_at), shortDate(backup.verified_at)])} />
+        </section>
+      </div>
+    )
+  }
+
+  function renderSettings() {
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Settings} title="System Settings" />
+          <form className="form-grid" onSubmit={updateSettings}>
+            <Field label="Database Warning MS" type="number" name="database_warning_ms" value={forms.settings.database_warning_ms} onChange={setPlatformForm('settings')} />
+            <Field label="Database Critical MS" type="number" name="database_critical_ms" value={forms.settings.database_critical_ms} onChange={setPlatformForm('settings')} />
+            <Field label="Queue Pending Warning" type="number" name="queue_pending_warning" value={forms.settings.queue_pending_warning} onChange={setPlatformForm('settings')} />
+            <Field label="Failed Jobs Critical" type="number" name="failed_jobs_critical" value={forms.settings.failed_jobs_critical} onChange={setPlatformForm('settings')} />
+            <Field label="Storage Warning %" type="number" name="storage_warning_percent" value={forms.settings.storage_warning_percent} onChange={setPlatformForm('settings')} />
+            <Field label="Storage Critical %" type="number" name="storage_critical_percent" value={forms.settings.storage_critical_percent} onChange={setPlatformForm('settings')} />
+            <Field label="Security Alert Critical" type="number" name="security_alert_critical" value={forms.settings.security_alert_critical} onChange={setPlatformForm('settings')} />
+            <Select label="AI Services" name="ai_enabled" value={forms.settings.ai_enabled} onChange={setPlatformForm('settings')}>
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </Select>
+            <Field label="AI Usage %" type="number" name="ai_usage_percent" value={forms.settings.ai_usage_percent} onChange={setPlatformForm('settings')} />
+            <Field label="AI Monthly Token Limit" type="number" name="ai_monthly_token_limit" value={forms.settings.ai_monthly_token_limit} onChange={setPlatformForm('settings')} />
+            <Field label="AI Monthly Budget" type="number" name="ai_monthly_budget" value={forms.settings.ai_monthly_budget} onChange={setPlatformForm('settings')} />
+            <Field label="AI Cost Month To Date" type="number" name="ai_cost_month_to_date" value={forms.settings.ai_cost_month_to_date} onChange={setPlatformForm('settings')} />
+            <button type="submit" className="primary-action"><CheckCircle2 size={17} />Save settings</button>
+          </form>
+        </section>
+        <section className="panel">
+          <PanelTitle icon={Settings} title="Configured Settings" />
+          <DataTable columns={['Key', 'Value']} rows={(platform.settings || []).map((setting) => [setting.setting_key, JSON.stringify(setting.setting_value || {})])} />
+        </section>
+      </div>
+    )
+  }
+
+  function renderSecurity() {
+    const failedLogins = securityEvents.filter((event) => String(event.event_type || '').includes('login'))
+    const openSecurityEvents = securityEvents.filter((event) => ['open', 'investigating'].includes(event.status))
+
+    return (
+      <section className="view-stack">
+        <div className="kpi-grid cloud-status-grid">
+          <Kpi icon={ShieldCheck} label="Failed Logins" value={failedLogins.length} sub="Identity events" />
+          <Kpi icon={ShieldCheck} label="Open Alerts" value={openSecurityEvents.length} sub="Open or investigating" />
+          <Kpi icon={Users} label="Sessions" value={summary.active_users_today || 0} sub="Users active today" />
+          <Kpi icon={ShieldCheck} label="Tokens" value={summary.api_requests || 0} sub="API requests this month" />
+          <Kpi icon={CheckCircle2} label="Certificates" value="Valid" sub="SSL certificates" />
+        </div>
+        <div className="grid-main">
+          <AccountSecurityPanel
+            accountSecurity={accountSecurity}
+            mfaSetup={mfaSetup}
+            securityForms={securityForms}
+            setSecurityForm={setSecurityForm}
+            startMfaSetup={startMfaSetup}
+            enableMfa={enableMfa}
+            disableMfa={disableMfa}
+            regenerateMfaRecoveryCodes={regenerateMfaRecoveryCodes}
+          />
+
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Secure Impersonation" />
+            <form className="form-grid" onSubmit={startImpersonation}>
+              {renderCompanySelector('impersonation')}
+              <Select label="User" name="user_id" value={forms.impersonation.user_id} onChange={setPlatformForm('impersonation')}>
+                <option value="">Select user</option>
+                {selectedCompanyUsers.map((item) => <option key={item.id} value={item.id}>{item.name} - {item.email}</option>)}
+              </Select>
+              <Field label="Authorization Reference" name="authorization_reference" value={forms.impersonation.authorization_reference} onChange={setPlatformForm('impersonation')} required />
+              <Field label="Expires Minutes" type="number" name="expires_minutes" value={forms.impersonation.expires_minutes} onChange={setPlatformForm('impersonation')} />
+              <TextArea className="span-2" label="Reason" name="reason" value={forms.impersonation.reason} onChange={setPlatformForm('impersonation')} required />
+              <button type="submit" className="primary-action"><ShieldCheck size={17} />Start impersonation</button>
+            </form>
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ActivityIcon} title="Security Activity" />
+            <div className="cloud-activity-feed">
+              {securityEvents.slice(0, 8).map((event) => (
+                <article key={event.id}>
+                  <ShieldCheck size={15} />
+                  <div>
+                    <span>{timelineTime(event.created_at)}</span>
+                    <strong>{labelize(event.event_type)}</strong>
+                    <small>{event.company?.name || 'Platform'} | {event.ip_address || ''}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section className="panel span-2">
+            <PanelTitle icon={ShieldCheck} title="Security Center" />
+            <DataTable columns={['Company', 'Event', 'Severity', 'Status', 'IP', 'Created']} rows={securityEvents.map((event) => [event.company?.name || 'Platform', labelize(event.event_type), <Badge key="severity" value={event.severity} />, <Badge key="status" value={event.status} />, event.ip_address || '', shortDate(event.created_at)])} />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderPlatformUsers() {
+    const staffPermissions = normalizePermissionList(forms.staff.permissions)
+    const isEditingStaff = Boolean(forms.staff.id)
+
+    return (
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Users} title={isEditingStaff ? 'Edit Cloud Console User' : 'Create Cloud Console User'} />
+          <form className="form-grid two" onSubmit={saveStaffUser}>
+            <Field label="Name" name="name" value={forms.staff.name} onChange={setPlatformForm('staff')} required />
+            <Field label="Email" type="email" name="email" value={forms.staff.email} onChange={setPlatformForm('staff')} required />
+            <Field label="Temporary Password" type="password" name="password" value={forms.staff.password} onChange={setPlatformForm('staff')} required={!isEditingStaff} placeholder={isEditingStaff ? 'Leave blank to keep current' : 'Enter a secure temporary password'} />
+            <Field label="Phone" name="phone" value={forms.staff.phone} onChange={setPlatformForm('staff')} />
+            <Field label="Job Title" name="job_title" value={forms.staff.job_title} onChange={setPlatformForm('staff')} />
+            <Select label="Status" name="status" value={forms.staff.status} onChange={setPlatformForm('staff')}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="suspended">Suspended</option>
+            </Select>
+            <div className="platform-feature-grid span-2">
+              {platformPermissions.map((permission) => (
+                <button key={permission.key} type="button" className={`feature-toggle ${staffPermissions.includes(permission.key) ? 'enabled' : ''}`} onClick={() => togglePlatformStaffPermission(permission.key)}>
+                  <span>Permission</span>
+                  <strong>{permission.label}</strong>
+                  <small>{permission.description}</small>
+                </button>
+              ))}
+            </div>
+            <div className="row-actions span-2">
+              <button type="submit" className="primary-action">
+                {isEditingStaff ? <CheckCircle2 size={17} /> : <Plus size={17} />}
+                {isEditingStaff ? 'Save user' : 'Create user'}
+              </button>
+              {isEditingStaff && (
+                <button type="button" className="table-action" onClick={resetPlatformStaffForm}>
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="My Login Details" />
+          <form className="form-grid two" onSubmit={saveProfile}>
+            <Field label="Name" name="name" value={forms.profile.name} onChange={setPlatformForm('profile')} required />
+            <Field label="Email" type="email" name="email" value={forms.profile.email} onChange={setPlatformForm('profile')} required />
+            <Field label="Phone" name="phone" value={forms.profile.phone} onChange={setPlatformForm('profile')} />
+            <Field label="Job Title" name="job_title" value={forms.profile.job_title} onChange={setPlatformForm('profile')} />
+            <Field label="Current Password" type="password" name="current_password" value={forms.profile.current_password} onChange={setPlatformForm('profile')} placeholder="Required for email or password changes" />
+            <Field label="New Password" type="password" name="password" value={forms.profile.password} onChange={setPlatformForm('profile')} />
+            <Field label="Confirm New Password" type="password" name="password_confirmation" value={forms.profile.password_confirmation} onChange={setPlatformForm('profile')} />
+            <button type="submit" className="primary-action">
+              <CheckCircle2 size={17} />
+              Save my login details
+            </button>
+          </form>
+        </section>
+
+        <section className="panel span-2">
+          <PanelTitle icon={Users} title="Navkwa Cloud Console Users" />
+          <DataTable
+            columns={['Name', 'Email', 'Job Title', 'Access', 'Status', 'Last Login', 'Actions']}
+            rows={platformStaff.map((item) => [
+              item.name,
+              item.email,
+              item.job_title || '',
+              platformPermissionSummary(item.effective_permissions || item.permissions || []),
+              <Badge key="status" value={item.status} />,
+              shortDate(item.last_login_at),
+              <div key="actions" className="row-actions">
+                <button type="button" className="table-action" onClick={() => editPlatformStaffUser(item)}>
+                  Edit
+                </button>
+                <button type="button" className="table-action danger" onClick={() => deleteStaffUser(item)} disabled={String(item.id) === String(currentUser?.id)}>
+                  Delete
+                </button>
+              </div>,
+            ])}
+          />
+        </section>
+      </div>
+    )
+  }
+
+  function renderMonitoring() {
+    const checks = Object.entries(monitoring.checks || {}).map(([key, check]) => [
+      labelize(key),
+      <Badge key="status" value={check.status} />,
+      check.value,
+    ])
+    const metricRows = [
+      ['Status', monitoring.status_label || 'Unavailable'],
+      ['Last Checked', timelineTime(monitoring.last_checked_at)],
+      ['Database Response', monitoring.database_response_time_ms === null || monitoring.database_response_time_ms === undefined ? 'N/A' : `${monitoring.database_response_time_ms} ms`],
+      ['Queue Connection', monitoring.queue_connection || 'N/A'],
+      ['Pending Jobs', monitoring.jobs_pending ?? 0],
+      ['Failed Jobs', monitoring.failed_jobs ?? 0],
+      ['Storage Used', `${monitoring.storage_used_mb ?? 0} MB`],
+      ['Storage Usage', monitoring.storage_usage_percent === null || monitoring.storage_usage_percent === undefined ? 'No platform cap' : `${monitoring.storage_usage_percent}%`],
+      ['Open Security Events', monitoring.open_security_events ?? 0],
+      ['Mail Driver', monitoring.mail_driver || 'N/A'],
+      ['Active Connectors', monitoring.active_connectors ?? 0],
+      ['Connector Issues', monitoring.connector_issues ?? 0],
+    ]
+
+    return (
+      <section className="view-stack">
+        <div className="cloud-telemetry-grid">
+          {[
+            ['CPU Load', monitoring.server_load_1m === null || monitoring.server_load_1m === undefined ? 'Unavailable' : monitoring.server_load_1m, monitoring.server_load_1m === null || monitoring.server_load_1m === undefined ? 'neutral' : 'healthy'],
+            ['PHP Memory', monitoring.php_memory_usage_mb === null || monitoring.php_memory_usage_mb === undefined ? 'Unavailable' : `${monitoring.php_memory_usage_mb} MB`, monitoring.php_memory_usage_mb === null || monitoring.php_memory_usage_mb === undefined ? 'neutral' : 'healthy'],
+            ['Database', checkValue('database'), checkTone('database')],
+            ['Redis', checkValue('redis', 'Not used by current config'), checkTone('redis')],
+            ['Cache', checkValue('cache'), checkTone('cache')],
+            ['Queue', checkValue('queue'), checkTone('queue')],
+            ['API', checkValue('api'), checkTone('api')],
+            ['Email', checkValue('email'), checkTone('email')],
+            ['Storage', storagePercent === null || storagePercent === undefined ? `${summary.storage_used_mb || 0} MB` : `${storagePercent}%`, Number(storagePercent || 0) >= 85 ? 'warning' : 'healthy'],
+            ['Latency', `${summary.average_response_time_ms ?? 'N/A'} ms`, checkTone('database')],
+            ['Errors', summary.failed_background_jobs || 0, (summary.failed_background_jobs || 0) > 0 ? 'critical' : 'healthy'],
+            ['Traffic', summary.api_requests || 0, 'healthy'],
+            ['Scheduler', checkValue('scheduler'), checkTone('scheduler')],
+            ['SSL', checkValue('ssl'), checkTone('ssl')],
+          ].map(([label, value, tone]) => (
+            <div key={label} className="cloud-health-cell">
+              <span>{label}</span>
+              <strong>{value}</strong>
+              <Badge value={tone} />
+            </div>
+          ))}
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={ActivityIcon} title="Live Monitoring" />
+            <DataTable columns={['Metric', 'Value']} rows={metricRows} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ShieldCheck} title="Health Checks" />
+            <DataTable columns={['Service', 'Status', 'Current']} rows={checks} />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderNotificationCenter() {
+    const categories = ['security', 'billing', 'support', 'deployment', 'customer', 'automation', 'ai', 'platform']
+    const categoryRows = categories.map((category) => {
+      const count = notifications.filter((item) => {
+        const haystack = `${item.category || ''} ${item.title || ''} ${item.event_type || ''}`.toLowerCase()
+        return haystack.includes(category)
+      }).length
+      return [labelize(category), count, <Badge key={category} value={count > 0 ? 'active' : 'neutral'} />]
+    })
+
+    return (
+      <section className="view-stack">
+        <div className="kpi-grid cloud-status-grid">
+          <Kpi icon={Send} label="Notifications" value={notifications.length} sub="All platform events" />
+          <Kpi icon={ShieldCheck} label="Security" value={categoryRows.find((row) => row[0] === 'Security')?.[1] || 0} sub="Security category" />
+          <Kpi icon={WalletCards} label="Billing" value={categoryRows.find((row) => row[0] === 'Billing')?.[1] || 0} sub="Billing category" />
+          <Kpi icon={AlertTriangle} label="Support" value={categoryRows.find((row) => row[0] === 'Support')?.[1] || 0} sub="Support category" />
+          <Kpi icon={Workflow} label="Automation" value={categoryRows.find((row) => row[0] === 'Automation')?.[1] || 0} sub="Automation category" />
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Send} title="Notification Categories" />
+            <DataTable columns={['Category', 'Events', 'Status']} rows={categoryRows} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ActivityIcon} title="Notification Activity" />
+            <DataTable columns={['No.', 'Company', 'Title', 'Severity', 'Status', 'Channels', 'Created']} rows={notifications.map((item) => [item.notification_number, item.company?.name || '', item.title, <Badge key="severity" value={item.severity} />, <Badge key="status" value={item.status} />, (item.channels || []).map(labelize).join(', '), shortDate(item.created_at)])} />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderAutomationCenter() {
+    const workflowRules = automationWorkflows.rules || []
+    const workflowRuns = automationWorkflows.recent_runs || []
+
+    return (
+      <section className="view-stack">
+        <div className="kpi-grid cloud-status-grid">
+          <Kpi icon={Workflow} label="Active Rules" value={automationWorkflows.summary?.active_rules || 0} sub={`${workflowRules.length} rules loaded`} />
+          <Kpi icon={ActivityIcon} label="Running Runs" value={automationWorkflows.summary?.running_runs || 0} sub="Queued or running" />
+          <Kpi icon={AlertTriangle} label="Failed Runs" value={automationWorkflows.summary?.failed_runs || 0} sub="Workflow failures" />
+          <Kpi icon={CheckCircle2} label="Completed Today" value={automationWorkflows.summary?.completed_today || 0} sub="Completed automation runs" />
+          <Kpi icon={Clock3} label="Average Runtime" value={automationWorkflows.summary?.average_duration_ms === null || automationWorkflows.summary?.average_duration_ms === undefined ? 'N/A' : `${automationWorkflows.summary.average_duration_ms} ms`} sub="Recent runs" />
+        </div>
+        {workflowRules.length > 0 ? (
+          <div className="cloud-workflow-board">
+            {workflowRules.map((rule) => (
+              <div key={rule.id} className="cloud-workflow-lane">
+                {(rule.nodes || []).length > 0 ? rule.nodes.map((step, index) => (
+                  <div key={`${rule.id}-${step.id || index}`} className="cloud-workflow-step">
+                    <span>{step.type || `Step ${index + 1}`}</span>
+                    <strong>{step.label}</strong>
+                  </div>
+                )) : (
+                  <div className="cloud-workflow-step">
+                    <span>{rule.module}</span>
+                    <strong>{rule.name}</strong>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <section className="panel">
+            <PanelTitle icon={Workflow} title="Automation Workflows" />
+            <DataTable columns={['State', 'Detail']} rows={[['Not configured', 'No platform automation workflows have been created yet.']]} />
+          </section>
+        )}
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={Workflow} title="Automation Controls" />
+            <DataTable columns={['Company', 'Automation Runs', 'Enabled Automation Features']} rows={companies.map((company) => [company.name, company.usage?.automation_runs || 0, (company.enabled_features || []).filter((feature) => feature.module === 'automation').length])} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={ActivityIcon} title="Recent Automation Runs" />
+            <DataTable columns={['Run', 'Company', 'Rule', 'Status', 'Actions', 'Duration', 'Started']} rows={workflowRuns.map((run) => [run.run_number, run.company?.name || '', run.rule?.name || '', <Badge key="status" value={run.status} />, run.actions_executed || 0, run.duration_ms === null || run.duration_ms === undefined ? '' : `${run.duration_ms} ms`, timelineTime(run.started_at)])} />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderMarketplace() {
+    const marketplaceOffers = productFeatures.map((flag) => [
+      flag.name,
+      moduleLabel(flag.module),
+      flag.pricing_tier || 'base',
+      flag.enabled_companies_count || 0,
+    ])
+
+    return (
+      <section className="view-stack">
+        {marketplaceOffers.length > 0 ? (
+          <div className="cloud-marketplace-grid">
+            {marketplaceOffers.map(([name, module, tier, customers]) => (
+              <article key={name}>
+                <Package size={18} />
+                <div>
+                  <span>{module}</span>
+                  <strong>{name}</strong>
+                  <small>{tier} | {customers} customers</small>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <section className="panel">
+            <PanelTitle icon={Package} title="Marketplace Catalog" />
+            <DataTable columns={['State', 'Detail']} rows={[['Not configured', 'No marketplace feature offerings exist yet.']]} />
+          </section>
+        )}
+        <section className="panel">
+          <PanelTitle icon={Package} title="Marketplace Catalog" />
+          <DataTable columns={['Offering', 'Module', 'Pricing Tier', 'Enabled Companies']} rows={marketplaceOffers} />
+        </section>
+      </section>
+    )
+  }
+
+  function renderAiCenter() {
+    const aiFlags = productFeatures.filter((flag) => flag.key.includes('ai'))
+    const companyRows = [...companies]
+      .sort((a, b) => Number(b.usage?.api_calls || 0) - Number(a.usage?.api_calls || 0))
+      .slice(0, 8)
+      .map((company) => [company.name, company.usage?.api_calls || 0, company.customer_success?.expansion_opportunity || 'None recorded'])
+
+    return (
+      <section className="view-stack">
+        <div className="kpi-grid cloud-status-grid">
+          <Kpi icon={BarChart3} label="AI Usage" value={summary.ai_enabled ? `${summary.ai_usage_percent ?? 0}%` : 'Disabled'} sub={`${summary.ai_monthly_token_limit || 0} monthly token limit`} />
+          <Kpi icon={WalletCards} label="AI Cost" value={money(summary.ai_cost_month_to_date || 0)} sub={`Budget ${money(summary.ai_monthly_budget || 0)}`} />
+          <Kpi icon={ActivityIcon} label="Requests" value={summary.api_requests || 0} sub="API-backed activity" />
+          <Kpi icon={CheckCircle2} label="AI Features" value={aiFlags.length} sub="Configured feature flags" />
+          <Kpi icon={Building2} label="Top Companies" value={companyRows.length} sub="Highest request volume" />
+        </div>
+        <div className="grid-main">
+          <section className="panel">
+            <PanelTitle icon={BarChart3} title="AI Services" />
+            <DataTable columns={['Feature', 'Module', 'Tier', 'Rollout', 'Enabled Companies']} rows={aiFlags.map((flag) => [flag.name, moduleLabel(flag.module), flag.pricing_tier || '', `${flag.rollout_percentage}%`, flag.enabled_companies_count || 0])} />
+          </section>
+          <section className="panel">
+            <PanelTitle icon={Building2} title="Top Companies" />
+            <DataTable columns={['Company', 'Requests', 'Recommendation']} rows={companyRows} />
+          </section>
+        </div>
+      </section>
+    )
+  }
+
+  function renderReportsCenter() {
+    const reportRows = [
+      ['Company Register', companies.length],
+      ['Subscriptions', subscriptions.length],
+      ['Billing Records', billingRecords.length],
+      ['Support Tickets', tickets.length],
+      ['Security Events', securityEvents.length],
+      ['Audit Logs', auditLogs.length],
+    ]
+    const downloadReport = (format) => {
+      const headers = ['Report', 'Records']
+      const serialized = format === 'json'
+        ? JSON.stringify(reportRows.map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index]]))), null, 2)
+        : [headers, ...reportRows].map((row) => row.map((cell) => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(',')).join('\n')
+      const blob = new Blob([serialized], { type: format === 'json' ? 'application/json' : 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `structra-platform-reports.${format === 'json' ? 'json' : 'csv'}`
+      document.body.append(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    }
+
+    return (
+      <section className="view-stack">
+        <section className="panel">
+          <PanelTitle icon={ClipboardList} title="Platform Reports" />
+          <div className="cloud-export-actions">
+            {['csv', 'json'].map((format) => <button key={format} type="button" className="table-action" onClick={() => downloadReport(format)}><Download size={14} />{format.toUpperCase()}</button>)}
+          </div>
+          <DataTable columns={['Report', 'Records']} rows={reportRows} />
+        </section>
+      </section>
+    )
+  }
+
+  function renderDeveloperTools() {
+    return (
+      <section className="view-stack">
+        <div className="cloud-telemetry-grid">
+          {[
+            ['Queues', checkValue('queue'), checkTone('queue')],
+            ['Jobs', `${monitoring.jobs_pending ?? 0} pending`, checkTone('queue')],
+            ['Workers', monitoring.queue_worker_status || 'Not monitored', monitoring.queue_worker_status === 'Sync driver' ? 'healthy' : 'neutral'],
+            ['Redis', checkValue('redis', 'Not used by current config'), checkTone('redis')],
+            ['Cache', checkValue('cache'), checkTone('cache')],
+            ['Scheduler', checkValue('scheduler'), checkTone('scheduler')],
+            ['Webhooks', integrations.filter((item) => item.category === 'webhook').length, 'healthy'],
+            ['API Logs', summary.api_requests || 0, 'healthy'],
+            ['Database', checkValue('database'), checkTone('database')],
+            ['Storage', `${summary.storage_used_mb || 0} MB`, Number(storagePercent || 0) >= 85 ? 'warning' : 'healthy'],
+            ['Email Queue', monitoring.notification_events_pending ?? 0, (monitoring.notification_events_pending ?? 0) > 0 ? 'warning' : 'healthy'],
+            ['SMS Events', monitoring.sms_events ?? 0, (monitoring.sms_events ?? 0) > 0 ? 'neutral' : 'neutral'],
+          ].map(([label, value, tone]) => (
+            <div key={label} className="cloud-health-cell">
+              <span>{label}</span>
+              <strong>{value}</strong>
+              <Badge value={tone} />
+            </div>
+          ))}
+        </div>
+        <section className="panel">
+          <PanelTitle icon={Workflow} title="Developer Tools" />
+          <DataTable columns={['Company', 'API Access', 'API Calls', 'Integrations']} rows={companies.map((company) => [company.name, (company.enabled_features || []).some((feature) => feature.key === 'platform.api_access') ? 'Enabled' : 'Disabled', company.usage?.api_calls || 0, integrations.filter((item) => item.company_id === company.id).length])} />
+        </section>
+      </section>
+    )
+  }
+
+  function renderSimpleTab() {
+    if (activeTab === 'identity') {
+      return <section className="panel"><PanelTitle icon={Globe2} title="Identity & Domains" /><DataTable columns={['Company', 'Tenant Key', 'Website', 'Login URL', 'Country']} rows={companies.map((company) => [company.name, company.tenant_key, company.website || '', `/login?tenant=${company.tenant_key}`, company.country])} /></section>
+    }
+    if (activeTab === 'users') return renderPlatformUsers()
+    if (activeTab === 'roles') return <section className="panel"><PanelTitle icon={ShieldCheck} title="Roles & Permissions" /><DataTable columns={['Company', 'Role', 'Slug', 'Permissions', 'Type']} rows={roleRows} /></section>
+    if (activeTab === 'licenses') return <section className="panel"><PanelTitle icon={CheckCircle2} title="Licenses" /><DataTable columns={['Company', 'Plan', 'Users', 'Projects', 'Storage', 'Portal Users', 'Automation Limit']} rows={companies.map((company) => [company.name, company.subscription?.plan?.name || '', `${company.usage?.users || 0}/${company.employee_limit || 'Unlimited'}`, `${company.usage?.projects || 0}/${company.project_limit || 'Unlimited'}`, `${company.usage?.storage_mb || 0}/${company.storage_limit_mb || 'Unlimited'} MB`, company.subscription?.plan?.portal_users || 'Plan', company.subscription?.plan?.automation_limit || 'Unlimited'])} /></section>
+    if (activeTab === 'usage') return <section className="panel"><PanelTitle icon={BarChart3} title="Company Usage" /><DataTable columns={['Company', 'Projects', 'Employees', 'Users', 'Documents', 'API Calls', 'Automation Runs', 'Emails', 'Backups']} rows={companies.map((company) => [company.name, company.usage?.projects || 0, company.usage?.employees || 0, company.usage?.users || 0, company.usage?.documents || 0, company.usage?.api_calls || 0, company.usage?.automation_runs || 0, company.usage?.emails_sent || 0, company.usage?.backups || 0])} /></section>
+    if (activeTab === 'notifications') return renderNotificationCenter()
+    if (activeTab === 'automation') return renderAutomationCenter()
+    if (activeTab === 'integrations') return <section className="panel"><PanelTitle icon={Layers3} title="Integrations" /><DataTable columns={['Company', 'Provider', 'Name', 'Category', 'Status', 'Last Tested']} rows={integrations.map((item) => [item.company?.name || '', item.provider, item.name, labelize(item.category), <Badge key="status" value={item.status} />, shortDate(item.last_tested_at)])} /></section>
+    if (activeTab === 'marketplace') return renderMarketplace()
+    if (activeTab === 'ai') return renderAiCenter()
+    if (activeTab === 'audit') return <section className="panel"><PanelTitle icon={Clock3} title="Audit Logs" /><DataTable columns={['When', 'Company', 'Action', 'Record', 'User', 'IP']} rows={auditLogs.map((log) => [timelineTime(log.created_at), log.company?.name || '', labelize(log.action), String(log.auditable_type || '').split('\\').pop(), log.user_id || '', log.ip_address || ''])} /></section>
+    if (activeTab === 'monitoring') return renderMonitoring()
+    if (activeTab === 'localization') return <section className="panel"><PanelTitle icon={Globe2} title="Localization" /><DataTable columns={['Company', 'Country', 'Currency', 'Timezone', 'Language', 'Date Format', 'Fiscal Year']} rows={companies.map((company) => [company.name, company.country, company.default_currency, company.base_timezone, company.language, company.date_format, company.fiscal_year_start])} /></section>
+    if (activeTab === 'data') return <section className="panel"><PanelTitle icon={FileText} title="Data Management" /><DataTable columns={['Company', 'Tenant Mode', 'Storage Root', 'Storage Used', 'Documents', 'Backups']} rows={companies.map((company) => [company.name, company.settings?.tenant_mode || 'single_database_scoped', company.settings?.storage_root || '', `${company.usage?.storage_mb || 0} MB`, company.usage?.documents || 0, company.usage?.backups || 0])} /></section>
+    if (activeTab === 'reports') return renderReportsCenter()
+    if (activeTab === 'developer') return renderDeveloperTools()
+
+    return renderExecutive()
+  }
+
+  function renderLayerContent() {
+    if (activeTab === 'executive') return renderCommandCenter()
+    if (activeTab === 'operations-center') return renderOperationsCenter()
+    if (activeTab === 'companies') return renderCompanyWorkspace()
+    if (activeTab === 'customer-success') return renderCustomerSuccess()
+    if (activeTab === 'subscriptions') return renderSubscriptions()
+    if (activeTab === 'features') return renderFeatures()
+    if (activeTab === 'branding') return renderBranding()
+    if (activeTab === 'billing' || activeTab === 'payments') return renderBilling()
+    if (activeTab === 'support') return renderSupport()
+    if (activeTab === 'security') return renderSecurity()
+    if (activeTab === 'deployment') return renderDeployment()
+    if (activeTab === 'backups') return renderBackups()
+    if (activeTab === 'settings') return renderSettings()
+
+    return renderSimpleTab()
+  }
+
+  return (
+    <section className="view-stack platform-admin-page cloud-console-page">
+      {renderGlobalSearch()}
+      {renderSearchResults()}
+
+      <section className="cloud-console-layout">
+        <aside className="cloud-console-sidebar">
+          {consoleLayers.map((layer) => {
+            const Icon = layerIconMap[layer.id] || BarChart3
+            return (
+              <button key={layer.id} type="button" className={activeLayer === layer.id ? 'active' : ''} onClick={() => activateLayer(layer)}>
+                <Icon size={17} />
+                <span>{layer.label}</span>
+              </button>
+            )
+          })}
+
+          <div className="cloud-context-nav">
+            <strong>{activeLayerConfig?.label}</strong>
+            {(activeLayerConfig?.items || []).map((item) => {
+              const Icon = tabIconMap[item.id] || BarChart3
+              return (
+                <button key={item.id} type="button" className={activeTab === item.id ? 'active' : ''} onClick={() => activateTab(item.id)}>
+                  <Icon size={15} />
+                  {item.label}
+                </button>
+              )
+            })}
+          </div>
+        </aside>
+
+        <main className="cloud-console-main">
+          {renderLayerContent()}
+        </main>
+      </section>
+    </section>
+  )
+}
+
+function ActivityIcon(props) {
+  return <BarChart3 {...props} />
 }
 
 function DashboardView({ dashboard, projects }) {
@@ -2446,7 +5715,275 @@ function DashboardView({ dashboard, projects }) {
 
 function CrmView({ branches, sales, leadForm, setLeadForm, createLead, runAction }) {
   const [editingLeadId, setEditingLeadId] = useState(null)
-  const editingLead = (sales.leads || []).find((lead) => lead.id === editingLeadId)
+  const leads = sales.leads || []
+  const opportunities = sales.opportunities || []
+  const tenders = sales.tenders || []
+  const estimates = sales.estimates || []
+  const editingLead = leads.find((lead) => lead.id === editingLeadId)
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const activeOpportunities = opportunities.filter((opportunity) => !['won', 'lost'].includes(opportunity.stage))
+  const submittedTenders = tenders.filter((tender) => ['submitted', 'pending'].includes(tender.status))
+  const openTenders = tenders.filter((tender) => !['won', 'lost'].includes(tender.status))
+  const wonTenders = tenders.filter((tender) => tender.status === 'won')
+  const lostTenders = tenders.filter((tender) => tender.status === 'lost')
+  const qualifiedLeads = leads.filter((lead) => lead.stage === 'qualified')
+  const pendingFollowUps = leads.filter((lead) => lead.next_follow_up_at && !['won', 'lost'].includes(lead.stage))
+  const weightedOpportunityValue = activeOpportunities.reduce((total, opportunity) => total + (Number(opportunity.estimated_value || 0) * Number(opportunity.probability || 0)) / 100, 0)
+  const openTenderValue = openTenders.reduce((total, tender) => total + Number(tender.value || 0), 0)
+  const pipelineValue = activeOpportunities.reduce((total, opportunity) => total + Number(opportunity.estimated_value || 0), 0) + openTenderValue
+  const expectedRevenue = weightedOpportunityValue + openTenderValue
+  const revenueThisMonth = wonTenders
+    .filter((tender) => dateFrom(tender.won_at || tender.updated_at) >= monthStart)
+    .reduce((total, tender) => total + Number(tender.value || 0), 0)
+  const conversionBase = leads.length || opportunities.length || tenders.length
+  const conversionRate = conversionBase ? Math.round((wonTenders.length / conversionBase) * 100) : 0
+  const wonTenderValues = wonTenders.map((tender) => Number(tender.value || 0)).filter((value) => value > 0)
+  const activeDealValues = activeOpportunities.map((opportunity) => Number(opportunity.estimated_value || 0)).filter((value) => value > 0)
+  const dealValues = wonTenderValues.length ? wonTenderValues : activeDealValues
+  const averageDealSize = dealValues.length ? dealValues.reduce((total, value) => total + value, 0) / dealValues.length : 0
+  const salesCycleDays = wonTenders
+    .map((tender) => daysBetween(tender.created_at, tender.won_at || tender.updated_at))
+    .filter((days) => Number.isFinite(days) && days >= 0)
+  const averageSalesCycle = salesCycleDays.length ? Math.round(salesCycleDays.reduce((total, value) => total + value, 0) / salesCycleDays.length) : 0
+  const assignedCounts = new Map()
+
+  ;[...leads, ...opportunities].forEach((item) => {
+    const owner = item.assigned_to ? `User ${item.assigned_to}` : 'Unassigned'
+    assignedCounts.set(owner, (assignedCounts.get(owner) || 0) + 1)
+  })
+
+  const topSalesperson = [...assignedCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'Unassigned'
+  const companyMap = new Map()
+
+  function registerCompany(name, contact, recordType, amount = 0, extras = {}) {
+    if (!name) return
+
+    const key = String(name).trim().toLowerCase()
+    const current = companyMap.get(key) || {
+      name,
+      contacts: new Map(),
+      leads: 0,
+      opportunities: 0,
+      tenders: 0,
+      estimates: 0,
+      projects: 0,
+      contracts: 0,
+      documents: 0,
+      meetings: 0,
+      emails: 0,
+      payments: 0,
+      value: 0,
+    }
+
+    current[recordType] = (current[recordType] || 0) + 1
+    current.value += Number(amount || 0)
+    current.projects += extras.project_id ? 1 : 0
+    current.contracts += recordType === 'tenders' && extras.status === 'won' ? 1 : 0
+    current.documents += extras.documents || 0
+    current.meetings += extras.meetings || 0
+    current.emails += extras.email ? 1 : 0
+    current.payments += extras.payments || 0
+
+    if (contact?.name || contact?.email || contact?.phone) {
+      const contactKey = String(contact.name || contact.email || contact.phone).trim().toLowerCase()
+      current.contacts.set(contactKey, {
+        name: contact.name || 'Primary contact',
+        email: contact.email || '',
+        phone: contact.phone || '',
+        role: contact.role || 'Primary contact',
+      })
+    }
+
+    companyMap.set(key, current)
+  }
+
+  leads.forEach((lead) => {
+    registerCompany(
+      lead.company_name || lead.client?.name,
+      { name: lead.contact_name, email: lead.email, phone: lead.phone },
+      'leads',
+      lead.estimated_value,
+      { email: lead.email, meetings: lead.stage === 'site_visit' ? 1 : 0 },
+    )
+  })
+
+  opportunities.forEach((opportunity) => {
+    registerCompany(
+      opportunity.client?.name || opportunity.lead?.company_name,
+      {
+        name: opportunity.client?.contact_name || opportunity.lead?.contact_name,
+        email: opportunity.client?.email || opportunity.lead?.email,
+        phone: opportunity.client?.phone || opportunity.lead?.phone,
+      },
+      'opportunities',
+      opportunity.estimated_value,
+    )
+  })
+
+  tenders.forEach((tender) => {
+    registerCompany(
+      tender.client?.name || tender.opportunity?.client?.name,
+      { name: tender.client?.contact_name, email: tender.client?.email, phone: tender.client?.phone },
+      'tenders',
+      tender.value,
+      {
+        project_id: tender.project_id,
+        status: tender.status,
+        documents: tender.documents?.length || 0,
+      },
+    )
+  })
+
+  estimates.forEach((estimate) => {
+    registerCompany(
+      estimate.tender?.client?.name || estimate.client?.name,
+      { name: estimate.client?.contact_name, email: estimate.client?.email, phone: estimate.client?.phone },
+      'estimates',
+      estimate.total_amount,
+    )
+  })
+
+  const companyProfiles = [...companyMap.values()].sort((a, b) => b.value - a.value)
+  const topClients = companyProfiles.slice(0, 3)
+  const contactRows = companyProfiles.flatMap((profile) =>
+    [...profile.contacts.values()].map((contact) => [
+      profile.name,
+      contact.name,
+      contact.role,
+      contact.email,
+      contact.phone,
+    ]),
+  )
+
+  const pipelineStages = [
+    { label: 'Lead', count: leads.length },
+    { label: 'Contacted', count: pendingFollowUps.length },
+    { label: 'Qualified', count: qualifiedLeads.length + opportunities.filter((opportunity) => opportunity.stage === 'qualified').length },
+    { label: 'Site Visit', count: leads.filter((lead) => lead.stage === 'site_visit').length + opportunities.filter((opportunity) => opportunity.stage === 'site_visit').length },
+    { label: 'Needs Assessment', count: opportunities.filter((opportunity) => opportunity.stage === 'needs_assessment').length },
+    { label: 'Proposal', count: opportunities.filter((opportunity) => opportunity.stage === 'proposal').length },
+    { label: 'Estimate', count: estimates.length },
+    { label: 'Tender Submitted', count: submittedTenders.length },
+    { label: 'Negotiation', count: tenders.filter((tender) => tender.status === 'pending').length + opportunities.filter((opportunity) => opportunity.stage === 'negotiation').length },
+    { label: 'Contract Awarded', count: wonTenders.length },
+    { label: 'Project Started', count: wonTenders.filter((tender) => tender.project_id).length },
+    { label: 'Project Completed', count: 0 },
+    { label: 'Warranty', count: 0 },
+    { label: 'Repeat Business', count: 0 },
+  ]
+
+  const activityRows = [
+    ...leads
+      .filter((lead) => lead.next_follow_up_at)
+      .map((lead) => ({
+        date: lead.next_follow_up_at,
+        type: 'Follow-up',
+        client: lead.company_name,
+        owner: lead.assigned_to ? `User ${lead.assigned_to}` : 'Unassigned',
+        outcome: lead.stage === 'new' ? 'Qualify lead' : labelize(lead.stage),
+      })),
+    ...opportunities
+      .filter((opportunity) => opportunity.expected_close_date)
+      .map((opportunity) => ({
+        date: opportunity.expected_close_date,
+        type: 'Opportunity close',
+        client: opportunity.client?.name || opportunity.name,
+        owner: opportunity.assigned_to ? `User ${opportunity.assigned_to}` : 'Unassigned',
+        outcome: `${opportunity.probability || 0}% probability`,
+      })),
+    ...tenders
+      .filter((tender) => tender.deadline_at)
+      .map((tender) => ({
+        date: tender.deadline_at,
+        type: 'Tender deadline',
+        client: tender.client?.name || tender.title,
+        owner: 'Business development',
+        outcome: labelize(tender.status),
+      })),
+  ].sort((a, b) => dateFrom(a.date) - dateFrom(b.date))
+
+  const upcomingRows = activityRows.filter((item) => dateFrom(item.date) >= now).slice(0, 8)
+  const today = now.toISOString().slice(0, 10)
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowValue = tomorrow.toISOString().slice(0, 10)
+  const todayMeetings = activityRows.filter((item) => String(item.date).slice(0, 10) === today && item.type.includes('Meeting')).length
+  const tomorrowFollowUps = activityRows.filter((item) => String(item.date).slice(0, 10) === tomorrowValue && item.type === 'Follow-up').length
+
+  const eventTimeline = []
+  leads.forEach((lead) => {
+    addCrmEvent(eventTimeline, lead.created_at, 'Lead Created', lead.company_name, lead.source || 'Direct', lead.stage)
+    addCrmEvent(eventTimeline, lead.next_follow_up_at, 'Follow-up Scheduled', lead.company_name, lead.contact_name || 'Client contact', 'scheduled')
+  })
+  opportunities.forEach((opportunity) => {
+    addCrmEvent(eventTimeline, opportunity.created_at, 'Opportunity Qualified', opportunity.name, opportunity.client?.name || '', opportunity.stage)
+  })
+  tenders.forEach((tender) => {
+    addCrmEvent(eventTimeline, tender.submitted_at, 'Tender Submitted', tender.title, tender.client?.name || '', 'submitted')
+    addCrmEvent(eventTimeline, tender.won_at, 'Contract Awarded', tender.title, money(tender.value), tender.status)
+  })
+  estimates.forEach((estimate) => {
+    addCrmEvent(eventTimeline, estimate.approved_at || estimate.created_at, 'Estimate Prepared', estimate.title, money(estimate.total_amount), estimate.status)
+  })
+
+  const timelineRows = eventTimeline.sort((a, b) => dateFrom(b.date) - dateFrom(a.date)).slice(0, 10)
+  const estimateCategoryTotals = new Map()
+  estimates.forEach((estimate) => {
+    ;(estimate.lines || []).forEach((line) => {
+      const category = line.category || 'uncategorized'
+      estimateCategoryTotals.set(category, (estimateCategoryTotals.get(category) || 0) + Number(line.line_total || 0))
+    })
+  })
+  const estimateStackRows = [
+    ['Labour', money(estimateCategoryTotals.get('labour')), 'Estimate lines'],
+    ['Materials', money(estimateCategoryTotals.get('materials')), 'Estimate lines'],
+    ['Equipment', money(estimateCategoryTotals.get('equipment')), 'Estimate lines'],
+    ['Subcontractors', money(estimateCategoryTotals.get('subcontractor')), 'Estimate lines'],
+    ['Overheads', money(estimates.reduce((total, estimate) => total + Number(estimate.overhead_amount || 0), 0)), 'Estimate header'],
+    ['Profit', money(estimates.reduce((total, estimate) => total + Number(estimate.profit_amount || 0), 0)), 'Estimate header'],
+    ['Contingency', money(0), 'Pending field'],
+    ['Taxes', money(estimates.reduce((total, estimate) => total + Number(estimate.tax_amount || 0), 0)), 'Estimate header'],
+    ['Final Price', money(estimates.reduce((total, estimate) => total + Number(estimate.total_amount || 0), 0)), 'Approved total'],
+  ]
+
+  const forecastRows = [30, 60, 90].map((days) => {
+    const cutoff = new Date(now)
+    cutoff.setDate(cutoff.getDate() + days)
+    const value = activeOpportunities
+      .filter((opportunity) => {
+        const closeDate = dateFrom(opportunity.expected_close_date)
+        return closeDate && closeDate <= cutoff
+      })
+      .reduce((total, opportunity) => total + (Number(opportunity.estimated_value || 0) * Number(opportunity.probability || 0)) / 100, 0)
+
+    return [`${days} Days`, money(value), 'Probability weighted']
+  })
+
+  const crmMenuItems = [
+    'Dashboard',
+    'Leads',
+    'Companies',
+    'Contacts',
+    'Activities',
+    'Calendar',
+    'Opportunities',
+    'Site Visits',
+    'Estimates',
+    'Quotations',
+    'Proposals',
+    'Tenders',
+    'Contracts',
+    'Clients',
+    'Communications',
+    'Documents',
+    'Support & Warranty',
+    'Business Development',
+    'Reports',
+    'Analytics',
+    'Automation',
+    'Settings',
+  ]
 
   function saveLead(event) {
     if (!editingLeadId) {
@@ -2503,7 +6040,40 @@ function CrmView({ branches, sales, leadForm, setLeadForm, createLead, runAction
   }
 
   return (
-    <section className="view-stack">
+    <section className="view-stack crm-page">
+      <section className="crm-hero">
+        <div>
+          <span>Business Development & Client Relationship Hub</span>
+        </div>
+        <div className="crm-hero-metrics">
+          <Metric label="Pipeline Value" value={money(pipelineValue)} />
+          <Metric label="Expected Revenue" value={money(expectedRevenue)} />
+          <Metric label="Won Projects" value={wonTenders.length} />
+        </div>
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={BarChart3} title="Customer Relation Management(CRM) Dashboard" />
+        <div className="kpi-grid crm-dashboard-grid">
+          <Kpi icon={Handshake} label="New Leads" value={leads.filter((lead) => lead.stage === 'new').length} sub="Fresh business inquiries" />
+          <Kpi icon={CheckCircle2} label="Qualified Leads" value={qualifiedLeads.length} sub="Ready for opportunity tracking" />
+          <Kpi icon={ClipboardList} label="Active Opportunities" value={activeOpportunities.length} sub="Live deal records" />
+          <Kpi icon={FileText} label="Submitted Tenders" value={submittedTenders.length} sub="Submitted or pending tenders" />
+          <Kpi icon={FolderKanban} label="Won Projects" value={wonTenders.length} sub="Awarded tenders" />
+          <Kpi icon={AlertTriangle} label="Lost Projects" value={lostTenders.length} sub="Lost tenders to review" />
+          <Kpi icon={Clock3} label="Pending Follow-ups" value={pendingFollowUps.length} sub="Lead next actions" />
+          <Kpi icon={WalletCards} label="Expected Revenue" value={money(expectedRevenue)} sub="Weighted opportunities and open tenders" />
+          <Kpi icon={WalletCards} label="Revenue This Month" value={money(revenueThisMonth)} sub="Won value this month" />
+          <Kpi icon={BarChart3} label="Pipeline Value" value={money(pipelineValue)} sub="Open commercial value" />
+          <Kpi icon={Layers3} label="Conversion Rate" value={`${conversionRate}%`} sub="Won tenders against lead base" />
+          <Kpi icon={Calculator} label="Average Deal Size" value={money(averageDealSize)} sub="Won or active deal average" />
+          <Kpi icon={CalendarDays} label="Average Sales Cycle" value={`${averageSalesCycle} days`} sub="Created to award" />
+          <Kpi icon={Building2} label="Top Clients" value={topClients.length} sub={topClients.map((client) => client.name).join(', ') || 'No client records'} />
+          <Kpi icon={Users} label="Top Salesperson" value={topSalesperson} sub="By assigned lead and opportunity count" />
+          <Kpi icon={CalendarDays} label="Upcoming Meetings" value={todayMeetings} sub={`${tomorrowFollowUps} follow-ups tomorrow`} />
+        </div>
+      </section>
+
       <div className="grid-main">
         <section className="panel">
           <PanelTitle icon={Handshake} title={editingLeadId ? 'Edit Lead' : 'New Lead'} />
@@ -2539,13 +6109,25 @@ function CrmView({ branches, sales, leadForm, setLeadForm, createLead, runAction
         <section className="panel">
           <PanelTitle icon={Users} title="Pipeline Summary" />
           <div className="kpi-grid compact">
-            <Kpi icon={Handshake} label="Leads" value={sales.leads?.length || 0} sub="Open sales records" />
-            <Kpi icon={ClipboardList} label="Opportunities" value={sales.opportunities?.length || 0} sub="Qualified pipeline" />
-            <Kpi icon={ClipboardList} label="Tenders" value={sales.tenders?.length || 0} sub="Tender records" />
-            <Kpi icon={Calculator} label="Estimates" value={sales.estimates?.length || 0} sub="Cost scenarios" />
+            <Kpi icon={Handshake} label="Leads" value={leads.length} sub="Open sales records" />
+            <Kpi icon={ClipboardList} label="Opportunities" value={opportunities.length} sub="Qualified pipeline" />
+            <Kpi icon={ClipboardList} label="Tenders" value={tenders.length} sub="Tender records" />
+            <Kpi icon={Calculator} label="Estimates" value={estimates.length} sub="Cost scenarios" />
           </div>
         </section>
       </div>
+
+      <section className="panel">
+        <PanelTitle icon={Layers3} title="Complete Sales Pipeline" />
+        <div className="crm-lifecycle">
+          {pipelineStages.map((stage) => (
+            <div key={stage.label} className="crm-stage">
+              <span>{stage.label}</span>
+              <strong>{stage.count}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="panel">
         <PanelTitle icon={Handshake} title="Leads" />
@@ -2605,46 +6187,627 @@ function CrmView({ branches, sales, leadForm, setLeadForm, createLead, runAction
           ])}
         />
       </section>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Building2} title="Companies" />
+          <DataTable
+            columns={['Company', 'Contacts', 'Projects', 'Tenders', 'Pipeline Value', 'Profile Coverage']}
+            rows={companyProfiles.map((profile) => [
+              profile.name,
+              profile.contacts.size,
+              profile.projects,
+              profile.tenders,
+              money(profile.value),
+              <div key="coverage" className="crm-chip-list">
+                {['Information', 'Contacts', 'Projects', 'Invoices', 'Meetings', 'Documents', 'Contracts', 'Payments', 'Emails', 'Notes'].map((item) => (
+                  <span key={item} className="crm-chip">{item}</span>
+                ))}
+              </div>,
+            ])}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Users} title="Contact Management" />
+          <DataTable
+            columns={['Company', 'Contact', 'Role', 'Email', 'Phone']}
+            rows={contactRows}
+          />
+          <MiniList items={['CEO', 'Project Director', 'Quantity Surveyor', 'Procurement Officer', 'Finance Manager', 'Architect']} />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={CalendarDays} title="Activities" />
+          <DataTable
+            columns={['Date', 'Activity', 'Client', 'Owner', 'Outcome / Next Action']}
+            rows={activityRows.slice(0, 10).map((item) => [
+              shortDate(item.date),
+              item.type,
+              item.client,
+              item.owner,
+              item.outcome,
+            ])}
+          />
+          <MiniList items={['Phone Call', 'Meeting', 'Email', 'Site Visit', 'Presentation', 'Proposal', 'Tender Submission', 'Lunch Meeting', 'Client Visit']} />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={CalendarDays} title="Calendar" />
+          <DataTable
+            columns={['Date', 'Calendar Item', 'Client', 'Status']}
+            rows={upcomingRows.map((item) => [
+              shortDate(item.date),
+              item.type,
+              item.client,
+              item.outcome,
+            ])}
+          />
+          <div className="crm-mini-metrics">
+            <Metric label="Today Meetings" value={todayMeetings} />
+            <Metric label="Tomorrow Follow-ups" value={tomorrowFollowUps} />
+            <Metric label="Tender Deadlines" value={upcomingRows.filter((item) => item.type === 'Tender deadline').length} />
+          </div>
+        </section>
+      </div>
+
+      <section className="panel">
+        <PanelTitle icon={ClipboardList} title="Tender Management" />
+        <DataTable
+          columns={['Tender Number', 'Client', 'Submission Date', 'Closing Date', 'Status', 'Estimated Value', 'Bid Bond', 'Competitors', 'Result']}
+          rows={tenders.map((tender) => {
+            const bidSecurityRecord = (tender.records || []).find((record) => record.record_type === 'bid_security')
+            const bidSecurityDocument = (tender.documents || []).find((document) => ['bid_bond', 'bid_security'].includes(document.document_type))
+            const competitorRecord = (tender.records || []).find((record) => ['competitor', 'competitor_analysis', 'evaluation', 'outcome'].includes(record.record_type))
+
+            return [
+              tender.tender_number,
+              tender.client?.name || '',
+              shortDate(tender.submitted_at),
+              shortDate(tender.deadline_at),
+              <Badge key="status" value={tender.status} />,
+              money(tender.value),
+              bidSecurityRecord ? labelize(bidSecurityRecord.status) : bidSecurityDocument ? 'Document uploaded' : 'Not recorded',
+              tender.lost_reason || competitorRecord?.title || 'Not recorded',
+              tender.status === 'won' ? 'Awarded' : tender.status === 'lost' ? tender.lost_reason || 'Lost' : 'Pending',
+            ]
+          })}
+        />
+      </section>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Calculator} title="Estimating" />
+          <DataTable columns={['Cost Component', 'Amount', 'Source']} rows={estimateStackRows} />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={FileText} title="Proposals, Quotations, and Contracts" />
+          <DataTable
+            columns={['Commercial Record', 'Tracks', 'Conversion']}
+            rows={[
+              ['Proposal Generator', 'Company details, client, scope, timeline, pricing, terms, signature', 'Professional PDF'],
+              ['Quotation Management', 'Quotation, accepted, rejected, expired, converted', `${estimates.length} estimate records available`],
+              ['Contract Management', 'Milestones, retention, payment schedule, variations, warranty', `${wonTenders.length} award-ready records`],
+            ]}
+          />
+        </section>
+      </div>
+
+      <section className="panel">
+        <PanelTitle icon={Clock3} title="Relationship Timeline" />
+        <div className="crm-timeline">
+          {timelineRows.length === 0 ? (
+            <div className="empty-cell">No records</div>
+          ) : (
+            timelineRows.map((item) => (
+              <div key={`${item.date}-${item.title}-${item.type}`} className="crm-timeline-item">
+                <span>{shortDate(item.date)}</span>
+                <strong>{item.type}</strong>
+                <p>{item.title}</p>
+                <small>{item.detail}</small>
+                <Badge value={item.status} />
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Send} title="Customer Communication" />
+          <DataTable
+            columns={['Channel', 'Tracked Fields', 'Client Link']}
+            rows={[
+              ['Emails', 'Subject, body, attachment, sent date', 'Company timeline'],
+              ['Phone Calls', 'Call date, duration, outcome, next action', 'Contact record'],
+              ['SMS / WhatsApp', 'Message, delivery, reply, follow-up', 'Connector-backed timeline'],
+              ['Meetings', 'Agenda, attendees, notes, decisions', 'Activity calendar'],
+              ['Letters', 'Reference, document, delivery status', 'Document register'],
+            ]}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={FileText} title="Documents" />
+          <DataTable
+            columns={['Document Type', 'Current Count', 'Linked To']}
+            rows={[
+              ['Proposal', estimates.length, 'Estimate and client'],
+              ['Tender Documents', tenders.reduce((total, tender) => total + (tender.documents?.length || 0), 0), 'Tender and company'],
+              ['Contracts', wonTenders.length, 'Awarded tender'],
+              ['Drawings', 0, 'Document management'],
+              ['Quotation', estimates.length, 'Commercial record'],
+              ['Company Registration / Insurance', 0, 'Company profile'],
+            ]}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Building2} title="Client Portal Integration" />
+          <MiniList items={['Progress', 'Invoices', 'Approvals', 'Documents', 'Meetings', 'Photos', 'Variation Requests', 'Payments']} />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={ShieldCheck} title="Client Feedback, Support, and Warranty" />
+          <DataTable
+            columns={['Area', 'Tracks', 'Status']}
+            rows={[
+              ['Client Feedback', 'Quality, communication, speed, safety, professionalism, would recommend', 'Post-handover'],
+              ['Customer Support', 'Complaints, warranty issues, maintenance requests, support tickets', 'After completion'],
+              ['Warranty', 'Warranty period, obligations, service visits, resolution time', 'Contract handover'],
+            ]}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Globe2} title="Business Development & Competitor Tracking" />
+          <DataTable
+            columns={['Area', 'Records', 'Examples']}
+            rows={[
+              ['Business Development', 'Potential clients, developers, government projects, NGOs, schools, hospitals', `${qualifiedLeads.length + activeOpportunities.length} active records`],
+              ['Competitor Tracking', 'Won by, reason lost, bid difference, market segment', 'Lower price / relationship / scope'],
+              ['Sales Forecasting', '30 days, 60 days, 90 days, probability weighted', 'Planning view'],
+            ]}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={BarChart3} title="Sales Forecasting" />
+          <DataTable columns={['Window', 'Expected Revenue', 'Basis']} rows={forecastRows} />
+        </section>
+      </div>
+
+      <section className="panel">
+        <PanelTitle icon={BarChart3} title="Reports and Analytics" />
+        <DataTable
+          columns={['Report Group', 'Metrics']}
+          rows={[
+            ['Lead Performance', 'Lead sources, lead conversion, sales by branch, sales by employee, sales by industry'],
+            ['Tendering', 'Tender success rate, proposal win rate, lost deals, reasons lost, competitor outcomes'],
+            ['Pipeline', 'Pipeline value, forecast revenue, average deal size, average sales cycle'],
+            ['Client Relationship', 'Top clients, repeat clients, support cases, warranty outcomes, feedback scores'],
+          ]}
+        />
+      </section>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Workflow} title="Automation" />
+          <DataTable
+            columns={['Trigger', 'Automation']}
+            rows={[
+              ['Lead Created', 'Assign salesperson, send welcome email, schedule follow-up'],
+              ['Tender Closing in 3 Days', 'Notify business development manager'],
+              ['Proposal Accepted', 'Create project, notify projects and finance, generate contract'],
+              ['Project Completed', 'Send satisfaction survey, create warranty period'],
+            ]}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Layers3} title="Module Integration" />
+          <DataTable
+            columns={['Module', 'Client Lifecycle Action']}
+            rows={[
+              ['Projects', 'Won opportunity creates project'],
+              ['Finance', 'Accepted proposal creates invoice schedule'],
+              ['Procurement', 'Project start generates procurement plan'],
+              ['HR & Workforce', 'Project start allocates workforce'],
+              ['Equipment', 'Reserve required equipment'],
+              ['Document Management', 'Store all client documents'],
+              ['Portals', 'Grant client portal access'],
+            ]}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={BarChart3} title="AI Customer Relation Management(CRM)" />
+          <DataTable
+            columns={['Signal', 'Action']}
+            rows={[
+              ['Client not contacted in 30 days', 'Create follow-up task'],
+              ['Tender win likelihood changed', 'Prompt bid review'],
+              ['Follow-up due today', 'Notify salesperson'],
+              ['Proposal priced above winning average', 'Flag pricing risk'],
+            ]}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Settings} title="Recommended Customer Relation Management(CRM) Menu" />
+          <div className="crm-menu-grid">
+            {crmMenuItems.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        </section>
+      </div>
     </section>
   )
 }
 
-function TenderingView({ sales, runAction }) {
+function TenderingView({ branches, clients, users, sales, tenderForm, setTenderForm, createTender, runAction }) {
+  const tenders = sales.tenders || emptyList
+  const tendering = sales.tendering || {}
+  const catalog = tendering.catalog || {}
+  const analytics = tendering.analytics || {}
+  const reports = tendering.reports || {}
+  const [selectedTenderId, setSelectedTenderId] = useState(null)
+  const [recordForm, setRecordForm] = useState({ record_type: '', owner_id: '', title: '', status: 'pending', priority: 'medium', due_at: '', amount: '', currency: 'GHS', notes: '' })
+  const [rfiForm, setRfiForm] = useState({ category: '', question: '', submitted_to: '', submitted_at: '', due_at: '', related_drawing: '', related_boq_item: '', related_specification: '', internal_impact: '', cost_impact: '', schedule_impact_days: '' })
+  const [documentForm, setDocumentForm] = useState({ title: '', document_type: '', version: '1', status: 'draft', is_mandatory: false, is_confidential: false, expires_at: '', comments: '', file: null })
+  const selectedTender = tenders.find((tender) => tender.id === selectedTenderId) || tenders[0] || null
+  const selectedRecords = selectedTender?.records || []
+  const selectedRecordTypes = Object.entries(catalog.record_types || {})
+
+  useEffect(() => {
+    if (!selectedTenderId && tenders[0]?.id) {
+      setSelectedTenderId(tenders[0].id)
+      return
+    }
+
+    if (selectedTenderId && tenders.length > 0 && !tenders.some((tender) => tender.id === selectedTenderId)) {
+      setSelectedTenderId(tenders[0].id)
+    }
+  }, [selectedTenderId, tenders])
+
+  useEffect(() => {
+    if (!recordForm.record_type && selectedRecordTypes[0]?.[0]) {
+      setRecordForm((current) => ({ ...current, record_type: selectedRecordTypes[0][0] }))
+    }
+  }, [recordForm.record_type, selectedRecordTypes])
+
+  function catalogOptions(group) {
+    return Object.entries(group || {})
+  }
+
+  function formatBackendValue(card) {
+    if (card.value_type === 'money') return money(card.value)
+    if (card.value_type === 'percent') return `${card.value || 0}%`
+    if (card.value_type === 'days') return `${card.value || 0} days`
+    return card.value ?? 0
+  }
+
+  function tenderCardIcon(key) {
+    return {
+      active_tenders: ClipboardList,
+      due_this_week: Clock3,
+      awaiting_bid_decision: Handshake,
+      under_preparation: Calculator,
+      awaiting_approval: ShieldCheck,
+      submitted: Send,
+      under_evaluation: Eye,
+      won: CheckCircle2,
+      lost: AlertTriangle,
+      active_value: WalletCards,
+      weighted_pipeline_value: BarChart3,
+      win_rate: Layers3,
+      average_preparation_days: CalendarDays,
+    }[key] || ClipboardList
+  }
+
+  function setBooleanDocumentField(event) {
+    const { name, checked } = event.target
+    setDocumentForm((current) => ({ ...current, [name]: checked }))
+  }
+
+  async function createTenderRecord(event) {
+    event.preventDefault()
+    if (!selectedTender) return
+
+    await runAction(
+      () =>
+        api.createTenderRecord(selectedTender.id, {
+          ...recordForm,
+          owner_id: recordForm.owner_id ? Number(recordForm.owner_id) : null,
+          due_at: recordForm.due_at || null,
+          amount: Number(recordForm.amount || 0),
+          currency: recordForm.currency || selectedTender.currency || 'GHS',
+        }),
+      'Tender record created.',
+    )
+    setRecordForm((current) => ({ ...current, title: '', due_at: '', amount: '', notes: '' }))
+  }
+
+  async function updateTenderRecordStatus(record, status) {
+    await runAction(() => api.updateTenderRecord(record.id, { status }), 'Tender record updated.')
+  }
+
+  async function createRfi(event) {
+    event.preventDefault()
+    if (!selectedTender) return
+
+    await runAction(
+      () =>
+        api.createTenderRfi(selectedTender.id, {
+          ...rfiForm,
+          submitted_at: rfiForm.submitted_at || null,
+          due_at: rfiForm.due_at || null,
+          cost_impact: Number(rfiForm.cost_impact || 0),
+          schedule_impact_days: Number(rfiForm.schedule_impact_days || 0),
+        }),
+      'Tender RFI created.',
+    )
+    setRfiForm({ category: '', question: '', submitted_to: '', submitted_at: '', due_at: '', related_drawing: '', related_boq_item: '', related_specification: '', internal_impact: '', cost_impact: '', schedule_impact_days: '' })
+  }
+
+  async function uploadTenderDocument(event) {
+    event.preventDefault()
+    if (!selectedTender) return
+
+    const payload = new FormData()
+    Object.entries(documentForm).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        payload.append(key, value)
+      }
+    })
+
+    await runAction(() => api.uploadTenderDocument(selectedTender.id, payload), 'Tender document uploaded.')
+    setDocumentForm({ title: '', document_type: '', version: '1', status: 'draft', is_mandatory: false, is_confidential: false, expires_at: '', comments: '', file: null })
+    event.target.reset()
+  }
+
+  function convertOpportunity(opportunity) {
+    runAction(
+      () =>
+        api.createTenderFromOpportunity(opportunity.id, {
+          title: opportunity.name,
+          deadline_at: opportunity.expected_close_date || null,
+          expected_award_at: opportunity.expected_close_date || null,
+        }),
+      'Tender created from opportunity.',
+    )
+  }
+
+  function recordTenderOutcome(tender) {
+    const outcome = window.prompt('Outcome status', 'won')
+    if (!outcome) return
+
+    const status = outcome.trim().toLowerCase().replaceAll(' ', '_')
+    if (status === 'lost') {
+      const reason = window.prompt('Loss reason')
+      if (!reason) return
+      runAction(() => api.loseTender(tender.id, reason), 'Tender outcome recorded.')
+      return
+    }
+
+    runAction(() => api.updateTender(tender.id, { status }), 'Tender outcome recorded.')
+  }
+
+  function convertTenderToProject(tender) {
+    runAction(
+      () =>
+        api.winTender(tender.id, {
+          estimate_id: tender.estimates?.[0]?.id,
+          project_name: tender.title,
+        }),
+      'Award converted to project.',
+    )
+  }
+
+  const recordRows = selectedRecords.map((record) => [
+    record.record_number,
+    catalog.record_types?.[record.record_type] || labelize(record.record_type),
+    record.title,
+    record.owner?.name || '',
+    <Badge key="status" value={record.status} />,
+    <Badge key="priority" value={record.priority} />,
+    shortDate(record.due_at),
+    money(record.amount),
+    <div key="actions" className="row-actions">
+      {record.status !== 'completed' && (
+        <button type="button" className="table-action" onClick={() => updateTenderRecordStatus(record, 'completed')}>
+          Complete
+        </button>
+      )}
+      {record.status !== 'approved' && (
+        <button type="button" className="table-action" onClick={() => updateTenderRecordStatus(record, 'approved')}>
+          Approve
+        </button>
+      )}
+    </div>,
+  ])
+
   return (
-    <section className="view-stack">
+    <section className="view-stack tender-page">
+      <section className="tender-hero">
+        <div>
+          <span>Bid Management & Pre-Construction Control Centre</span>
+        </div>
+        <div className="tender-hero-metrics">
+          <Metric label="Active Value" value={money(tendering.summary?.active_value)} />
+          <Metric label="Weighted Pipeline" value={money(tendering.summary?.weighted_pipeline_value)} />
+          <Metric label="Win Rate" value={`${tendering.summary?.win_rate || 0}%`} />
+        </div>
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon={BarChart3} title="Tender Dashboard" />
+        <div className="kpi-grid tender-dashboard-grid">
+          {(tendering.summary_cards || []).map((card) => (
+            <Kpi key={card.key} icon={tenderCardIcon(card.key)} label={card.label} value={formatBackendValue(card)} sub={card.sub} />
+          ))}
+        </div>
+      </section>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={Plus} title="Create Tender" />
+          <form className="form-grid tender-create-form" onSubmit={createTender}>
+            <Select label="Source Opportunity" name="opportunity_id" value={tenderForm.opportunity_id} onChange={setForm(setTenderForm)}>
+              <option value="">Create directly</option>
+              {(tendering.bid_opportunities || []).map((opportunity) => (
+                <option key={opportunity.id} value={opportunity.id}>
+                  {opportunity.opportunity_number} - {opportunity.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Branch" name="branch_id" value={tenderForm.branch_id} onChange={setForm(setTenderForm)}>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Client" name="client_id" value={tenderForm.client_id} onChange={setForm(setTenderForm)}>
+              <option value="">New or opportunity client</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </Select>
+            <Field label="Client Name" name="client_name" value={tenderForm.client_name} onChange={setForm(setTenderForm)} />
+            <Field label="Tender Title" name="title" value={tenderForm.title} onChange={setForm(setTenderForm)} required />
+            <Select label="Tender Manager" name="tender_manager_id" value={tenderForm.tender_manager_id} onChange={setForm(setTenderForm)}>
+              <option value="">Unassigned</option>
+              {users.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="BD Officer" name="business_development_officer_id" value={tenderForm.business_development_officer_id} onChange={setForm(setTenderForm)}>
+              <option value="">Unassigned</option>
+              {users.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </Select>
+            <Select label="Tender Type" name="tender_type" value={tenderForm.tender_type} onChange={setForm(setTenderForm)}>
+              <option value="">Select type</option>
+              {catalogOptions(catalog.tender_types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            <Select label="Procurement Method" name="procurement_method" value={tenderForm.procurement_method} onChange={setForm(setTenderForm)}>
+              <option value="">Select method</option>
+              {catalogOptions(catalog.procurement_methods).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            <Select label="Project Sector" name="project_sector" value={tenderForm.project_sector} onChange={setForm(setTenderForm)}>
+              <option value="">Select sector</option>
+              {catalogOptions(catalog.project_sectors).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            <Select label="Project Category" name="project_category" value={tenderForm.project_category} onChange={setForm(setTenderForm)}>
+              <option value="">Select category</option>
+              {catalogOptions(catalog.project_categories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            <Field label="Project Location" name="project_location" value={tenderForm.project_location} onChange={setForm(setTenderForm)} />
+            <Select label="Priority" name="priority" value={tenderForm.priority} onChange={setForm(setTenderForm)}>
+              <option value="">Select priority</option>
+              {catalogOptions(catalog.priorities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            <Select label="Confidentiality" name="confidentiality_level" value={tenderForm.confidentiality_level} onChange={setForm(setTenderForm)}>
+              <option value="">Select level</option>
+              {catalogOptions(catalog.confidentiality_levels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            <Field label="Submission Deadline" type="datetime-local" name="deadline_at" value={tenderForm.deadline_at} onChange={setForm(setTenderForm)} />
+            <Field label="Expected Award" type="datetime-local" name="expected_award_at" value={tenderForm.expected_award_at} onChange={setForm(setTenderForm)} />
+            <Field label="Estimated Value" type="number" name="value" value={tenderForm.value} onChange={setForm(setTenderForm)} />
+            <Field label="Tender Fee" type="number" name="tender_fee" value={tenderForm.tender_fee} onChange={setForm(setTenderForm)} />
+            <Field label="Currency" name="currency" value={tenderForm.currency} onChange={setForm(setTenderForm)} />
+            <Field label="Funding Source" name="funding_source" value={tenderForm.funding_source} onChange={setForm(setTenderForm)} />
+            <Field label="Tender Authority" name="tender_authority" value={tenderForm.tender_authority} onChange={setForm(setTenderForm)} />
+            <TextArea label="Scope Summary" name="scope_summary" value={tenderForm.scope_summary} onChange={setForm(setTenderForm)} />
+            <TextArea label="Description" name="description" value={tenderForm.description} onChange={setForm(setTenderForm)} />
+            <button type="submit" className="primary-action">
+              <Plus size={17} />
+              Create tender
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={AlertTriangle} title="Tender Alerts" />
+          <DataTable
+            columns={['Alert', 'Tender', 'Priority', 'Owner']}
+            rows={(tendering.alerts || []).map((alert) => [
+              alert.message,
+              `${alert.tender_number} - ${alert.tender_title}`,
+              <Badge key="priority" value={alert.priority} />,
+              alert.owner,
+            ])}
+          />
+        </section>
+      </div>
+
+      <section className="panel">
+        <PanelTitle icon={Handshake} title="Bid Opportunities" />
+        <DataTable
+          columns={['Opportunity', 'Client', 'Stage', 'Value', 'Expected Award', 'Action']}
+          rows={(tendering.bid_opportunities || []).map((opportunity) => [
+            `${opportunity.opportunity_number} - ${opportunity.name}`,
+            opportunity.client?.name || '',
+            <Badge key="stage" value={opportunity.stage} />,
+            money(opportunity.estimated_value),
+            shortDate(opportunity.expected_close_date),
+            <button key="convert" type="button" className="table-action" onClick={() => convertOpportunity(opportunity)}>
+              Convert to tender
+            </button>,
+          ])}
+        />
+      </section>
+
       <section className="panel">
         <PanelTitle icon={ClipboardList} title="Tender Register" />
         <DataTable
-          columns={['No.', 'Title', 'Client', 'Status', 'Deadline', 'Value', 'Actions']}
-          rows={(sales.tenders || []).map((tender) => [
+          columns={['No.', 'Title', 'Client', 'Source', 'Status', 'Completion', 'Deadline', 'Days Left', 'Value', 'Probability', 'Actions']}
+          rows={tenders.map((tender) => [
             tender.tender_number,
             tender.title,
             tender.client?.name || '',
-            <Badge key="status" value={tender.status} />,
+            tender.source_label || '',
+            <Badge key="status" value={tender.status === 'won' ? 'awarded' : tender.status} />,
+            `${tender.completion_percent || 0}%`,
             shortDate(tender.deadline_at),
+            tender.days_left === null || tender.days_left === undefined ? '' : `${tender.days_left} days`,
             money(tender.value),
+            `${tender.probability || 0}%`,
             <div key="actions" className="row-actions">
-              {['draft', 'pending'].includes(tender.status) && (
+              <button type="button" className="table-action" onClick={() => setSelectedTenderId(tender.id)}>
+                Open
+              </button>
+              {['draft', 'pending', 'ready_for_submission'].includes(tender.status) && (
                 <button type="button" className="table-action" onClick={() => runAction(() => api.submitTender(tender.id), 'Tender submitted.')}>
-                  Submit
+                  Record submission
                 </button>
               )}
-              {['submitted', 'pending'].includes(tender.status) && (
-                <button
-                  type="button"
-                  className="table-action"
-                  onClick={() =>
-                    runAction(
-                      () =>
-                        api.winTender(tender.id, {
-                          estimate_id: tender.estimates?.[0]?.id,
-                          project_name: tender.title,
-                        }),
-                      'Tender won and project created.',
-                    )
-                  }
-                >
-                  Win
+              {!['lost', 'cancelled', 'withdrawn', 'archived'].includes(tender.status) && (
+                <button type="button" className="table-action" onClick={() => recordTenderOutcome(tender)}>
+                  Record outcome
+                </button>
+              )}
+              {['won', 'awarded'].includes(tender.status) && !tender.project_id && (
+                <button type="button" className="table-action" onClick={() => convertTenderToProject(tender)}>
+                  Convert to project
                 </button>
               )}
             </div>,
@@ -2653,19 +6816,270 @@ function TenderingView({ sales, runAction }) {
       </section>
 
       <section className="panel">
-        <PanelTitle icon={FileText} title="Tender RFIs" />
-        <DataTable
-          columns={['Tender', 'Question', 'Status', 'Response']}
-          rows={(sales.tenders || []).flatMap((tender) =>
-            (tender.rfis || []).map((rfi) => [
-              tender.tender_number,
-              rfi.question,
-              <Badge key="status" value={rfi.status} />,
-              rfi.response || '',
-            ]),
-          )}
-        />
+        <PanelTitle icon={FolderKanban} title="Tender Workspace" />
+        {selectedTender ? (
+          <div className="tender-workspace">
+            <div className="project-head tender-workspace-head">
+              <div>
+                <p>{selectedTender.tender_number}</p>
+                <h2>{selectedTender.title}</h2>
+              </div>
+              <div className="project-metrics">
+                <Metric label="Completion" value={`${selectedTender.completion_percent || 0}%`} />
+                <Metric label="Value" value={money(selectedTender.value)} />
+                <Metric label="Source" value={selectedTender.source_label || ''} />
+                <Metric label="Weighted" value={money(selectedTender.weighted_value)} />
+              </div>
+            </div>
+
+            <div className="grid-main">
+              <section className="panel">
+                <PanelTitle icon={Settings} title="Tender Status" />
+                <form className="form-grid two" onSubmit={(event) => event.preventDefault()}>
+                  <Select label="Status" value={selectedTender.status} onChange={(event) => runAction(() => api.updateTender(selectedTender.id, { status: event.target.value }), 'Tender status updated.')}>
+                    {catalogOptions(catalog.statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </Select>
+                  <Select label="Bid Decision" value={selectedTender.bid_decision || ''} onChange={(event) => runAction(() => api.updateTender(selectedTender.id, { bid_decision: event.target.value }), 'Bid decision updated.')}>
+                    <option value="">No decision</option>
+                    {catalogOptions(catalog.bid_decisions).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </Select>
+                </form>
+              </section>
+
+              <section className="panel">
+                <PanelTitle icon={Eye} title="Overview" />
+                <DataTable
+                  columns={['Field', 'Value']}
+                  rows={[
+                    ['Client', selectedTender.client?.name || ''],
+                    ['Source Opportunity', selectedTender.opportunity?.opportunity_number || ''],
+                    ['Project', selectedTender.project?.code || ''],
+                    ['Tender Type', catalog.tender_types?.[selectedTender.tender_type] || ''],
+                    ['Procurement Method', catalog.procurement_methods?.[selectedTender.procurement_method] || ''],
+                    ['Sector', catalog.project_sectors?.[selectedTender.project_sector] || ''],
+                    ['Category', catalog.project_categories?.[selectedTender.project_category] || ''],
+                    ['Location', selectedTender.project_location || ''],
+                    ['Authority', selectedTender.tender_authority || ''],
+                    ['Funding Source', selectedTender.funding_source || ''],
+                  ]}
+                />
+              </section>
+            </div>
+
+            <section className="panel">
+              <PanelTitle icon={Plus} title="Add Tender Record" />
+              <form className="form-grid tender-create-form" onSubmit={createTenderRecord}>
+                <Select label="Record Type" name="record_type" value={recordForm.record_type} onChange={setForm(setRecordForm)} required>
+                  {selectedRecordTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </Select>
+                <Select label="Owner" name="owner_id" value={recordForm.owner_id} onChange={setForm(setRecordForm)}>
+                  <option value="">Unassigned</option>
+                  {users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                </Select>
+                <Field label="Title" name="title" value={recordForm.title} onChange={setForm(setRecordForm)} required />
+                <Select label="Status" name="status" value={recordForm.status} onChange={setForm(setRecordForm)}>
+                  {catalogOptions(catalog.record_statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </Select>
+                <Select label="Priority" name="priority" value={recordForm.priority} onChange={setForm(setRecordForm)}>
+                  {catalogOptions(catalog.priorities).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </Select>
+                <Field label="Due At" type="datetime-local" name="due_at" value={recordForm.due_at} onChange={setForm(setRecordForm)} />
+                <Field label="Amount" type="number" name="amount" value={recordForm.amount} onChange={setForm(setRecordForm)} />
+                <Field label="Currency" name="currency" value={recordForm.currency} onChange={setForm(setRecordForm)} />
+                <TextArea label="Notes" name="notes" value={recordForm.notes} onChange={setForm(setRecordForm)} />
+                <button type="submit" className="primary-action">
+                  <Plus size={17} />
+                  Add record
+                </button>
+              </form>
+            </section>
+
+            <section className="panel">
+              <PanelTitle icon={ClipboardList} title="Tender Records" />
+              <DataTable columns={['No.', 'Type', 'Title', 'Owner', 'Status', 'Priority', 'Due', 'Amount', 'Actions']} rows={recordRows} />
+            </section>
+
+            <div className="grid-main">
+              {selectedRecordTypes.map(([type, label]) => (
+                <section key={type} className="panel">
+                  <PanelTitle icon={ClipboardList} title={label} />
+                  <DataTable
+                    columns={['No.', 'Title', 'Owner', 'Status', 'Due', 'Amount']}
+                    rows={selectedRecords
+                      .filter((record) => record.record_type === type)
+                      .map((record) => [
+                        record.record_number,
+                        record.title,
+                        record.owner?.name || '',
+                        <Badge key="status" value={record.status} />,
+                        shortDate(record.due_at),
+                        money(record.amount),
+                      ])}
+                  />
+                </section>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="empty-cell">No tender selected</div>
+        )}
       </section>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={FileText} title="RFIs and Clarifications" />
+          {selectedTender && (
+            <form className="form-grid two section-form" onSubmit={createRfi}>
+              <Field label="Category" name="category" value={rfiForm.category} onChange={setForm(setRfiForm)} />
+              <Field label="Submitted To" name="submitted_to" value={rfiForm.submitted_to} onChange={setForm(setRfiForm)} />
+              <Field label="Submitted At" type="datetime-local" name="submitted_at" value={rfiForm.submitted_at} onChange={setForm(setRfiForm)} />
+              <Field label="Due At" type="datetime-local" name="due_at" value={rfiForm.due_at} onChange={setForm(setRfiForm)} />
+              <Field label="Related Drawing" name="related_drawing" value={rfiForm.related_drawing} onChange={setForm(setRfiForm)} />
+              <Field label="Related BOQ Item" name="related_boq_item" value={rfiForm.related_boq_item} onChange={setForm(setRfiForm)} />
+              <Field label="Cost Impact" type="number" name="cost_impact" value={rfiForm.cost_impact} onChange={setForm(setRfiForm)} />
+              <Field label="Schedule Impact Days" type="number" name="schedule_impact_days" value={rfiForm.schedule_impact_days} onChange={setForm(setRfiForm)} />
+              <TextArea label="Question" name="question" value={rfiForm.question} onChange={setForm(setRfiForm)} required />
+              <TextArea label="Internal Impact" name="internal_impact" value={rfiForm.internal_impact} onChange={setForm(setRfiForm)} />
+              <button type="submit" className="primary-action">
+                <Plus size={17} />
+                Add RFI
+              </button>
+            </form>
+          )}
+          <DataTable
+            columns={['No.', 'Tender', 'Category', 'Question', 'Status', 'Due', 'Cost Impact', 'Response']}
+            rows={tenders.flatMap((tender) =>
+              (tender.rfis || []).map((rfi) => [
+                rfi.rfi_number || '',
+                tender.tender_number,
+                rfi.category || '',
+                rfi.question,
+                <Badge key="status" value={rfi.status} />,
+                shortDate(rfi.due_at),
+                money(rfi.cost_impact),
+                rfi.response || '',
+              ]),
+            )}
+          />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={FileText} title="Tender Documents" />
+          {selectedTender && (
+            <form className="form-grid two section-form" onSubmit={uploadTenderDocument}>
+              <Field label="Title" name="title" value={documentForm.title} onChange={setForm(setDocumentForm)} required />
+              <Field label="Document Type" name="document_type" value={documentForm.document_type} onChange={setForm(setDocumentForm)} />
+              <Field label="Version" name="version" value={documentForm.version} onChange={setForm(setDocumentForm)} />
+              <Select label="Status" name="status" value={documentForm.status} onChange={setForm(setDocumentForm)}>
+                {catalogOptions(catalog.record_statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </Select>
+              <Field label="Expires At" type="date" name="expires_at" value={documentForm.expires_at} onChange={setForm(setDocumentForm)} />
+              <Field label="File" type="file" name="file" onChange={(event) => setDocumentForm((current) => ({ ...current, file: event.target.files?.[0] || null }))} />
+              <label className="access-option">
+                <input type="checkbox" name="is_mandatory" checked={documentForm.is_mandatory} onChange={setBooleanDocumentField} />
+                <span><strong>Mandatory</strong></span>
+              </label>
+              <label className="access-option">
+                <input type="checkbox" name="is_confidential" checked={documentForm.is_confidential} onChange={setBooleanDocumentField} />
+                <span><strong>Confidential</strong></span>
+              </label>
+              <TextArea label="Comments" name="comments" value={documentForm.comments} onChange={setForm(setDocumentForm)} />
+              <button type="submit" className="primary-action">
+                <Upload size={17} />
+                Upload document
+              </button>
+            </form>
+          )}
+          <DataTable
+            columns={['Tender', 'Title', 'Type', 'Version', 'Status', 'Mandatory', 'Confidential', 'Expiry']}
+            rows={tenders.flatMap((tender) =>
+              (tender.documents || []).map((document) => [
+                tender.tender_number,
+                document.title,
+                document.document_type,
+                document.version,
+                <Badge key="status" value={document.status} />,
+                document.is_mandatory ? 'Yes' : 'No',
+                document.is_confidential ? 'Yes' : 'No',
+                shortDate(document.expires_at),
+              ]),
+            )}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <ChartPanel icon={BarChart3} title="Tenders by Status">
+          {(analytics.status_counts || []).length === 0 ? (
+            <div className="analytics-chart-empty">No tender status data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={analytics.status_counts || []}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#2364d8" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartPanel>
+
+        <ChartPanel icon={WalletCards} title="Tender Value by Month">
+          {(analytics.value_by_month || []).length === 0 ? (
+            <div className="analytics-chart-empty">No tender value data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={analytics.value_by_month || []}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(value) => compactFormatter.format(value)} />
+                <Tooltip formatter={(value) => money(value)} />
+                <Bar dataKey="value" fill="#11835b" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartPanel>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel chart-panel">
+          <PanelTitle icon={CheckCircle2} title="Wins Versus Losses" />
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={analytics.wins_losses || []} dataKey="value" nameKey="label" innerRadius={56} outerRadius={96} paddingAngle={3}>
+                {(analytics.wins_losses || []).map((entry, index) => (
+                  <Cell key={entry.label} fill={index === 0 ? '#11835b' : '#c3382f'} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={BarChart3} title="Tender Reports" />
+          <DataTable
+            columns={['Report', 'Records']}
+            rows={Object.entries(reports).map(([key, rows]) => [
+              labelize(key),
+              Array.isArray(rows) ? rows.length : 0,
+            ])}
+          />
+        </section>
+      </div>
+
+      <div className="grid-main">
+        <section className="panel">
+          <PanelTitle icon={AlertTriangle} title="Win/Loss Analysis" />
+          <DataTable columns={['Loss Reason', 'Count']} rows={(analytics.loss_reasons || []).map((item) => [item.reason, item.count])} />
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Globe2} title="Tender Source Analysis" />
+          <DataTable columns={['Source', 'Count']} rows={(analytics.source_analysis || []).map((item) => [item.source, item.count])} />
+        </section>
+      </div>
     </section>
   )
 }
@@ -5883,7 +10297,14 @@ function FinanceView({
       {activeTab === 'automation' && (
         <section className="panel">
           <PanelTitle icon={Workflow} title="Finance Automation" />
-          <DataTable columns={['Trigger', 'Status']} rows={(finance.automation?.approval_triggers || []).map((trigger) => [labelize(trigger), 'Available'])} />
+          <DataTable
+            columns={['Trigger', 'Status', 'Active Workflows']}
+            rows={(finance.automation?.approval_triggers || []).map((trigger) => {
+              const item = typeof trigger === 'string' ? { trigger, status: 'not_configured', active_workflows: 0 } : trigger
+
+              return [labelize(item.trigger), <Badge key="status" value={item.status} />, item.active_workflows || 0]
+            })}
+          />
           <DataTable columns={['Metric', 'Value']} rows={[['Connected finance workflows', finance.automation?.connected_workflows || 0], ['Ledger posting', finance.finance_settings?.ledger_posting || 'automatic'], ['Audit trail', finance.finance_settings?.audit_trail_enabled ? 'Enabled' : 'Disabled']]} />
         </section>
       )}
@@ -7703,8 +12124,15 @@ function PeopleView({ branches, projects, suppliers, users, roles, currentUser, 
       {activeTab === 'automation' && (
         <section className="panel">
           <PanelTitle icon={Workflow} title="HR Automation" />
-          <DataTable columns={['Trigger', 'Status']} rows={(people.automation?.available_triggers || []).map((trigger) => [labelize(trigger), 'Available'])} />
-          <DataTable columns={['Metric', 'Value']} rows={[['Connected workflows', people.automation?.connected_workflows || 0], ['Payroll posting', 'Finance ledger integration'], ['Certification alerts', 'Available'], ['Attendance exceptions', 'Available']]} />
+          <DataTable
+            columns={['Trigger', 'Status', 'Active Workflows']}
+            rows={(people.automation?.available_triggers || []).map((trigger) => {
+              const item = typeof trigger === 'string' ? { trigger, status: 'not_configured', active_workflows: 0 } : trigger
+
+              return [labelize(item.trigger), <Badge key="status" value={item.status} />, item.active_workflows || 0]
+            })}
+          />
+          <DataTable columns={['Metric', 'Value']} rows={[['Connected workflows', people.automation?.connected_workflows || 0], ['Payroll posting', 'Finance ledger integration'], ['Certification alerts', (people.health_safety?.certification_risk || []).length], ['Attendance exceptions', people.attendance?.summary?.absent_today || 0]]} />
         </section>
       )}
 
@@ -10780,9 +15208,12 @@ function AutomationView({ automation = emptyAutomationData, forms, setPhaseFourF
   const rules = automation?.rules || []
   const runs = automation?.runs || []
   const templates = automation?.templates || []
+  const notifications = automation?.notifications || []
+  const notificationSettings = automation?.notification_settings || emptyAutomationData.notification_settings
   const [activeTab, setActiveTab] = useState('dashboard')
   const [editingRuleId, setEditingRuleId] = useState(null)
   const [search, setSearch] = useState('')
+  const [settingsForm, setSettingsForm] = useState(() => notificationSettingsForm(notificationSettings))
   const form = forms.automation
   const moduleOptions = catalog.modules?.length ? catalog.modules : ['projects', 'procurement', 'finance', 'hr', 'inventory', 'field', 'equipment', 'qa_hse', 'crm', 'documents', 'general']
   const triggerOptions = catalog.triggers?.length ? catalog.triggers : [{ key: 'material_request_submitted', label: 'Material Request Submitted', module: 'procurement' }]
@@ -10818,6 +15249,10 @@ function AutomationView({ automation = emptyAutomationData, forms, setPhaseFourF
     { type: 'action', eyebrow: 'Action', title: selectedAction?.label || labelize(form.action_type), detail: form.action_message || 'Configured action' },
     { type: 'log', eyebrow: 'Audit', title: 'Execution Log', detail: 'Versioned and traceable' },
   ]
+
+  useEffect(() => {
+    setSettingsForm(notificationSettingsForm(notificationSettings))
+  }, [notificationSettings])
 
   function normalizedRuleConditions(rule) {
     if (Array.isArray(rule.conditions)) return rule.conditions
@@ -10897,6 +15332,44 @@ function AutomationView({ automation = emptyAutomationData, forms, setPhaseFourF
     )
   }
 
+  function setNotificationSetting(event) {
+    const { name, value } = event.target
+    setSettingsForm((current) => ({ ...current, [name]: value }))
+  }
+
+  function toggleNotificationChannel(channel) {
+    setSettingsForm((current) => {
+      const channels = current.default_channels.includes(channel)
+        ? current.default_channels.filter((item) => item !== channel)
+        : [...current.default_channels, channel]
+
+      return { ...current, default_channels: channels }
+    })
+  }
+
+  function saveNotificationSettings(event) {
+    event.preventDefault()
+
+    runAction(
+      () =>
+        api.updateNotificationSettings({
+          in_app_enabled: settingsForm.in_app_enabled === 'true',
+          email_enabled: settingsForm.email_enabled === 'true',
+          email_from_name: settingsForm.email_from_name || null,
+          email_from_address: settingsForm.email_from_address || null,
+          reply_to_email: settingsForm.reply_to_email || null,
+          minimum_email_severity: settingsForm.minimum_email_severity,
+          digest_frequency: settingsForm.digest_frequency,
+          default_channels: settingsForm.default_channels,
+          retry_policy: {
+            max_retries: Number(settingsForm.max_retries || 0),
+            on_failure: settingsForm.on_failure || 'notify_admin',
+          },
+        }),
+      'Notification settings updated.',
+    )
+  }
+
   function renderDashboard() {
     return (
       <>
@@ -10908,6 +15381,7 @@ function AutomationView({ automation = emptyAutomationData, forms, setPhaseFourF
           <Kpi icon={CalendarDays} label="Scheduled jobs" value={summary.scheduled_jobs || 0} sub="Time-based workflows" />
           <Kpi icon={ShieldCheck} label="Approvals" value={summary.approval_workflows || 0} sub="Approval workflows" />
           <Kpi icon={Clock3} label="Avg. execution" value={`${summary.average_execution_time_ms || 0} ms`} sub="Recent runs" />
+          <Kpi icon={Send} label="Unread alerts" value={summary.unread_notifications || 0} sub={`${summary.email_failures || 0} email failures`} />
         </div>
 
         <div className="grid-main">
@@ -11197,17 +15671,92 @@ function AutomationView({ automation = emptyAutomationData, forms, setPhaseFourF
 
   function renderSettings() {
     return (
-      <section className="panel">
-        <PanelTitle icon={Settings} title="Automation Settings" />
-        <div className="automation-settings-grid">
-          <Metric label="Security model" value="RBAC" />
-          <Metric label="Tenant isolation" value="Company scoped" />
-          <Metric label="Execution mode" value="Sync / Queue-ready" />
-          <Metric label="Audit policy" value="Versioned logs" />
-          <Metric label="Retry policy" value="2 attempts" />
-          <Metric label="Webhook policy" value="Signed-ready" />
-        </div>
-      </section>
+      <>
+        <section className="panel">
+          <PanelTitle icon={Settings} title="Notification Settings" />
+          <form className="form-grid automation-settings-form" onSubmit={saveNotificationSettings}>
+            <Select label="In-app alerts" name="in_app_enabled" value={settingsForm.in_app_enabled} onChange={setNotificationSetting}>
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </Select>
+            <Select label="Email alerts" name="email_enabled" value={settingsForm.email_enabled} onChange={setNotificationSetting}>
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </Select>
+            <Select label="Minimum email severity" name="minimum_email_severity" value={settingsForm.minimum_email_severity} onChange={setNotificationSetting}>
+              {['low', 'medium', 'high', 'critical'].map((severity) => (
+                <option key={severity} value={severity}>
+                  {labelize(severity)}
+                </option>
+              ))}
+            </Select>
+            <Select label="Delivery frequency" name="digest_frequency" value={settingsForm.digest_frequency} onChange={setNotificationSetting}>
+              {['immediate', 'hourly', 'daily', 'weekly'].map((frequency) => (
+                <option key={frequency} value={frequency}>
+                  {labelize(frequency)}
+                </option>
+              ))}
+            </Select>
+            <Field label="From name" name="email_from_name" value={settingsForm.email_from_name} onChange={setNotificationSetting} />
+            <Field label="From email" type="email" name="email_from_address" value={settingsForm.email_from_address} onChange={setNotificationSetting} />
+            <Field label="Reply-to email" type="email" name="reply_to_email" value={settingsForm.reply_to_email} onChange={setNotificationSetting} />
+            <Field label="Max retries" type="number" min="0" max="10" name="max_retries" value={settingsForm.max_retries} onChange={setNotificationSetting} />
+            <Field label="Failure action" name="on_failure" value={settingsForm.on_failure} onChange={setNotificationSetting} />
+            <div className="access-selector automation-channel-selector">
+              <div className="access-selector-head">
+                <span>Default Channels</span>
+              </div>
+              <div className="access-grid compact-access-grid">
+                {['in_app', 'email'].map((channel) => (
+                  <label key={channel} className="access-option">
+                    <input type="checkbox" checked={settingsForm.default_channels.includes(channel)} onChange={() => toggleNotificationChannel(channel)} />
+                    <span>
+                      <strong>{labelize(channel)}</strong>
+                      <small>{channel === 'email' ? 'Uses the configured Laravel mailer.' : 'Creates a saved Structra alert.'}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button type="submit" className="primary-action automation-settings-submit">
+              <CheckCircle2 size={17} />
+              Save settings
+            </button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <PanelTitle icon={Send} title="Notification Events" />
+          <DataTable
+            columns={['No.', 'Title', 'Module', 'Severity', 'Status', 'Channels', 'Delivery', 'Created', 'Actions']}
+            rows={notifications.map((notification) => [
+              notification.notification_number,
+              <div key="title" className="table-primary">
+                <strong>{notification.title}</strong>
+                <small>{notification.message}</small>
+              </div>,
+              moduleLabel(notification.module),
+              <Badge key="severity" value={notification.severity} />,
+              <Badge key="status" value={notification.status} />,
+              (notification.channels || []).map(labelize).join(', '),
+              Object.entries(notification.delivery_status || {}).map(([channel, status]) => `${labelize(channel)}: ${labelize(status)}`).join(', '),
+              shortDate(notification.created_at),
+              <div key="actions" className="row-actions">
+                {notification.status === 'unread' && (
+                  <button type="button" className="table-action" onClick={() => runAction(() => api.markNotificationRead(notification.id), 'Notification marked read.')}>
+                    Read
+                  </button>
+                )}
+                {!['acknowledged'].includes(notification.status) && (
+                  <button type="button" className="table-action" onClick={() => runAction(() => api.acknowledgeNotification(notification.id), 'Notification acknowledged.')}>
+                    Acknowledge
+                  </button>
+                )}
+              </div>,
+            ])}
+          />
+        </section>
+      </>
     )
   }
 
@@ -11245,7 +15794,29 @@ function AutomationView({ automation = emptyAutomationData, forms, setPhaseFourF
   )
 }
 
-function AdminView({ organization, branches, clients, suppliers, roles, users, currentUser, approvals = emptyAdminApprovalData, forms, setForms, setAdminFormValue, archiveCompany, runAction }) {
+function AdminView({
+  organization,
+  branches,
+  clients,
+  suppliers,
+  roles,
+  users,
+  currentUser,
+  approvals = emptyAdminApprovalData,
+  accountSecurity = emptyAccountSecurity,
+  mfaSetup,
+  forms,
+  securityForms,
+  setForms,
+  setAdminFormValue,
+  setSecurityForm,
+  archiveCompany,
+  startMfaSetup,
+  enableMfa,
+  disableMfa,
+  regenerateMfaRecoveryCodes,
+  runAction,
+}) {
   const company = organization?.company
   const canAdminister = canAdministerRecords(currentUser)
   const isEditingClient = Boolean(forms.client.id)
@@ -11537,6 +16108,17 @@ function AdminView({ organization, branches, clients, suppliers, roles, users, c
           />
         </section>
       )}
+
+      <AccountSecurityPanel
+        accountSecurity={accountSecurity}
+        mfaSetup={mfaSetup}
+        securityForms={securityForms}
+        setSecurityForm={setSecurityForm}
+        startMfaSetup={startMfaSetup}
+        enableMfa={enableMfa}
+        disableMfa={disableMfa}
+        regenerateMfaRecoveryCodes={regenerateMfaRecoveryCodes}
+      />
 
       <div className="grid-main">
         <section className="panel">
@@ -12135,23 +16717,31 @@ function explicitUserPermissions(user) {
 function hasPermissionFromList(permissions, requiredPermissions = []) {
   const normalized = normalizePermissionList(permissions)
 
-  if (requiredPermissions.length === 0 || normalized.includes('*')) {
+  if (requiredPermissions.length === 0) {
     return true
   }
 
-  return requiredPermissions.some((permission) => normalized.includes(permission))
+  return requiredPermissions.some((permission) => {
+    if (permission.startsWith('platform.')) {
+      return normalized.includes('platform.*') || normalized.includes(permission)
+    }
+
+    return normalized.includes('*') || normalized.includes(permission)
+  })
 }
 
 function hasAnyPermission(user, requiredPermissions = []) {
   return hasPermissionFromList(effectiveUserPermissions(user), requiredPermissions)
 }
 
-function accessibleNavItems(user) {
+function accessibleNavItems(user, options = {}) {
   if (!user) {
     return []
   }
 
-  return navItems.filter((item) => hasAnyPermission(user, item.permissions))
+  return navItems
+    .filter((item) => options.cloudConsole ? item.id === 'platform' : item.id !== 'platform')
+    .filter((item) => hasAnyPermission(user, item.permissions))
 }
 
 function hasCategoryPermissions(permissions, category) {
@@ -12200,6 +16790,35 @@ function shortDate(value) {
   if (!value) return ''
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value))
 }
+
+function dateFrom(value) {
+  if (!value) return null
+  const date = new Date(value)
+
+  return Number.isNaN(date.valueOf()) ? null : date
+}
+
+function daysBetween(start, end) {
+  const startDate = dateFrom(start)
+  const endDate = dateFrom(end)
+
+  if (!startDate || !endDate) return Number.NaN
+
+  return (endDate - startDate) / 86400000
+}
+
+function addCrmEvent(events, date, type, title, detail, status) {
+  if (!dateFrom(date)) return
+
+  events.push({
+    date,
+    type,
+    title,
+    detail,
+    status,
+  })
+}
+
 
 function dateInputValue(value) {
   if (!value) return ''

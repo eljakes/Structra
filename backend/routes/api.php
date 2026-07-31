@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AdminApprovalController;
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AutomationController;
 use App\Http\Controllers\Api\BudgetLineController;
 use App\Http\Controllers\Api\BusinessIntelligenceController;
@@ -13,8 +13,10 @@ use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\FieldController;
 use App\Http\Controllers\Api\FinanceController;
 use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PeopleController;
+use App\Http\Controllers\Api\PlatformAdminController;
 use App\Http\Controllers\Api\PortalController;
 use App\Http\Controllers\Api\ProcurementController;
 use App\Http\Controllers\Api\ProjectController;
@@ -23,16 +25,52 @@ use App\Http\Controllers\Api\SalesController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
-    Route::post('auth/register', [AuthController::class, 'register']);
-    Route::post('auth/login', [AuthController::class, 'login']);
+    Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:auth.login');
+    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:auth.login');
+    Route::post('auth/mfa-challenge', [AuthController::class, 'mfaChallenge'])->middleware('throttle:auth.mfa');
 
-    Route::middleware('auth:sanctum')->group(function (): void {
+    Route::middleware(['auth:sanctum', 'throttle:api'])->group(function (): void {
         Route::get('auth/me', [AuthController::class, 'me']);
         Route::post('auth/logout', [AuthController::class, 'logout']);
+        Route::get('security/mfa', [AuthController::class, 'mfaStatus']);
+        Route::post('security/mfa/setup', [AuthController::class, 'setupMfa']);
+        Route::post('security/mfa/enable', [AuthController::class, 'enableMfa']);
+        Route::post('security/mfa/disable', [AuthController::class, 'disableMfa']);
+        Route::post('security/mfa/recovery-codes', [AuthController::class, 'regenerateMfaRecoveryCodes']);
 
         Route::get('dashboard', [DashboardController::class, 'index'])->middleware('permission:reports.view');
         Route::get('reports', [DashboardController::class, 'reports'])->middleware('permission:reports.view');
         Route::get('audit-logs', [DashboardController::class, 'auditLogs'])->middleware('permission:reports.view');
+        Route::get('notifications', [NotificationController::class, 'index'])->middleware('permission:reports.view|automation.manage|settings.manage');
+        Route::patch('notifications/settings', [NotificationController::class, 'updateSettings'])->middleware('permission:settings.manage|automation.manage');
+        Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('permission:reports.view|automation.manage|settings.manage');
+        Route::post('notifications/{notification}/acknowledge', [NotificationController::class, 'acknowledge'])->middleware('permission:reports.view|automation.manage|settings.manage');
+        Route::get('platform-admin', [PlatformAdminController::class, 'index'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/companies', [PlatformAdminController::class, 'storeCompany'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/companies/{company}', [PlatformAdminController::class, 'updateCompanyAccount'])->middleware('permission:platform.manage');
+        Route::delete('platform-admin/companies/{company}', [PlatformAdminController::class, 'archiveCompany'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/companies/{companyId}/restore', [PlatformAdminController::class, 'restoreCompany'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/companies/{company}/features/{flag}', [PlatformAdminController::class, 'updateCompanyFeature'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/companies/{company}/branding', [PlatformAdminController::class, 'updateBranding'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/companies/{company}/success', [PlatformAdminController::class, 'updateCompanySuccess'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/companies/{company}/impersonate', [PlatformAdminController::class, 'startImpersonation'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/features/{flag}', [PlatformAdminController::class, 'updateFeatureFlag'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/users', [PlatformAdminController::class, 'storePlatformUser'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/users/{user}', [PlatformAdminController::class, 'updatePlatformUser'])->middleware('permission:platform.manage');
+        Route::delete('platform-admin/users/{user}', [PlatformAdminController::class, 'destroyPlatformUser'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/profile', [PlatformAdminController::class, 'updatePlatformProfile'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/plans', [PlatformAdminController::class, 'storePlan'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/plans/{plan}', [PlatformAdminController::class, 'updatePlan'])->middleware('permission:platform.manage');
+        Route::delete('platform-admin/plans/{plan}', [PlatformAdminController::class, 'destroyPlan'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/subscriptions/{subscription}', [PlatformAdminController::class, 'updateSubscription'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/subscriptions/{subscription}/upgrade', [PlatformAdminController::class, 'upgradeSubscription'])->middleware('permission:platform.manage');
+        Route::delete('platform-admin/subscriptions/{subscription}', [PlatformAdminController::class, 'destroySubscription'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/billing-records', [PlatformAdminController::class, 'storeBillingRecord'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/support-tickets', [PlatformAdminController::class, 'storeSupportTicket'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/support-tickets/{ticket}', [PlatformAdminController::class, 'updateSupportTicket'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/deployments', [PlatformAdminController::class, 'storeDeployment'])->middleware('permission:platform.manage');
+        Route::post('platform-admin/backups', [PlatformAdminController::class, 'storeBackup'])->middleware('permission:platform.manage');
+        Route::patch('platform-admin/settings', [PlatformAdminController::class, 'updateSettings'])->middleware('permission:platform.manage');
 
         Route::get('organization', [OrganizationController::class, 'index']);
         Route::patch('organization/company', [OrganizationController::class, 'updateCompany'])->middleware('permission:settings.manage');
@@ -113,6 +151,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('sales/leads/{lead}/qualify', [SalesController::class, 'qualifyLead'])->middleware('permission:crm.manage');
         Route::post('sales/opportunities', [SalesController::class, 'storeOpportunity'])->middleware('permission:crm.manage');
         Route::post('sales/opportunities/{opportunity}/tenders', [SalesController::class, 'createTenderFromOpportunity'])->middleware('permission:tenders.manage');
+        Route::post('sales/tenders', [SalesController::class, 'storeTender'])->middleware('permission:tenders.manage');
         Route::patch('sales/tenders/{tender}', [SalesController::class, 'updateTender'])->middleware('permission:tenders.manage');
         Route::post('sales/tenders/{tender}/submit', [SalesController::class, 'submitTender'])->middleware('permission:tenders.manage');
         Route::post('sales/tenders/{tender}/win', [SalesController::class, 'winTender'])->middleware('permission:tenders.manage');
@@ -120,6 +159,8 @@ Route::prefix('v1')->group(function (): void {
         Route::post('sales/tenders/{tender}/rfis', [SalesController::class, 'storeTenderRfi'])->middleware('permission:tenders.manage');
         Route::post('sales/tender-rfis/{rfi}/respond', [SalesController::class, 'respondTenderRfi'])->middleware('permission:tenders.manage');
         Route::post('sales/tenders/{tender}/documents', [SalesController::class, 'uploadTenderDocument'])->middleware('permission:tenders.manage');
+        Route::post('sales/tenders/{tender}/records', [SalesController::class, 'storeTenderRecord'])->middleware('permission:tenders.manage');
+        Route::patch('sales/tender-records/{record}', [SalesController::class, 'updateTenderRecord'])->middleware('permission:tenders.manage');
         Route::get('sales/tender-documents/{document}/download', [SalesController::class, 'downloadTenderDocument'])->middleware('permission:tenders.manage');
         Route::post('sales/pricing-items', [SalesController::class, 'storePricingItem'])->middleware('permission:estimating.manage');
         Route::post('sales/estimates', [SalesController::class, 'storeEstimate'])->middleware('permission:estimating.manage');

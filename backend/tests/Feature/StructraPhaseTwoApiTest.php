@@ -89,6 +89,88 @@ class StructraPhaseTwoApiTest extends TestCase
         ]);
     }
 
+    public function test_direct_tender_management_records_rfis_documents_and_dashboard_work(): void
+    {
+        [$user, $branch] = $this->tenantUser();
+        Sanctum::actingAs($user);
+
+        $tenderId = $this->postJson('/api/v1/sales/tenders', [
+            'branch_id' => $branch->id,
+            'client_name' => 'Volta Education Trust',
+            'title' => 'Volta School Expansion Tender',
+            'tender_type' => 'open_tender',
+            'procurement_method' => 'competitive',
+            'project_sector' => 'education',
+            'project_category' => 'building',
+            'project_location' => 'Ho',
+            'deadline_at' => now()->addDays(10)->toISOString(),
+            'expected_award_at' => now()->addMonth()->toISOString(),
+            'value' => 6107500,
+            'tender_fee' => 2500,
+            'priority' => 'high',
+            'confidentiality_level' => 'commercial_restricted',
+            'scope_summary' => 'Classroom block expansion and external works.',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('tender.title', 'Volta School Expansion Tender')
+            ->assertJsonPath('tender.tender_type', 'open_tender')
+            ->assertJsonPath('tender.completion_percent', 31)
+            ->json('tender.id');
+
+        $recordId = $this->postJson("/api/v1/sales/tenders/{$tenderId}/records", [
+            'record_type' => 'supplier_quote',
+            'title' => 'Structural steel quotation',
+            'status' => 'submitted',
+            'priority' => 'high',
+            'amount' => 450000,
+            'notes' => 'Supplier quotation received for bid comparison.',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('record.record_type', 'supplier_quote')
+            ->assertJsonPath('record.amount', '450000.00')
+            ->json('record.id');
+
+        $this->patchJson("/api/v1/sales/tender-records/{$recordId}", [
+            'status' => 'completed',
+        ])
+            ->assertOk()
+            ->assertJsonPath('record.status', 'completed');
+
+        $this->postJson("/api/v1/sales/tenders/{$tenderId}/rfis", [
+            'category' => 'scope',
+            'question' => 'Please confirm whether furniture supply is included.',
+            'submitted_to' => 'Client procurement team',
+            'submitted_at' => now()->toISOString(),
+            'due_at' => now()->addDays(3)->toISOString(),
+            'internal_impact' => 'Commercial proposal may require an alternate item.',
+            'cost_impact' => 120000,
+            'schedule_impact_days' => 0,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('rfi.category', 'scope')
+            ->assertJsonPath('rfi.status', 'submitted')
+            ->assertJsonPath('rfi.rfi_number', fn (string $number): bool => str_starts_with($number, 'RFI-'));
+
+        $this->postJson("/api/v1/sales/tenders/{$tenderId}/documents", [
+            'title' => 'Invitation to Tender',
+            'document_type' => 'invitation_to_tender',
+            'version' => '1',
+            'status' => 'approved',
+            'is_mandatory' => true,
+            'is_confidential' => false,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('document.is_mandatory', true)
+            ->assertJsonPath('document.status', 'approved');
+
+        $this->getJson('/api/v1/sales')
+            ->assertOk()
+            ->assertJsonPath('tendering.summary.active_tenders', 1)
+            ->assertJsonPath('tendering.summary.active_value', 6107500)
+            ->assertJsonPath('tendering.catalog.record_types.supplier_quote', 'Supplier quotation')
+            ->assertJsonPath('tenders.0.records.0.record_type', 'activity_log');
+    }
+
     public function test_inventory_stock_movements_and_supplier_reviews_work(): void
     {
         [$user, $branch] = $this->tenantUser();
